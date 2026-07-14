@@ -3,10 +3,12 @@ data/runs/*
 data/cache/*
 data/logs/*
 data/hermes/*
+data/library/*
 !data/runs/.gitkeep
 !data/cache/.gitkeep
 !data/logs/.gitkeep
 !data/hermes/.gitkeep
+!data/library/.gitkeep
 
 # Python
 __pycache__/

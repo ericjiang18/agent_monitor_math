@@ -273,12 +273,28 @@ def _execute_job(
     started = time.time()
     ws = Path(workspace)
     _append_chat(run_id, "system", f"▶ run started · engine {engine} · problem {problem_id}" + (f" · model {model}" if model else ""))
+    # Inject the user library (memory / skills / tools) into every engine run:
+    # files land in <ws>/_library/ and the prompt gets a USER LIBRARY block.
+    lib_ctx = ""
+    try:
+        from agent_monitor import library as user_library
+
+        materialized = user_library.materialize(ws)
+        lib_ctx = user_library.compose_context()
+        if materialized.get("written"):
+            _append_chat(
+                run_id, "system",
+                "library injected: " + ", ".join(materialized["written"]),
+            )
+    except Exception:  # noqa: BLE001
+        lib_ctx = ""
+    engine_problem_text = (lib_ctx + "\n" + problem_text) if lib_ctx else problem_text
     try:
         if engine == "hermes":
             result_run = _run_hermes(
                 run_id=run_id,
                 problem_id=problem_id,
-                problem_text=problem_text,
+                problem_text=engine_problem_text,
                 model=model,
                 max_iterations=max_iterations,
                 started=started,
@@ -288,6 +304,9 @@ def _execute_job(
             from agent_monitor.runners import improof as improof_runner
 
             path = ws / "problem.txt"
+            if lib_ctx:
+                path = ws / "problem_with_library.txt"
+                path.write_text(engine_problem_text, encoding="utf-8")
             result = improof_runner.run_problem(
                 path,
                 problem_id=problem_id,
@@ -312,6 +331,9 @@ def _execute_job(
             from agent_monitor.runners import ucla as ucla_runner
 
             path = ws / "problem.txt"
+            if lib_ctx:
+                path = ws / "problem_with_library.txt"
+                path.write_text(engine_problem_text, encoding="utf-8")
             result = ucla_runner.run_problem(
                 path,
                 problem_id=problem_id,
@@ -337,7 +359,7 @@ def _execute_job(
                 run_id=run_id,
                 engine=engine,
                 problem_id=problem_id,
-                problem_text=problem_text,
+                problem_text=engine_problem_text,
                 started=started,
                 workspace=ws,
             )
@@ -371,6 +393,23 @@ def _execute_job(
                 break
         if final_out:
             _append_chat(run_id, "assistant", final_out[:3000])
+        # Auto-record a memory entry for this run (disabled by default in UI).
+        try:
+            from agent_monitor import library as user_library
+
+            user_library.record_run_memory(
+                run_id=run_id,
+                engine=engine,
+                problem_id=problem_id,
+                status=status,
+                summary=(
+                    f"Problem: {problem_text[:600]}\n\n"
+                    f"Outcome: {summary}\n\n"
+                    f"Final answer (excerpt):\n{final_out[:1200]}"
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            pass
     except StopRequested:
         stopped_run = _load_run_record(run_id)
         stopped_run["status"] = "stopped"

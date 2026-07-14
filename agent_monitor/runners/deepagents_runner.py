@@ -101,6 +101,49 @@ def _rewrite_prompt_for_virtual_fs(prompt: str, workspace: Path) -> str:
     return header + cleaned.strip() + "\n"
 
 
+def _load_user_tools(workspace: Path) -> list:
+    """Register library tools (workspace/_library/tools.json) as callable tools."""
+    manifest = workspace / "_library" / "tools.json"
+    if not manifest.exists():
+        return []
+    try:
+        entries = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    import subprocess
+
+    from langchain_core.tools import StructuredTool
+
+    tools = []
+    for entry in entries:
+        script = workspace / str(entry.get("script") or "")
+        if not script.exists():
+            continue
+        tname = re.sub(r"\W+", "_", str(entry.get("name") or script.stem)).strip("_") or script.stem
+
+        def _run(args: str = "", _script=script) -> str:
+            try:
+                proc = subprocess.run(
+                    ["bash", str(_script), *([a for a in args.split() if a])],
+                    capture_output=True, text=True, timeout=120, cwd=str(workspace),
+                )
+                out = (proc.stdout or "") + (("\n[stderr] " + proc.stderr) if proc.stderr else "")
+                return out.strip()[:6000] or f"(exit {proc.returncode}, no output)"
+            except Exception as exc:  # noqa: BLE001
+                return f"tool error: {exc}"
+
+        tools.append(
+            StructuredTool.from_function(
+                func=_run,
+                name=f"user_tool_{tname}"[:60],
+                description=(str(entry.get("description") or "") or f"User library tool {tname}")
+                + " (args: optional space-separated arguments)",
+            )
+        )
+    return tools
+
+
 def main() -> int:
     prompt = sys.argv[1] if len(sys.argv) > 1 else ""
     if not prompt.strip():
@@ -116,10 +159,16 @@ def main() -> int:
     from deepagents.backends.filesystem import FilesystemBackend
 
     user_prompt = _rewrite_prompt_for_virtual_fs(prompt, workspace)
-    emit_item({"type": "agent_message", "text": f"deepagents session · model {model} · fs={workspace}"})
+    user_tools = _load_user_tools(workspace)
+    emit_item({
+        "type": "agent_message",
+        "text": f"deepagents session · model {model} · fs={workspace}"
+        + (f" · user tools: {', '.join(t.name for t in user_tools)}" if user_tools else ""),
+    })
 
     agent = create_deep_agent(
         model=model,
+        tools=user_tools or None,
         backend=FilesystemBackend(root_dir=str(workspace), virtual_mode=True),
         system_prompt=(
             "You are a mathematics proving agent. Plan briefly, then write a complete "

@@ -305,6 +305,30 @@ button.start:disabled { opacity: .4; }
 .prov-grid input, .general-row input, .general-row select { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--fg); }
 .modal-foot button, .prov-card button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); cursor: pointer; color: var(--fg); }
 .modal-foot button.primary { background: var(--grad); color: #fff; border: 0; }
+
+/* Library modal */
+.lib-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.lib-tabs button { padding: 6px 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--fg); cursor: pointer; font-size: 13px; }
+.lib-tabs button.active { background: var(--grad); color: #fff; border-color: transparent; }
+.lib-auto { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--dim); margin-bottom: 10px; }
+.lib-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; max-height: 300px; overflow-y: auto; }
+.lib-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
+.lib-item.off { opacity: .5; }
+.lib-item .meta { flex: 1; min-width: 0; }
+.lib-item .nm { font-weight: 600; font-size: 13px; }
+.lib-item .ds { font-size: 12px; color: var(--dim); }
+.lib-item .ct { font-size: 11px; color: var(--dim); white-space: pre-wrap; max-height: 60px; overflow: hidden; margin-top: 4px; font-family: ui-monospace, monospace; }
+.lib-item .src { font-size: 10px; color: var(--dim); opacity: .7; }
+.lib-item button { padding: 4px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--fg); cursor: pointer; font-size: 12px; }
+.lib-empty { color: var(--dim); font-size: 13px; padding: 14px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+.lib-form { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.lib-form-title { font-size: 13px; font-weight: 600; }
+.lib-form input, .lib-form textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font-size: 13px; box-sizing: border-box; }
+.lib-form textarea { font-family: ui-monospace, monospace; resize: vertical; }
+.lib-form-row { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.lib-form-row .hint { flex: 1; font-size: 11px; color: var(--dim); }
+.lib-form-row button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--fg); cursor: pointer; }
+.lib-form-row button.primary { background: var(--grad); color: #fff; border: 0; }
 .verify-ok { color: var(--ok); font-size: 11px; } .verify-err { color: var(--err); font-size: 11px; }
 ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
 </style>
@@ -321,6 +345,7 @@ button.start:disabled { opacity: .4; }
     <div class="sb-sec">Runs</div>
     <div class="sb-runs" id="runs"></div>
     <div class="sb-foot">
+      <button id="library-btn">📚 Library</button>
       <button id="settings-btn">⚙ Settings</button>
       <button class="theme-btn" id="theme-btn" title="Theme">☾</button>
       <span class="pill" id="live-pill">idle</span>
@@ -424,6 +449,35 @@ button.start:disabled { opacity: .4; }
   </div>
 </div>
 
+<div class="modal-backdrop" id="library-modal">
+  <div class="modal" style="width:min(860px,100%)">
+    <div class="modal-hdr">
+      <div><h2>Library</h2><p style="font-size:12px;color:var(--dim)">Memory · Skills · Tools — injected into every run (workspace <code>_library/</code> + prompt)</p></div>
+      <button id="library-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="lib-tabs" id="lib-tabs">
+        <button class="active" data-type="memory">🧠 Memory</button>
+        <button data-type="skill">🎯 Skills</button>
+        <button data-type="tool">🔧 Tools</button>
+      </div>
+      <label class="lib-auto"><input type="checkbox" id="lib-auto-memory"/> Auto-save a memory entry after each run (starts disabled; enable entries you want reused)</label>
+      <div id="lib-list" class="lib-list"></div>
+      <div class="lib-form" id="lib-form">
+        <div class="lib-form-title" id="lib-form-title">Add item</div>
+        <input id="lib-name" placeholder="Name (e.g. induction-checklist)"/>
+        <input id="lib-desc" placeholder="Short description (shown to agents)"/>
+        <textarea id="lib-content" rows="6" placeholder="Content — memory: facts/notes · skill: method/strategy in Markdown · tool: bash script body (gets #!/bin/bash if missing)"></textarea>
+        <div class="lib-form-row">
+          <span class="hint" id="lib-hint"></span>
+          <button id="lib-reset">Clear</button>
+          <button class="primary" id="lib-save">Save item</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
@@ -496,6 +550,57 @@ async function saveSettings(){
   const d=await r.json(); if(r.ok){SETTINGS=d.settings;closeSettings();} else alert(d.error);
 }
 $('settings-btn').onclick=openSettings; $('settings-close').onclick=closeSettings; $('settings-cancel').onclick=closeSettings; $('settings-save').onclick=saveSettings;
+
+/* ── library (memory / skills / tools) ── */
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+let LIB={items:[],settings:{}}, libType='memory', libEditId=null;
+const LIB_HINTS={
+  memory:'Memory = facts/context injected into prompts and _library/MEMORY.md.',
+  skill:'Skill = method/strategy (Markdown) injected into prompts and _library/SKILLS.md.',
+  tool:'Tool = bash script saved to _library/tools/<name>.sh; agents can execute it (DeepAgents gets it as a callable tool).'
+};
+async function loadLibrary(){ try{ LIB=await(await fetch('/api/library')).json(); }catch(e){ LIB={items:[],settings:{}}; } renderLibrary(); }
+function openLibrary(){ $('library-modal').classList.add('open'); libEditId=null; clearLibForm(); loadLibrary(); }
+function closeLibrary(){ $('library-modal').classList.remove('open'); }
+function clearLibForm(){ libEditId=null; $('lib-form-title').textContent='Add '+libType; $('lib-name').value=''; $('lib-desc').value=''; $('lib-content').value=''; $('lib-hint').textContent=LIB_HINTS[libType]; }
+function renderLibrary(){
+  $('lib-auto-memory').checked=!!(LIB.settings&&LIB.settings.auto_memory);
+  const items=(LIB.items||[]).filter(i=>i.type===libType);
+  $('lib-tabs').querySelectorAll('button').forEach(b=>{
+    const n=(LIB.counts||{})[b.dataset.type]||0;
+    b.textContent=(b.dataset.type==='memory'?'🧠 Memory':b.dataset.type==='skill'?'🎯 Skills':'🔧 Tools')+(n?` (${n})`:'');
+    b.classList.toggle('active',b.dataset.type===libType);
+  });
+  if(!items.length){ $('lib-list').innerHTML=`<div class="lib-empty">No ${libType} items yet — add one below.</div>`; return; }
+  $('lib-list').innerHTML=items.map(i=>`
+    <div class="lib-item ${i.enabled?'':'off'}">
+      <div class="meta">
+        <div class="nm">${esc(i.name)}</div>
+        ${i.description?`<div class="ds">${esc(i.description)}</div>`:''}
+        <div class="ct">${esc((i.content||'').slice(0,240))}</div>
+        ${i.source&&i.source!=='user'?`<div class="src">source: ${esc(i.source)}</div>`:''}
+      </div>
+      <button data-act="toggle" data-id="${i.id}">${i.enabled?'On':'Off'}</button>
+      <button data-act="edit" data-id="${i.id}">Edit</button>
+      <button data-act="del" data-id="${i.id}">🗑</button>
+    </div>`).join('');
+  $('lib-list').querySelectorAll('button').forEach(b=>b.onclick=async()=>{
+    const item=(LIB.items||[]).find(x=>x.id===b.dataset.id); if(!item)return;
+    if(b.dataset.act==='toggle'){ await fetch('/api/library',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...item,enabled:!item.enabled})}); loadLibrary(); }
+    else if(b.dataset.act==='edit'){ libEditId=item.id; $('lib-form-title').textContent='Edit '+item.type+' · '+item.name; $('lib-name').value=item.name; $('lib-desc').value=item.description||''; $('lib-content').value=item.content||''; }
+    else if(b.dataset.act==='del'){ if(confirm(`Delete ${item.type} "${item.name}"?`)){ await fetch('/api/library/'+item.id,{method:'DELETE'}); loadLibrary(); } }
+  });
+}
+$('lib-tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{ libType=b.dataset.type; clearLibForm(); renderLibrary(); });
+$('lib-auto-memory').onchange=async e=>{ await fetch('/api/library/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({auto_memory:e.target.checked})}); };
+$('lib-save').onclick=async()=>{
+  const payload={id:libEditId||undefined,type:libType,name:$('lib-name').value.trim(),description:$('lib-desc').value.trim(),content:$('lib-content').value};
+  const r=await fetch('/api/library',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const d=await r.json(); if(r.ok){ clearLibForm(); loadLibrary(); } else alert(d.error||'save failed');
+};
+$('lib-reset').onclick=clearLibForm;
+$('library-btn').onclick=openLibrary; $('library-close').onclick=closeLibrary;
+$('library-modal').addEventListener('click',e=>{ if(e.target.id==='library-modal')closeLibrary(); });
 
 /* ── engines ── */
 async function loadEngines(){ try{ENGINES=(await(await fetch('/api/engines')).json()).engines||[];}catch(e){ENGINES=[{id:'hermes',label:'Hermes',available:true}];} renderEngines(); }

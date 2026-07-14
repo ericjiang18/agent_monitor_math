@@ -184,6 +184,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(get_settings(), ensure_ascii=False))
             return
 
+        if path == "/api/library":
+            from agent_monitor import library
+
+            self._send(200, json.dumps(library.get_library(), ensure_ascii=False))
+            return
+
         if path.startswith("/api/jobs/"):
             job_id = path.removeprefix("/api/jobs/")
             job = job_manager.get_job(job_id)
@@ -384,11 +390,39 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(result, ensure_ascii=False))
             return
 
+        if path == "/api/library":
+            from agent_monitor import library
+
+            try:
+                item = library.upsert_item(body)
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": str(exc)}))
+                return
+            self._send(200, json.dumps(item, ensure_ascii=False))
+            return
+
+        if path == "/api/library/settings":
+            from agent_monitor import library
+
+            self._send(200, json.dumps(library.update_settings(body), ensure_ascii=False))
+            return
+
         self._send(404, json.dumps({"error": "not found"}))
 
     def do_DELETE(self):  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path.startswith("/api/library/"):
+            from agent_monitor import library
+
+            item_id = path.removeprefix("/api/library/")
+            if not item_id or "/" in item_id:
+                self._send(404, json.dumps({"error": "not found"}))
+                return
+            ok = library.delete_item(item_id)
+            self._send(200 if ok else 404, json.dumps({"deleted": ok, "id": item_id}))
+            return
 
         if path.startswith("/api/runs/"):
             run_id = path.removeprefix("/api/runs/")
