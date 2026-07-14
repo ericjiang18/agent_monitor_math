@@ -1,0 +1,7 @@
+Two sequences ${(p_n)}_{n\geqslant -1}$ and ${(q_n)}_{n\geqslant -1}$ of integers are defined recursively by
+\[\begin{array}{llllllllll}
+p_{-1} := 1,\,\,& p_0 := 1,\,\,& p_n := (n+1)p_{n-1} + p_{n-2} \quad & (n\geqslant 1) \,,\\
+q_{-1} := 0,\,\,& q_0 := 1,\,\,& q_n := (n+1)q_{n-1} + q_{n-2} \quad & (n\geqslant 1) \,.
+\end{array} \]
+Show that for every integer $m\geqslant 1$, where $m \equiv 1 \pmod 2$, we have
+\[gcd \big(  q_{m-1}, p_{m-1} - q_{m-2}, p_{m-2} \big) \,= 1\]

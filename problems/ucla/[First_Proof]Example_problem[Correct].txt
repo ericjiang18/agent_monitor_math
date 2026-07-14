@@ -1,0 +1,30 @@
+\begin{problem*}
+Let \(n\geq 1\), and let
+\[
+\pi\colon S^n\longrightarrow \mathbb{RP}^n
+\]
+be the quotient map identifying antipodal points. Choose a basepoint
+\(x_0\in S^n\), and use \([x_0]\in \mathbb{RP}^n\) as the basepoint of
+\(\mathbb{RP}^n\), so that \(\pi\) is a based map.
+
+Let \(\widetilde{\KO}^{*}\) denote reduced real \(K\)-theory. Consider the
+induced map
+\[
+\pi^*\colon \widetilde{\KO}^{-1}(\mathbb{RP}^n)
+\longrightarrow
+\widetilde{\KO}^{-1}(S^n).
+\]
+
+Is its image contained in the subgroup of doubles in the target? That is,
+is
+\[
+\operatorname{im}(\pi^*)\subseteq
+2\,\widetilde{\KO}^{-1}(S^n),
+\]
+where
+\[
+2\,\widetilde{\KO}^{-1}(S^n)
+=
+\{\,2y : y\in \widetilde{\KO}^{-1}(S^n)\,\}?
+\]
+\end{problem*}

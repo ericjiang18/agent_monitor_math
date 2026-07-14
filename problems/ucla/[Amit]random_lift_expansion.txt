@@ -1,0 +1,22 @@
+Prove the theorem below:
+
+\begin{definition}[$(n, m, k)$-Graph]
+    A bipartite graph with $n$ left nodes, $m$ right nodes, and right degree $k$. 
+\end{definition}
+
+\begin{definition}[$(\gamma, t)$-Expansion]
+    An $(n, m, k)$-graph is $(\gamma, t)$-expanding iff for all subsets $S$ of right nodes with $1 \leq \vert S\vert \leq t$, the neighborhood of $S$ has size at least $\gamma k \vert S\vert$.
+\end{definition}
+
+\begin{definition}[Random Lift]
+    A random \emph{$\ell$-lift} of an $(n, m, k)$-graph $G$ is a $(n\ell, m\ell, k)$-graph $H$ where
+    \begin{enumerate}
+        \item Each left vertex $u$ is replaced by a cloud $C_L(u)$ of $\ell$ vertices.
+        \item Each right vertex $v$ is replaced by a cloud $C_R(v)$ of $\ell$ vertices.
+        \item For each edge $(u, v)$ in $G$, we sample a random matching between $C_L(u)$ and $C_R(v)$, and add these edges to $H$.
+    \end{enumerate}
+\end{definition}
+
+\begin{theorem}
+    For all $\varepsilon > 0$, there exists $\delta > 0$ and $k \in \mathbb{Z}^+$ such that the following holds for all sufficiently large $n$. Let $G$ be a random $(n, n^{1+\delta}, k)$-graph, and let $H$ be a random $n$-lift of $G$. Then $H$ is $(1-\varepsilon, n^{2-\varepsilon})$-expanding with probability $1-o(1)$.
+\end{theorem}

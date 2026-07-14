@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Proving Console</title>
+<style>
+:root, [data-theme="dark"] {
+  --bg: #0a0d12; --bg2: #0e1218; --panel: #11161e; --panel2: #161c26;
+  --border: #232c3a; --border2: #2e3a4d; --fg: #ecf1f8; --muted: #8b9cb3; --dim: #5b6b82;
+  --accent: #4f8cff; --accent-2: #22d3ee; --grad: linear-gradient(120deg, #4f8cff, #22d3ee);
+  --ok: #34d399; --warn: #fbbf24; --err: #f87171;
+  --mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  --shadow: 0 8px 28px rgba(0,0,0,.35); --r: 14px; --scroll: #26303f;
+  --sidebar-w: 260px;
+}
+[data-theme="light"] {
+  --bg: #f7f8fb; --bg2: #fff; --panel: #fff; --panel2: #f3f5f9;
+  --border: #dde3ed; --border2: #c8d2e0; --fg: #111827; --muted: #4b5563; --dim: #9ca3af;
+  --accent: #2563eb; --accent-2: #0891b2; --grad: linear-gradient(120deg, #2563eb, #0891b2);
+  --shadow: 0 8px 28px rgba(15,23,42,.08); --scroll: #c5ced9;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased;
+}
+
+/* ── App shell (ChatGPT-like) ───────────────── */
+.app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0; background: var(--bg2);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+}
+.sb-brand {
+  display: flex; align-items: center; gap: 10px; padding: 16px 14px 12px;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.sb-brand .logo {
+  width: 28px; height: 28px; border-radius: 9px; background: var(--grad);
+  display: grid; place-items: center; font-size: 14px; color: #fff; font-weight: 800;
+}
+.sb-brand .nm { font-size: 14px; font-weight: 700; }
+.sb-brand .nm i { font-style: normal; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+.new-proof {
+  margin: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel); color: var(--fg); font-size: 13px; font-weight: 600;
+  cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px;
+  transition: border-color .15s, background .15s;
+}
+.new-proof:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+
+.sb-sec { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; padding: 8px 14px 6px; font-weight: 700; }
+.sb-runs { flex: 1; overflow-y: auto; padding: 0 10px 10px; }
+
+.run-item {
+  padding: 9px 10px; border-radius: 10px; margin-bottom: 4px; cursor: pointer;
+  transition: background .12s; border: 1px solid transparent;
+}
+.run-item:hover { background: var(--panel2); }
+.run-item.active { background: color-mix(in srgb, var(--accent) 10%, var(--panel2)); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.run-top { display: flex; align-items: flex-start; gap: 6px; }
+.run-item .en { font-weight: 600; font-size: 12px; display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.run-item .en .sdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.sdot.running { background: var(--warn); animation: pulse 1.2s infinite; }
+.sdot.finished { background: var(--ok); }
+.sdot.failed { background: var(--err); }
+.sdot.stopped { background: var(--dim); }
+.sdot.archived { background: var(--dim); }
+.run-item .st { color: var(--dim); font-size: 10px; margin-top: 2px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-del, .run-act {
+  width: 20px; height: 20px; border: 0; border-radius: 5px; background: transparent;
+  color: var(--dim); cursor: pointer; font-size: 13px; opacity: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.run-act { font-size: 10px; }
+.run-item:hover .run-del, .run-item.active .run-del,
+.run-item:hover .run-act, .run-item.active .run-act { opacity: 1; }
+.run-del:hover { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+.run-act.stop:hover { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+.run-act.cont:hover { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+@keyframes pulse { 50% { opacity: .3; } }
+
+.sb-foot {
+  padding: 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; align-items: center;
+}
+.sb-foot button {
+  flex: 1; border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+  border-radius: 8px; padding: 8px; font-size: 12px; cursor: pointer;
+}
+.sb-foot button:hover { color: var(--fg); border-color: var(--border2); }
+.sb-foot .theme-btn { flex: 0; width: 36px; padding: 8px 0; }
+.pill {
+  font-size: 10px; padding: 4px 8px; border-radius: 999px; font-weight: 600;
+  border: 1px solid var(--border); color: var(--muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.pill.running { color: var(--warn); }
+.pill.finished { color: var(--ok); }
+.pill.failed { color: var(--err); }
+.pill.stopped { color: var(--dim); }
+
+/* ── Main stage ─────────────────────────────── */
+.main-stage { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+/* Landing (home) */
+#view-landing {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 40px 24px 60px;
+  background: radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 65%), var(--bg);
+}
+#view-landing h1 { font-size: 26px; font-weight: 650; letter-spacing: -.03em; margin-bottom: 22px; text-align: center; }
+#view-landing h1 span { color: var(--dim); font-weight: 500; }
+.prompt-shell {
+  width: min(760px, 100%); background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden;
+}
+.prompt-shell:focus-within { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+#problem-text {
+  width: 100%; min-height: 120px; max-height: 220px; resize: vertical; border: 0;
+  background: transparent; color: var(--fg); padding: 20px 22px 12px; font-size: 15px;
+  line-height: 1.55; outline: none; font-family: inherit;
+}
+#problem-text::placeholder { color: var(--dim); }
+.prompt-footer { display: flex; align-items: center; gap: 8px; padding: 10px 14px 14px; border-top: 1px solid var(--border); background: var(--panel2); flex-wrap: wrap; }
+.engine-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.eng {
+  display: flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border);
+  background: var(--panel); border-radius: 999px; cursor: pointer; font-size: 12px; white-space: nowrap;
+}
+.eng.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.eng.unavail { opacity: .4; }
+.eng .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.eng.unavail .dot { background: var(--dim); }
+.eng .v { font-size: 10px; color: var(--dim); }
+.model-pick { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
+.model-pick select, .model-pick input { background: var(--panel); border: 1px solid var(--border); color: var(--fg); border-radius: 8px; padding: 6px 8px; font-size: 11px; }
+button.start {
+  background: var(--grad); color: #fff; border: 0; border-radius: 10px; padding: 10px 20px;
+  font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+button.start:disabled { opacity: .4; }
+.errbox {
+  color: var(--err); background: color-mix(in srgb, var(--err) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--err) 25%, transparent); border-radius: 10px;
+  padding: 10px 14px; font-size: 12px; margin-top: 12px; max-width: 760px; width: 100%; display: none;
+}
+
+/* Session (sandbox / monitor) */
+#view-session { flex: 1; display: none; flex-direction: column; min-height: 0; overflow: hidden; }
+.session-top {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg2); flex-shrink: 0;
+}
+.session-top .seg-control { grid-column: 2; }
+.session-top .session-side { grid-column: 3; justify-self: end; }
+.seg-control {
+  display: inline-flex; padding: 3px; border-radius: 999px; background: var(--panel2);
+  border: 1px solid var(--border);
+}
+.seg-control button {
+  border: 0; background: transparent; color: var(--dim); padding: 7px 20px;
+  border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.seg-control button.active { background: var(--panel); color: var(--fg); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.session-side { display: flex; align-items: center; gap: 10px; max-width: 55%; min-width: 0; }
+.session-meta { font-size: 11px; color: var(--dim); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sess-btn {
+  border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+  border-radius: 999px; padding: 5px 14px; font-size: 11px; font-weight: 700; cursor: pointer;
+  display: none; align-items: center; gap: 5px; flex-shrink: 0; transition: all .15s;
+}
+.sess-btn.show { display: inline-flex; }
+.sess-btn.stop:hover { border-color: var(--err); color: var(--err); }
+.sess-btn.cont:hover { border-color: var(--ok); color: var(--ok); }
+
+.session-body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+/* Sandbox split: proof + chat */
+#view-sandbox { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+.sandbox-split { flex: 1; display: grid; grid-template-columns: 1fr 360px; grid-template-rows: minmax(0, 1fr); min-height: 0; overflow: hidden; }
+
+.proof-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
+.proof-toolbar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); background: var(--bg2); flex-shrink: 0;
+}
+.proof-toolbar .title { font-size: 12px; font-weight: 700; }
+.proof-toolbar .sub { font-size: 11px; color: var(--dim); font-family: var(--mono); flex: 1; }
+.proof-toolbar button {
+  border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+  border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.proof-toolbar button:disabled { opacity: .4; cursor: not-allowed; }
+.proof-body { flex: 1; min-height: 0; position: relative; overflow: hidden; display: flex; flex-direction: column; background: color-mix(in srgb, var(--bg2) 30%, var(--bg)); }
+.pdf-pages { flex: 1; overflow-y: auto; padding: 24px; display: none; flex-direction: column; align-items: center; gap: 18px; }
+.md-view { flex: 1; overflow-y: auto; padding: 28px 8%; display: none; background: var(--bg); }
+.md-view .md-doc { max-width: 760px; margin: 0 auto; font-size: 14.5px; line-height: 1.75; color: var(--fg); }
+.md-view h1, .md-view h2, .md-view h3 { margin: 1.2em 0 .5em; line-height: 1.3; }
+.md-view h1 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+.md-view h2 { font-size: 1.25em; }
+.md-view p { margin: .7em 0; }
+.md-view code { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: var(--mono); font-size: .9em; }
+.md-view pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+.md-view pre code { border: 0; background: none; padding: 0; }
+.md-view blockquote { border-left: 3px solid var(--accent); margin: .8em 0; padding: 2px 14px; color: var(--dim); }
+.md-view .katex-display { overflow-x: auto; padding: 4px 0; }
+.pdf-page { position: relative; background: #fff; box-shadow: 0 2px 16px rgba(15,23,42,.08); line-height: 0; }
+.pdf-page canvas { display: block; }
+.pdf-status { color: var(--dim); padding: 40px; text-align: center; }
+/* PDF.js text layer — enables Cursor-style text selection */
+.textLayer {
+  position: absolute; inset: 0; overflow: hidden; line-height: 1;
+  text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 2;
+}
+.textLayer span, .textLayer br {
+  color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%;
+}
+.textLayer ::selection { background: rgba(79,140,255,.35); }
+.sel-pop {
+  position: fixed; z-index: 200; display: none; align-items: center; gap: 6px;
+  background: var(--panel); color: var(--fg); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.sel-pop:hover { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.proof-empty {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--dim); font-size: 13px; text-align: center; padding: 24px; line-height: 1.7; gap: 8px;
+}
+
+/* Chat panel */
+.chat-panel {
+  display: flex; flex-direction: column; min-height: 0; background: var(--bg2);
+}
+.chat-hdr { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.chat-hdr span { display: block; font-size: 11px; color: var(--dim); font-weight: 500; margin-top: 2px; }
+.chat-status {
+  display: none; align-items: center; gap: 7px; margin-top: 8px;
+  font-size: 11px; font-weight: 600; color: var(--muted);
+}
+.chat-status.on { display: flex; }
+.chat-status .cdot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex-shrink: 0; animation: pulse 1.2s infinite; }
+.chat-status.done .cdot { background: var(--ok); animation: none; }
+.chat-status.err .cdot { background: var(--err); animation: none; }
+.chat-status .detail { font-weight: 400; color: var(--dim); font-family: var(--mono); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.chat-msg { max-width: 95%; font-size: 13px; line-height: 1.5; }
+.chat-msg.user { align-self: flex-end; background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); padding: 10px 12px; border-radius: 14px 14px 4px 14px; }
+.chat-msg.assistant, .chat-msg.system { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); padding: 10px 12px; border-radius: 14px 14px 14px 4px; color: var(--muted); }
+.chat-msg.system { font-size: 11px; font-style: italic; }
+.chat-msg .who { font-size: 10px; font-weight: 700; color: var(--dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; display: flex; gap: 8px; align-items: baseline; }
+.chat-msg .who .ts { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: .7; }
+.chat-msg { white-space: pre-wrap; word-break: break-word; }
+/* Process log strip */
+.proc-log { border-top: 1px solid var(--border); flex-shrink: 0; background: var(--bg2); }
+.proc-hdr {
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer;
+  font-size: 11px; font-weight: 700; color: var(--muted); user-select: none;
+}
+.proc-hdr:hover { color: var(--fg); }
+.proc-hdr .n { font-weight: 400; color: var(--dim); font-family: var(--mono); font-size: 10px; }
+.proc-hdr .chev { margin-left: auto; color: var(--dim); transition: transform .15s; }
+.proc-log.collapsed .chev { transform: rotate(-90deg); }
+.proc-body {
+  margin: 0; padding: 0 16px 10px; max-height: 170px; overflow-y: auto;
+  font-family: var(--mono); font-size: 10px; line-height: 1.6; color: var(--dim);
+  white-space: pre-wrap; word-break: break-word;
+}
+.proc-log.collapsed .proc-body { display: none; }
+.proc-body .ln-new { color: var(--muted); }
+
+.chat-compose {
+  padding: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
+}
+.chat-compose textarea {
+  width: 100%; min-height: 72px; max-height: 140px; resize: vertical; border: 1px solid var(--border);
+  background: var(--panel); color: var(--fg); border-radius: 10px; padding: 10px 12px; font-size: 13px;
+  font-family: inherit; outline: none;
+}
+.chat-compose textarea:focus { border-color: var(--accent); }
+.chat-compose .row { display: flex; justify-content: space-between; align-items: center; }
+.chat-compose button {
+  background: var(--grad); color: #fff; border: 0; border-radius: 8px; padding: 8px 16px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.chat-compose button:disabled { opacity: .4; }
+.chat-compose .hint { font-size: 10px; color: var(--dim); }
+
+#view-monitor { flex: 1; display: none; min-height: 0; overflow-y: auto; }
+#view-monitor iframe { width: 100%; min-height: 720px; height: 1200px; border: 0; display: block; }
+
+/* Settings modal */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; display: none; align-items: center; justify-content: center; padding: 24px; }
+.modal-backdrop.open { display: flex; }
+.modal { width: min(720px, 100%); max-height: 85vh; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+.modal-hdr { display: flex; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.modal-body { overflow-y: auto; padding: 16px 20px; }
+.modal-foot { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+.prov-card, .general-row { border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px; background: var(--panel2); }
+.prov-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.prov-grid label, .general-row label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--dim); }
+.prov-grid input, .general-row input, .general-row select { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--fg); }
+.modal-foot button, .prov-card button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); cursor: pointer; color: var(--fg); }
+.modal-foot button.primary { background: var(--grad); color: #fff; border: 0; }
+.verify-ok { color: var(--ok); font-size: 11px; } .verify-err { color: var(--err); font-size: 11px; }
+::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sb-brand" id="go-home" title="Back to home">
+      <div class="logo">∎</div>
+      <div class="nm">Proving<i>Console</i></div>
+    </div>
+    <button class="new-proof" id="new-proof-btn">＋ New proof</button>
+    <div class="sb-sec">Runs</div>
+    <div class="sb-runs" id="runs"></div>
+    <div class="sb-foot">
+      <button id="settings-btn">⚙ Settings</button>
+      <button class="theme-btn" id="theme-btn" title="Theme">☾</button>
+      <span class="pill" id="live-pill">idle</span>
+    </div>
+  </aside>
+
+  <main class="main-stage">
+    <!-- Landing -->
+    <section id="view-landing">
+      <h1>What would you like to <span>prove</span>?</h1>
+      <div class="prompt-shell">
+        <textarea id="problem-text" rows="4" placeholder="Describe a math problem — e.g. Prove that √2 is irrational…"></textarea>
+        <div class="prompt-footer">
+          <div id="engines" class="engine-chips"></div>
+          <div class="model-pick">
+            <span>Model</span>
+            <select id="model-select"></select>
+            <input id="model-custom" type="text" placeholder="custom" style="display:none"/>
+          </div>
+          <button class="start" id="start-btn">Prove ▸</button>
+        </div>
+      </div>
+      <div class="errbox" id="form-error"></div>
+    </section>
+
+    <!-- Session: Sandbox / Monitor -->
+    <section id="view-session">
+      <div class="session-top">
+        <div class="seg-control">
+          <button class="active" data-view="sandbox">Sandbox</button>
+          <button data-view="monitor">Monitor</button>
+        </div>
+        <div class="session-side">
+          <button class="sess-btn stop" id="sess-stop">■ Stop</button>
+          <button class="sess-btn cont" id="sess-cont">▶ Continue</button>
+          <span class="session-meta" id="run-meta">—</span>
+        </div>
+      </div>
+      <div class="session-body">
+        <div id="view-sandbox">
+          <div class="sandbox-split">
+            <div class="proof-panel">
+              <div class="proof-toolbar">
+                <span class="title">Proof</span>
+                <span class="sub" id="proof-label">—</span>
+                <button id="pdf-dl-btn" disabled>⬇ Download</button>
+              </div>
+              <div class="proof-body">
+                <div class="proof-empty" id="proof-empty">
+                  <div style="font-size:28px;opacity:.4">∎</div>
+                  <div>Proof preview will appear here.</div>
+                </div>
+                <div id="pdf-pages" class="pdf-pages"></div>
+                <div id="md-view" class="md-view"></div>
+              </div>
+            </div>
+            <div class="chat-panel">
+              <div class="chat-hdr">
+                Human in the loop
+                <span>Guide the prover — feedback continues the run</span>
+                <div class="chat-status" id="chat-status">
+                  <span class="cdot"></span>
+                  <span class="stage" id="chat-stage"></span>
+                  <span class="detail" id="chat-detail"></span>
+                </div>
+              </div>
+              <div class="chat-msgs" id="chat-msgs"></div>
+              <div class="proc-log" id="proc-log">
+                <div class="proc-hdr" id="proc-toggle">
+                  <span class="t">Process log</span>
+                  <span class="n" id="proc-count"></span>
+                  <span class="chev" id="proc-chev">▾</span>
+                </div>
+                <pre class="proc-body" id="proc-body"></pre>
+              </div>
+              <div class="chat-compose">
+                <textarea id="chat-input" placeholder="e.g. Make the base case more explicit, or try induction on n…"></textarea>
+                <div class="row">
+                  <span class="hint">Enter to send · Shift+Enter newline</span>
+                  <button id="chat-send" disabled>Send</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="view-monitor">
+          <iframe id="monitor-frame" src="/monitor"></iframe>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="sel-pop" id="sel-pop">💬 Add to chat</div>
+
+<div class="modal-backdrop" id="settings-modal">
+  <div class="modal">
+    <div class="modal-hdr"><div><h2>Settings</h2><p style="font-size:12px;color:var(--dim)">API keys &amp; models</p></div><button id="settings-close">✕</button></div>
+    <div class="modal-body" id="settings-body"></div>
+    <div class="modal-foot"><button id="settings-cancel">Cancel</button><button class="primary" id="settings-save">Save</button></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script>
+const THEME_KEY='proving-console-theme';
+let ENGINES=[], SETTINGS=null, engine='hermes';
+let runId=null, jobId=null, proofPath=null, lastProofMtime=0, pollTimer=null, pdfRenderGen=0;
+let screen='landing', workspaceView='sandbox';
+const $=id=>document.getElementById(id);
+
+/* ── navigation ── */
+function goLanding(){
+  screen='landing';
+  $('view-landing').style.display='flex';
+  $('view-session').style.display='none';
+}
+function goSession(view='sandbox'){
+  screen='session';
+  workspaceView=view;
+  $('view-landing').style.display='none';
+  $('view-session').style.display='flex';
+  setWorkspaceView(view);
+}
+function setWorkspaceView(v){
+  workspaceView=v;
+  document.querySelectorAll('.seg-control button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.view===v);
+  });
+  $('view-sandbox').style.display=v==='sandbox'?'flex':'none';
+  $('view-monitor').style.display=v==='monitor'?'block':'none';
+  if(v==='monitor'){ syncThemeToMonitor(document.documentElement.dataset.theme||'dark'); syncRunToMonitor(runId); }
+}
+$('go-home').onclick=goLanding;
+$('new-proof-btn').onclick=()=>{ runId=null; jobId=null; stopPolling(); goLanding(); $('problem-text').focus(); };
+document.querySelectorAll('.seg-control button').forEach(b=>b.onclick=()=>setWorkspaceView(b.dataset.view));
+
+/* ── theme ── */
+function applyTheme(t){ document.documentElement.dataset.theme=t; localStorage.setItem(THEME_KEY,t); $('theme-btn').textContent=t==='light'?'☀':'☾'; syncThemeToMonitor(t); }
+function syncThemeToMonitor(t){ try{$('monitor-frame')?.contentWindow?.postMessage({type:'proving-console-theme',theme:t},'*');}catch(e){} }
+function syncRunToMonitor(rid){ try{$('monitor-frame')?.contentWindow?.postMessage({type:'proving-console-run',run_id:rid||''},'*');}catch(e){} }
+applyTheme(localStorage.getItem(THEME_KEY)||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));
+$('theme-btn').onclick=()=>applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
+window.addEventListener('message',e=>{ if(e.data?.type==='proving-console-resize'&&e.data.height){ const f=$('monitor-frame'); if(f)f.style.height=Math.max(720,Number(e.data.height))+'px'; }});
+$('monitor-frame').onload=()=>{ syncThemeToMonitor(document.documentElement.dataset.theme||'dark'); syncRunToMonitor(runId); };
+
+/* ── settings (compact) ── */
+function currentModel(){ const s=$('model-select').value; return s==='__custom__'?$('model-custom').value.trim():s||SETTINGS?.default_model||''; }
+async function loadSettings(){ try{ SETTINGS=await(await fetch('/api/settings')).json(); const sel=$('model-select'); const m=[...new Set([...(SETTINGS.model_presets||[]),SETTINGS.default_model].filter(Boolean))]; sel.innerHTML=m.map(x=>`<option value="${x}">${x}</option>`).join('')+'<option value="__custom__">custom…</option>'; if(SETTINGS.default_model&&m.includes(SETTINGS.default_model))sel.value=SETTINGS.default_model; }catch(e){} }
+function openSettings(){ $('settings-modal').classList.add('open'); loadSettings().then(renderSettingsModal); }
+function closeSettings(){ $('settings-modal').classList.remove('open'); }
+function renderSettingsModal(){
+  if(!SETTINGS){$('settings-body').textContent='Failed to load.';return;}
+  $('settings-body').innerHTML=`<div class="general-row"><label>Model<input id="set-model" value="${SETTINGS.default_model||''}"/></label><label>Max iter<input id="set-max-iter" type="number" value="${SETTINGS.max_iterations||40}"/></label></div>`+
+    (SETTINGS.providers||[]).map(p=>`<div class="prov-card"><b>${p.label}</b> <span style="font-size:10px;color:var(--dim)">${p.api_key_set?'✓ set':'not set'}</span><div class="prov-grid" style="margin-top:8px"><label>${p.key_var}<input type="password" data-key="${p.key_var}" placeholder="sk-…"/></label><label>${p.base_var||'Base'}<input data-key="${p.base_var||''}" value="${p.base_url||''}"/></label></div><button data-verify="${p.id}" style="margin-top:8px">Verify</button> <span id="verify-${p.id}"></span></div>`).join('');
+  $('settings-body').querySelectorAll('[data-verify]').forEach(btn=>btn.onclick=async()=>{
+    const pid=btn.dataset.verify; const card=btn.closest('.prov-card');
+    const spec=SETTINGS.providers.find(x=>x.id===pid);
+    const r=await fetch('/api/settings/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:pid,api_key:card.querySelector(`[data-key="${spec.key_var}"]`)?.value||undefined})});
+    const d=await r.json(); $('verify-'+pid).className=d.ok?'verify-ok':'verify-err'; $('verify-'+pid).textContent=d.ok?'✓ OK':'✗ '+(d.error||'fail');
+  });
+}
+async function saveSettings(){
+  const updates={}; if($('set-model')?.value)updates.AGENT_MONITOR_MODEL=$('set-model').value.trim();
+  if($('set-max-iter')?.value)updates.AGENT_MONITOR_MAX_ITERATIONS=String($('set-max-iter').value);
+  $('settings-body').querySelectorAll('input[data-key]').forEach(inp=>{ if(inp.value.trim())updates[inp.dataset.key]=inp.value.trim(); });
+  const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({updates})});
+  const d=await r.json(); if(r.ok){SETTINGS=d.settings;closeSettings();} else alert(d.error);
+}
+$('settings-btn').onclick=openSettings; $('settings-close').onclick=closeSettings; $('settings-cancel').onclick=closeSettings; $('settings-save').onclick=saveSettings;
+
+/* ── engines ── */
+async function loadEngines(){ try{ENGINES=(await(await fetch('/api/engines')).json()).engines||[];}catch(e){ENGINES=[{id:'hermes',label:'Hermes',available:true}];} renderEngines(); }
+function renderEngines(){
+  $('engines').innerHTML=ENGINES.map(e=>`<div class="eng ${e.id===engine?'active':''} ${e.available?'':'unavail'}" data-id="${e.id}"><span class="dot"></span><span>${e.label}</span>${e.vendor?`<span class="v">${e.vendor}</span>`:''}</div>`).join('');
+  $('engines').querySelectorAll('.eng').forEach(el=>el.onclick=()=>{ engine=el.dataset.id; renderEngines(); const s=ENGINES.find(x=>x.id===engine); if(s&&!s.available){$('form-error').style.display='block';$('form-error').textContent=s.label+' 未配置 — '+(s.hint||'');}else $('form-error').style.display='none'; });
+}
+
+async function startRun(){
+  const text=$('problem-text').value.trim(); const eb=$('form-error'); eb.style.display='none';
+  if(!text){eb.style.display='block';eb.textContent='请输入题目。';return;}
+  $('start-btn').disabled=true; setPill('running','starting…');
+  try{
+    const r=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({engine,problem_text:text,model:currentModel()||null,max_iterations:Number(SETTINGS?.max_iterations)||40})});
+    const d=await r.json(); if(!r.ok)throw new Error(d.error);
+    selectRun(d.run_id,d.job_id); goSession('sandbox');
+  }catch(err){eb.style.display='block';eb.textContent=String(err.message); setPill('failed','failed');}
+  finally{$('start-btn').disabled=false;}
+}
+
+/* ── runs ── */
+async function loadRuns(){
+  let jobs=((await(await fetch('/api/jobs')).json()).jobs||[]).slice().reverse();
+  const seen=new Set();
+  jobs=jobs.filter(j=>{ if(seen.has(j.run_id))return false; seen.add(j.run_id); return true; });
+  const manifest=((await(await fetch('/api/runs')).json()).runs||[]).filter(r=>!seen.has(r.run_id));
+  const item=(rid,jid,en,pid,st)=>{
+    const act=st==='running'
+      ?`<button class="run-act stop" data-run="${rid}" title="Stop">■</button>`
+      :`<button class="run-act cont" data-run="${rid}" title="Continue">▶</button>`;
+    return `<div class="run-item ${rid===runId?'active':''}" data-run="${rid}" ${jid?`data-job="${jid}"`:''}><div class="run-top"><div class="en"><span class="sdot ${st||'archived'}"></span>${en}</div>${act}<button class="run-del" data-run="${rid}">×</button></div><div class="st">${pid}</div></div>`;
+  };
+  $('runs').innerHTML=jobs.map(j=>item(j.run_id,j.job_id,j.engine,j.problem_id,j.status)).join('')+manifest.map(r=>item(r.run_id,null,r.engine||'?',r.problem_id||r.run_id,r.status)).join('')||'<div style="color:var(--dim);font-size:11px;padding:8px">No runs yet</div>';
+  $('runs').querySelectorAll('.run-item').forEach(el=>el.onclick=()=>{ selectRun(el.dataset.run,el.dataset.job||null); goSession(workspaceView||'sandbox'); });
+  $('runs').querySelectorAll('.run-del').forEach(b=>b.onclick=e=>{e.stopPropagation();deleteRun(b.dataset.run);});
+  $('runs').querySelectorAll('.run-act.stop').forEach(b=>b.onclick=e=>{e.stopPropagation();stopRun(b.dataset.run);});
+  $('runs').querySelectorAll('.run-act.cont').forEach(b=>b.onclick=e=>{e.stopPropagation();continueRun(b.dataset.run);});
+}
+
+function selectRun(rid,jid){
+  runId=rid; jobId=jid; lastProofMtime=0; lastChatKey=''; resetProofView(); loadRuns();
+  syncRunToMonitor(rid); loadChat(); $('chat-send').disabled=!rid;
+  updateChatStatus(null);
+  startPolling();
+}
+
+async function deleteRun(rid){
+  if(!confirm('删除此 run？'))return;
+  await fetch('/api/runs/'+encodeURIComponent(rid),{method:'DELETE'});
+  if(runId===rid){runId=null;stopPolling();resetProofView();$('chat-msgs').innerHTML='';goLanding();}
+  loadRuns(); syncRunToMonitor(null);
+}
+
+async function stopRun(rid){
+  try{ await fetch('/api/runs/'+encodeURIComponent(rid)+'/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); }catch(e){}
+  if(runId===rid) setPill('stopped','stopped');
+  loadRuns();
+}
+
+async function continueRun(rid){
+  try{
+    const r=await fetch('/api/runs/'+encodeURIComponent(rid)+'/continue',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const d=await r.json();
+    if(!r.ok){ alert(d.error||'continue failed'); return; }
+    if(runId!==rid) selectRun(rid,d.job_id||null);
+    setPill('running','continuing…'); startPolling();
+  }catch(e){ alert(String(e)); }
+  loadRuns();
+}
+
+/* ── polling ── */
+function startPolling(){ stopPolling(); pollTimer=setInterval(tick,2000); tick(); }
+function stopPolling(){ if(pollTimer)clearInterval(pollTimer); pollTimer=null; }
+async function tick(){
+  if(!runId)return;
+  try{
+    const r=await fetch('/api/run/'+encodeURIComponent(runId));
+    if(r.ok){
+      const run=await r.json(); const t=run.totals||{};
+      $('run-meta').textContent=`${run.run_id} · ${run.status} · $${Number(t.cost_usd||0).toFixed(2)}`;
+      setPill(run.status,(run.status||'')+' · '+(run.engine||''));
+      updateChatStatus(run);
+      if(run.status==='finished'||run.status==='failed'||run.status==='stopped'){ await refreshProofPreview(true); stopPolling(); loadRuns(); loadChat(); return; }
+    }
+  }catch(e){}
+  await refreshProofPreview(false);
+  loadChat();
+}
+
+/* ── harness stage indicator ── */
+const STAGE_LABELS={
+  bootstrap:'Starting', understand:'Understanding', plan:'Planning', draft:'Drafting',
+  verify:'Verifying', finalize:'Finalizing', work:'Working',
+  workflow:'Working', author:'Writing', critic:'Reviewing', council:'Deliberating',
+  literature:'Exploring literature', advisor:'Advising', solvers:'Solving',
+  hermes_main:'Proving', setup:'Setting up', error:'Error',
+};
+function updateChatStatus(run){
+  const box=$('chat-status'); if(!box)return;
+  if(!run){
+    box.className='chat-status';
+    $('sess-stop').classList.remove('show'); $('sess-cont').classList.remove('show');
+    lastProcText=''; $('proc-body').textContent=''; $('proc-count').textContent='';
+    return;
+  }
+  const agents=run.agents||[]; const last=agents[agents.length-1];
+  const stageKey=last?.pipeline_stage||last?.stage_name||'';
+  const label=STAGE_LABELS[stageKey]||STAGE_LABELS[last?.stage_name]||stageKey||'Working';
+  let detail='';
+  const out=(last?.output||'').trim();
+  if(out){
+    const lines=out.split('\n').map(s=>s.trim()).filter(Boolean);
+    detail=(lines[lines.length-1]||'').slice(0,80);
+  }
+  if(run.status==='finished'){ box.className='chat-status on done'; $('chat-stage').textContent='Finished'; $('chat-detail').textContent=''; }
+  else if(run.status==='stopped'){ box.className='chat-status on'; $('chat-stage').textContent='Stopped'; $('chat-detail').textContent=''; }
+  else if(run.status==='failed'){ box.className='chat-status on err'; $('chat-stage').textContent='Failed'; $('chat-detail').textContent=detail; }
+  else { box.className='chat-status on'; $('chat-stage').textContent=label+'…'; $('chat-detail').textContent=detail; }
+  updateSessionButtons(run.status);
+  updateProcLog(run);
+}
+
+function updateSessionButtons(status){
+  $('sess-stop').classList.toggle('show', status==='running');
+  $('sess-cont').classList.toggle('show', status==='finished'||status==='failed'||status==='stopped');
+}
+
+/* ── simple process log ── */
+let procCollapsed=false, lastProcText='';
+function updateProcLog(run){
+  const body=$('proc-body'); if(!body)return;
+  const agents=run?.agents||[]; const last=agents[agents.length-1];
+  const raw=(last?.output||'').trim();
+  if(!raw){ body.textContent=''; $('proc-count').textContent=''; return; }
+  // last 300 non-empty lines (fuller live record for human-in-the-loop)
+  const lines=raw.split('\n').map(s=>s.replace(/\s+$/,'')).filter(s=>s.trim());
+  const tail=lines.slice(-300);
+  const text=tail.join('\n');
+  if(text===lastProcText)return; lastProcText=text;
+  body.textContent=text;
+  $('proc-count').textContent=lines.length+' lines';
+  body.scrollTop=body.scrollHeight;
+}
+$('proc-toggle').onclick=()=>{ procCollapsed=!procCollapsed; $('proc-log').classList.toggle('collapsed',procCollapsed); };
+$('sess-stop').onclick=()=>{ if(runId)stopRun(runId); };
+$('sess-cont').onclick=()=>{ if(runId)continueRun(runId); };
+
+/* ── proof preview ── */
+function resetProofView(){ pdfRenderGen++; $('proof-label').textContent='—'; $('pdf-dl-btn').disabled=true; const p=$('pdf-pages'); p.style.display='none'; p.innerHTML=''; p.dataset.cur=''; const m=$('md-view'); m.style.display='none'; m.innerHTML=''; m.dataset.cur=''; $('proof-empty').style.display='flex'; }
+function renderMathIn(el){ if(window.renderMathInElement){ try{ renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false}); }catch(e){} } }
+async function showProofMd(url){
+  $('proof-empty').style.display='none'; $('pdf-pages').style.display='none';
+  const view=$('md-view'); view.style.display='block';
+  try{
+    let text=await(await fetch(url)).text();
+    try{ const j=JSON.parse(text); if(j&&typeof j.content==='string')text=j.content; }catch(e){}
+    if(view.dataset.cur===text.length+':'+text.slice(0,80))return;
+    view.dataset.cur=text.length+':'+text.slice(0,80);
+    const html=window.marked?marked.parse(text,{mangle:false,headerIds:false}):('<pre>'+escapeHtml(text)+'</pre>');
+    view.innerHTML='<div class="md-doc">'+html+'</div>';
+    renderMathIn(view);
+  }catch(e){ view.innerHTML='<div class="pdf-status">Preview failed</div>'; }
+}
+async function showProofPdf(url){
+  $('proof-empty').style.display='none'; $('md-view').style.display='none';
+  const pages=$('pdf-pages'); pages.style.display='flex';
+  if(pages.dataset.cur===url)return; pages.dataset.cur=url;
+  const gen=++pdfRenderGen; pages.innerHTML='<div class="pdf-status">Rendering…</div>';
+  if(!window.pdfjsLib){pages.innerHTML='<div class="pdf-status">PDF.js unavailable</div>';return;}
+  try{
+    const pdf=await pdfjsLib.getDocument(url).promise; if(gen!==pdfRenderGen)return;
+    pages.innerHTML=''; const maxW=Math.max(300,(pages.clientWidth||600)-40);
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i); if(gen!==pdfRenderGen)return;
+      const scale=Math.min(2.2,Math.max(.75,maxW/page.getViewport({scale:1}).width));
+      const vp=page.getViewport({scale});
+      const c=document.createElement('canvas'); c.width=vp.width; c.height=vp.height;
+      await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      const w=document.createElement('div'); w.className='pdf-page';
+      w.style.width=vp.width+'px'; w.style.height=vp.height+'px';
+      w.appendChild(c);
+      // Selectable text layer over the canvas
+      try{
+        const tc=await page.getTextContent(); if(gen!==pdfRenderGen)return;
+        const tl=document.createElement('div'); tl.className='textLayer';
+        tl.style.setProperty('--scale-factor', String(scale));
+        w.appendChild(tl);
+        pdfjsLib.renderTextLayer({textContentSource:tc,textContent:tc,container:tl,viewport:vp,textDivs:[]});
+      }catch(e){}
+      pages.appendChild(w);
+    }
+  }catch(e){ if(gen===pdfRenderGen)pages.innerHTML='<div class="pdf-status">Preview failed</div>'; }
+}
+function setDownloadUrl(url,fn){ const b=$('pdf-dl-btn'); b.disabled=!url; b.onclick=url?()=>{const a=document.createElement('a');a.href=url;a.download=fn||'proof.pdf';a.click();}:null; }
+async function refreshProofPreview(force){
+  if(!runId)return;
+  const files=((await(await fetch('/api/workspace/'+encodeURIComponent(runId)+'/files')).json()).files||[]);
+  const md=files.find(f=>f.path==='proof.md')||files.find(f=>f.path.endsWith('.md')&&!/readme/i.test(f.path));
+  const tex=files.find(f=>f.path==='proof.tex')||files.find(f=>f.path.endsWith('.tex'));
+  const pdf=files.find(f=>f.path==='proof.pdf');
+  if(md){
+    if(!force&&md.mtime===lastProofMtime)return; lastProofMtime=md.mtime;
+    $('proof-label').textContent=md.path;
+    const u='/api/workspace/'+encodeURIComponent(runId)+'/file?path='+encodeURIComponent(md.path)+'&t='+Date.now();
+    showProofMd(u); setDownloadUrl(u+'&download=1',md.path.split('/').pop()); return;
+  }
+  if(tex){
+    if(!force&&tex.mtime===lastProofMtime)return; lastProofMtime=tex.mtime;
+    $('proof-label').textContent=tex.path;
+    const base='/api/workspace/'+encodeURIComponent(runId)+'/pdf?path='+encodeURIComponent(tex.path);
+    showProofPdf(base+'&t='+Date.now()); setDownloadUrl(base+'&download=1&t='+Date.now(),'proof.pdf'); return;
+  }
+  if(pdf){
+    if(!force&&pdf.mtime===lastProofMtime)return; lastProofMtime=pdf.mtime;
+    $('proof-label').textContent=pdf.path;
+    const u='/api/workspace/'+encodeURIComponent(runId)+'/file?path='+encodeURIComponent(pdf.path)+'&t='+Date.now();
+    showProofPdf(u); setDownloadUrl(u+'&download=1','proof.pdf'); return;
+  }
+  $('proof-label').textContent='waiting for proof.md…';
+}
+
+/* ── chat ── */
+let lastChatKey='';
+function fmtTs(ts){ try{ const d=new Date(ts); return isNaN(d)?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '';} }
+function renderChat(msgs){
+  $('chat-msgs').innerHTML=(msgs||[]).map(m=>{
+    const ts=m.ts?`<span class="ts">${fmtTs(m.ts)}</span>`:'';
+    return `<div class="chat-msg ${m.role}"><div class="who">${m.role==='user'?'you':m.role}${ts}</div>${escapeHtml(m.content||'')}</div>`;
+  }).join('');
+  $('chat-msgs').scrollTop=$('chat-msgs').scrollHeight;
+}
+async function loadChat(){
+  if(!runId){$('chat-msgs').innerHTML='';lastChatKey='';return;}
+  try{
+    const d=await(await fetch('/api/runs/'+encodeURIComponent(runId)+'/chat')).json();
+    const key=runId+':'+(d.messages||[]).length;
+    if(key!==lastChatKey){ lastChatKey=key; renderChat(d.messages); }
+  }catch(e){}
+}
+async function sendChat(){
+  const text=$('chat-input').value.trim(); if(!text||!runId)return;
+  $('chat-send').disabled=true;
+  $('chat-msgs').innerHTML+='<div class="chat-msg user"><div class="who">you</div>'+escapeHtml(text)+'</div>';
+  $('chat-input').value='';
+  try{
+    const r=await fetch('/api/runs/'+encodeURIComponent(runId)+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,model:currentModel()||null})});
+    const d=await r.json(); if(!r.ok)throw new Error(d.error);
+    renderChat(d.messages);
+    if(d.status==='continuing'){ setPill('running','continuing…'); startPolling(); }
+  }catch(err){ $('chat-msgs').innerHTML+='<div class="chat-msg system">'+escapeHtml(String(err.message))+'</div>'; }
+  finally{ $('chat-send').disabled=!runId; }
+}
+$('chat-send').onclick=sendChat;
+$('chat-input').onkeydown=e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();} };
+
+/* ── PDF selection → chat (Cursor-style) ── */
+const selPop=$('sel-pop');
+let selText='';
+document.addEventListener('mouseup',e=>{
+  if(selPop.contains(e.target))return;
+  setTimeout(()=>{
+    const sel=window.getSelection();
+    const text=(sel?.toString()||'').trim();
+    const inPdf=sel&&sel.rangeCount&&($('pdf-pages').contains(sel.anchorNode)||$('md-view').contains(sel.anchorNode));
+    if(text&&inPdf){
+      selText=text;
+      const rect=sel.getRangeAt(0).getBoundingClientRect();
+      selPop.style.display='flex';
+      selPop.style.left=Math.max(8,Math.min(window.innerWidth-160,rect.left+rect.width/2-70))+'px';
+      selPop.style.top=Math.max(8,rect.top-42)+'px';
+    }else{
+      selPop.style.display='none';
+    }
+  },10);
+});
+document.addEventListener('mousedown',e=>{ if(!selPop.contains(e.target))selPop.style.display='none'; });
+$('pdf-pages')?.addEventListener('scroll',()=>{ selPop.style.display='none'; });
+$('md-view')?.addEventListener('scroll',()=>{ selPop.style.display='none'; });
+selPop.onclick=()=>{
+  if(!selText)return;
+  const input=$('chat-input');
+  const quoted=selText.split('\n').map(l=>'> '+l).join('\n');
+  input.value=(input.value?input.value+'\n\n':'')+quoted+'\n';
+  selPop.style.display='none';
+  window.getSelection()?.removeAllRanges();
+  input.focus();
+  input.setSelectionRange(input.value.length,input.value.length);
+};
+
+function setPill(s,t){ const el=$('live-pill'); el.className='pill '+(s||''); el.textContent=t||s||'idle'; }
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+$('start-btn').onclick=startRun;
+$('problem-text').onkeydown=e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='Enter')startRun(); };
+$('model-select').onchange=()=>{ $('model-custom').style.display=$('model-select').value==='__custom__'?'inline-block':'none'; };
+
+loadEngines(); loadSettings(); loadRuns(); goLanding();
+setInterval(loadRuns, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+Let $f, g: N \to R$ be supported on sets of cardinality $M$ for some $M \geq 2$.  Show that
+
+$$ \sum_p |\sum_n f(n) g(pn)|^2 \ll (\log M) \|f\|_{\ell^2}^2 \|g\|_{\ell^2}^2$$
+where $p$ ranges over primes.

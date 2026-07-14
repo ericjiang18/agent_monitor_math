@@ -1,0 +1,10 @@
+Let $0 < \epsilon < 1$. Define $T_\epsilon f(x) = \mathbb{E}*{y \sim \mathcal{N}(0,I)} \left[ f\left(\epsilon x + \sqrt{1-\epsilon^2},y \right) \right]$. Then $T*\epsilon H_\alpha = \epsilon^{|\alpha|} H_\alpha$.
+
+A distribution $D$ on $\mathbb{R}^n$ is called $k$-Gaussian off one coordinate if for every $i \in {1,\dots,n}$, every univariate polynomial $q$, and every polynomial $p$ in the other $n-1$ variables of total degree at most $k$, $\mathbb{E}[q(X_i)p(X_{-i})] = \mathbb{E}[q(G_i)p(G_{-i})]$, where $X \sim D$ and $G \sim \mathcal{N}(0,I)$.
+
+Let $X \sim D$, let $Y \sim \mathcal{N}(0,I)$ be independent, and define
+$Z = \epsilon X + \sqrt{1-\epsilon^2},Y$.
+
+Show that for every symmetric function $F : \mathbb{R}^n \to [-1,1]$, if
+$k \gg \frac{\log(n/\delta)}{\log(1/\epsilon)}$,
+then $\left| \mathbb{E}[F(Z)] - \mathbb{E}_{g \sim \mathcal{N}(0,I)}[F(g)] \right| \le \delta$. Here symmetric means, $F(x) = F(\pi(x))$ for any permutation $\pi$. 

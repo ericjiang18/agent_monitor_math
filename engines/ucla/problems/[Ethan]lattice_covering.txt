@@ -1,0 +1,1 @@
+Let e₁ = (1,0), e₂ = (0,1), and e₃ = (1,1). For an integer k ≥ 2, call a set A ⊆ ℤ² k-admissible if for every x ∈ ℤ² and every v ∈ {e₁, e₂, e₃}, {x, x+v, …, x+(k-1)v} ∩ A ≠ ∅. Define δₖ := inf{ limsup_{L→∞} |A ∩ [-L, L]²| / (2L+1)² : A ⊆ ℤ² is k-admissible }. Determine δₖ for every k ≥ 2.

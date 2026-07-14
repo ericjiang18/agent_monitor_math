@@ -1,0 +1,4 @@
+Let A be a k x k positive semidefinite matrix with non-negative coefficients between 0 and L, and let n_1 < ... < n_k < M be natural numbers.  Show that there exists a constant C depending only on k, n_1, ..., n_k, L, M such that
+$$ A^{\dot M} \leq C (A^{\dot n_1} + \dots + A^{\dot n_k})$$
+
+where A^{\dot M} is the Hadamard product of M copies of A (i.e., each entry of A is raised to the power M), and A \leq B denotes the assertion that B - A is positive semi-definite.

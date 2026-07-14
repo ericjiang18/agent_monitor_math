@@ -1,0 +1,2 @@
+Let $A = (a_{ij})_{1 \leq i,j \leq n}$ be an n x n real symmetric matrix with spectral radius rho(A) and maximum absolute row sum $\sigma(A) = \max_i \sum_j |a_{ij}|$.  Assume that $\sigma(A) \leq K \rho(A)$ for some $K \geq 1$.  Then there exists a unit vector $x = (x_1,\dots,x_n)$ such that $\| Ax \| \geq 0.1 \rho(A)$ and
+$$ (|x_1| + \dots + |x_n|) \max_i |x_i| \leq 10 K.$$

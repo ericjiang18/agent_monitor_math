@@ -1,0 +1,3 @@
+Let A be the smallest subset of natural numbers that contain 2 and 3, and are closed under the operation a, b -> ab-1 (e.g., 5 = 2 * 3 - 1) lies in A.
+
+Let A be as above, and let (a mod q), (a' mod q') be two residue classes not contained in (1 mod 3).  Show that A has positive density in (a mod q) if and only if it has positive density in (a' mod q').

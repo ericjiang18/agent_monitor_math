@@ -1,0 +1,5 @@
+Let n_1 < ... < n_k be nonnegative integers, and let f(x) = (x^{n_1},...,x^{n_k}).  For any 0 \leq x_1 \leq ... \leq x_k, show that
+
+|det(f(x_1), \dots, f(x_k))| \asymp (\prod_{1 \leq i < i' \leq k} |x_i - x_{i'}|)  \prod_{i=1}^k x_i^{n_i-i}
+
+where the implied constants depend only on n_0,...,n_k.

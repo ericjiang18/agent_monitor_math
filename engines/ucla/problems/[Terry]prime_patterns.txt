@@ -1,0 +1,7 @@
+Let $f: \N \to \{0,1\}$ be the indicator function of the primes.  For each natural number $N$, consider the set $A_N \subset \{0,1\}^N$ of all the sign patterns $(f(n+1),\dots,f(n+N))$.
+
+\begin{proposition}  We have the upper bound
+$$ A_N \ll (4+o(1))^{\frac{N}{\log N}}$$
+and on the Hardy-Littlewood conjecture we have the lower bound
+$$ A_N \gg (2+o(1))^{\frac{N}{\log N}}.$$
+\end{proposition}

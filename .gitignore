@@ -1,0 +1,43 @@
+# Runtime / generated
+data/runs/*
+data/cache/*
+data/logs/*
+data/hermes/*
+!data/runs/.gitkeep
+!data/cache/.gitkeep
+!data/logs/.gitkeep
+!data/hermes/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+**/.venv/
+.env
+.env.*
+!.env.example
+!.env*.example
+.python-version
+
+# Large / local engine installs
+engines/**/node_modules/
+engines/**/.cache/
+**/__pycache__/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Hermes / Node leftovers if any
+**/node_modules/
+**/.cache/
+**/web_dist/
+**/tui_dist/

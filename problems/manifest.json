@@ -1,0 +1,365 @@
+{
+  "version": 1,
+  "problems": [
+    {
+      "problem_id": "[Amit]new_problem",
+      "source": "ucla",
+      "statement_path": "ucla/[Amit]new_problem.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Amit]random_lift_expansion",
+      "source": "ucla",
+      "statement_path": "ucla/[Amit]random_lift_expansion.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Amit]subspace_sampling",
+      "source": "ucla",
+      "statement_path": "ucla/[Amit]subspace_sampling.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Ethan]lattice_covering",
+      "source": "ucla",
+      "statement_path": "ucla/[Ethan]lattice_covering.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[First_Proof]Example_problem",
+      "source": "ucla",
+      "statement_path": "ucla/[First_Proof]Example_problem.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[First_Proof]Example_problem[Correct]",
+      "source": "ucla",
+      "statement_path": "ucla/[First_Proof]Example_problem[Correct].txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[First_Proof]Example_problem[Official_Correct]",
+      "source": "ucla",
+      "statement_path": "ucla/[First_Proof]Example_problem[Official_Correct].txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Raghu]balls_bins",
+      "source": "ucla",
+      "statement_path": "ucla/[Raghu]balls_bins.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Raghu]biased_noise",
+      "source": "ucla",
+      "statement_path": "ucla/[Raghu]biased_noise.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Raghu]gaussian_symmetry",
+      "source": "ucla",
+      "statement_path": "ucla/[Raghu]gaussian_symmetry.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Rushil]coset_minimizer",
+      "source": "ucla",
+      "statement_path": "ucla/[Rushil]coset_minimizer.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]GOE_positivity",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]GOE_positivity.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]concave_fourier",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]concave_fourier.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]flat_eigenvector",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]flat_eigenvector.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]generalized_vandermonde",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]generalized_vandermonde.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]gilbreath_model",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]gilbreath_model.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]hadamard_power_bound",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]hadamard_power_bound.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]prime_dilation",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]prime_dilation.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]prime_patterns",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]prime_patterns.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]residue_density_closure(EasierVer)",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]residue_density_closure(EasierVer).txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]residue_density_closure(HarderVer)",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]residue_density_closure(HarderVer).txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]residue_progressions",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]residue_progressions.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]spherical_rectangles",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]spherical_rectangles.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]uniform_positive_direction",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]uniform_positive_direction.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry]wasserstein_codimension",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry]wasserstein_codimension.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Terry_Xinjie]new_problem",
+      "source": "ucla",
+      "statement_path": "ucla/[Terry_Xinjie]new_problem.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "[Xinjie]gaussian_comparison",
+      "source": "ucla",
+      "statement_path": "ucla/[Xinjie]gaussian_comparison.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "sample_problem_batch_2",
+      "source": "ucla",
+      "statement_path": "ucla/sample_problem_batch_2.tex",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "sample_problem_batch_2[official_correct]",
+      "source": "ucla",
+      "statement_path": "ucla/sample_problem_batch_2[official_correct].tex",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "sample_solution_batch_2",
+      "source": "ucla",
+      "statement_path": "ucla/sample_solution_batch_2.tex",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "sample_solution_batch_2[official_correct]",
+      "source": "ucla",
+      "statement_path": "ucla/sample_solution_batch_2[official_correct].tex",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "batch2_README",
+      "source": "batch2",
+      "statement_path": "batch2/design/README.md",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "batch2_allowed-instances",
+      "source": "batch2",
+      "statement_path": "batch2/design/allowed-instances.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "batch2_first-proof-benchmarking-protocol",
+      "source": "batch2",
+      "statement_path": "batch2/design/first-proof-benchmarking-protocol.md",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "batch2_README",
+      "source": "batch2",
+      "statement_path": "batch2/design/submissions/test-dummy/README.md",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    },
+    {
+      "problem_id": "batch2_requirements",
+      "source": "batch2",
+      "statement_path": "batch2/design/submissions/test-dummy/requirements.txt",
+      "engines": [
+        "ucla",
+        "hermes",
+        "improof"
+      ]
+    }
+  ]
+}

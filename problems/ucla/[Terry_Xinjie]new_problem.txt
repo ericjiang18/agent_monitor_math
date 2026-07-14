@@ -1,0 +1,18 @@
+For a set \(S \subseteq \mathbb{N}\) and a residue class \(r \pmod m\), say that \(S\) has positive lower density in \(r \pmod m\) if
+\[
+\liminf_{N\to\infty}
+\frac{\left|S \cap \{n \le N : n \equiv r \pmod m\}\right|}
+{\left|\{n \le N : n \equiv r \pmod m\}\right|}
+>0.
+\]
+
+Let \(A\) be the smallest subset of natural numbers such that
+\[
+2,3\in A,
+\]
+and whenever \(a,b\in A\) are distinct, one also has
+\[
+ab-1\in A.
+\]
+
+Let \(a \pmod q\) and \(a' \pmod {q'}\) be two residue classes not contained in \(1 \pmod 3\). Show that \(A\) has positive lower density in \(a \pmod q\) if and only if \(A\) has positive lower density in \(a' \pmod {q'}\).

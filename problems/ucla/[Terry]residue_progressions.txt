@@ -1,0 +1,4 @@
+\begin{theorem}\label{th1}  Let $F: \R^+ \to \R^+$ be a function with $F(x) \geq x$ for all $x$.  Then there exists $\eps>0$ with the following property: given any natural number $W$, there exists $P_0 \geq 1$ such that for any sufficiently large $N$ and any function $f: \{1,\dots,N\} \to \Z/3\Z$, there exists $1 \leq P_1 \leq P_0$ such that
+$$ \sum_{P \leq r \leq 2P: (r,W)=1} \sum_{a \leq N} 1_{f(a)+f(a+r)+f(a+2r)=c} \geq \eps \frac{\phi(W)}{W} N P $$
+for all $c \in \Z/3\Z$ and $P_1 \leq P \leq F(P_1)$.
+\end{theorem}

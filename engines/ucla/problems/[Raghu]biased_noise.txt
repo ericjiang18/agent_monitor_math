@@ -1,0 +1,5 @@
+Let $U_0$ denote the uniform distribution on $\{0,1\}^n$. For $0<\epsilon<1$, let $U_\eps$ denote the product distribution on $\{0,1\}^n$ with independent coordinates satisfying $Pr[\eta_j=0]=\frac{1+\eps}{2}$, $Pr[\eta_j=1]=\frac{1-\eps}{2}$.
+
+We say that a distribution $D$ on $\{0,1\}^n$ is $k$-wise moment matching to $U_0$ if $E_{x\sim D}\chi_S(x)=0$ for every $\emptyset\neq S\subseteq[n],\ |S|\le k$, where $\chi_S$ denotes the Fourier character for set $S$.
+
+Prove that there is a constant $C$ such that the following holds. Let $D$ be $k$-wise moment matching to $U_0$ for $k > C log(n/\delta)/\log(1/\epsilon)$. Then for every symmetric function $F:\{0,1\}^n\to[-1,1]$ we have $|E_{x\sim D,\,\eta\sim U_\eps} [F(x \oplus \eta)] - E_{u\sim U_0}[F(u)] \le \delta$.

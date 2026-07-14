@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-monitor"
+version = "0.1.0"
+description = "Unified informal math proving console: UCLA / IMProof / Hermes engines + pipeline monitor"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = { text = "MIT" }
+dependencies = [
+  # Monitor / dashboard
+  "rich>=13.0.0",
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0.0",
+  "requests>=2.31.0",
+  # Hermes agent core (aligned with vendored hermes_core pins where practical)
+  "openai==2.24.0",
+  "httpx[socks]==0.28.1",
+  "tenacity==9.1.4",
+  "ruamel.yaml==0.18.17",
+  "jinja2==3.1.6",
+  "pydantic==2.13.4",
+  "prompt_toolkit==3.0.52",
+  "croniter==6.0.0",
+  "packaging==26.0",
+  "Markdown==3.10.2",
+  "PyJWT[crypto]==2.13.0",
+  "urllib3>=2.7.0,<3",
+  "cryptography==46.0.7",
+  "psutil==7.2.2",
+  "ptyprocess==0.7.0; sys_platform != 'win32'",
+  "fire==0.7.1",
+  "certifi==2026.5.20",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+agent-monitor = "agent_monitor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent_monitor*", "monitor_core*"]
+
+[tool.setuptools.package-data]
+monitor_core = ["harness_dashboard/web/**/*"]

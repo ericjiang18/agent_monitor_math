@@ -1,0 +1,7 @@
+Let $0 < d < n$. Let $\mu$ be a compactly supported probability measure on $\mathbb{R}^n$ with support $X$, and assume that $\mu$ is dimension-regular, meaning to say that there exists some constant $C$ and some $R_0>0$ so that for any point $x\in X$ and any radius $R_0 > R>0$, one has that $(1/C) R^d \leq \mu(B(x,R))\leq C R^d$, where $B(x,R)$ denotes the ball of radius $R$ around $x$.  
+
+Let $\nu_t$ be the Gaussian measure on $\mathbb R^n$ of variance $t n$ (meaning to say that this measure is Gaussian, centered, and the expected value of $\Vert x \Vert^2$ with respect to $\nu_t$ is $tn$).
+
+Let $\mu_t = \nu_t * \mu$, and let $f(t)$ be the square L^2 Wasserstein distance $d_W (\mu_t, \mu)^2$ between $\mu$ and $\mu_t$.  That is to say, $f(t)$ is the infimum over all probability measures $\pi$ on $\mathbb{R}^n \times \mathbb{R}^n$ with marginals $\mu$ and $\mu_t$ of the expected value under $\pi$ of $\Vert x - y \Vert^2$ where $(x,y)\in \mathbb{R}^n \times \mathbb{R}^n$.
+
+Show that $f’(0) = \lim_{t\to 0} f(t) / t$ exists and equals the co-dimension $n-d$. 

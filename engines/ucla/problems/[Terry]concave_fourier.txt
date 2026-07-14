@@ -1,0 +1,1 @@
+Let $f$ be a non-negative concave function on [-1/2,1/2], extended by zero outside of [-1/2,1/2]. Let 0 < delta < delta_0 where delta_0 is a sufficiently small absolute constant.  Show that there exists R ~ 1/delta such that |\hat f(R)| \gtrsim \delta f(1/2 - \delta).

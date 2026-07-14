@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Harness Pipeline Monitor</title>
+<style>
+:root, [data-theme="dark"] {
+  --bg: #0c0f14; --card: #141a22; --card2: #1a2230; --border: #2a3548;
+  --fg: #e8edf5; --muted: #8b9cb3; --accent: #3b82f6; --accent2: #8b5cf6;
+  --ok: #22c55e; --warn: #eab308; --err: #ef4444; --cyan: #06b6d4;
+  --mono: ui-monospace, Menlo, Monaco, monospace;
+  --scroll: #26303f;
+}
+[data-theme="light"] {
+  --bg: #f7f8fb; --card: #ffffff; --card2: #f3f5f9; --border: #dde3ed;
+  --fg: #111827; --muted: #4b5563; --accent: #2563eb; --accent2: #7c3aed;
+  --ok: #16a34a; --warn: #ca8a04; --err: #dc2626; --cyan: #0891b2;
+  --scroll: #c5ced9;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--fg); min-height: 100vh; transition: background .25s, color .25s; }
+body.embedded { min-height: auto; overflow: visible; }
+header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
+header h1 { font-size: 18px; font-weight: 600; }
+header .sub { color: var(--muted); font-size: 13px; }
+header select, header button { background: var(--card2); border: 1px solid var(--border); color: var(--fg); padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+header button:hover { border-color: var(--accent); }
+header .theme-btn { width: 34px; padding: 6px 0; text-align: center; }
+header .hdr-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); min-height: calc(100vh - 53px); height: auto; }
+body.embedded .layout { min-height: 0; height: auto; }
+.main { overflow: auto; padding: 16px 20px; min-width: 0; }
+.sidebar { border-left: 1px solid var(--border); background: var(--card); overflow: auto; display: flex; flex-direction: column; }
+/* Narrow embeds (iframe): stack detail below the pipeline so main keeps full width */
+@media (max-width: 980px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { border-left: 0; border-top: 1px solid var(--border); max-height: 60vh; }
+}
+.stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-width: 110px; }
+.stat .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.stat .val { font-size: 20px; font-weight: 600; margin-top: 2px; font-family: var(--mono); }
+.view-toggle { display:flex; gap:6px; margin:6px 0 10px; align-items:center; }
+.view-toggle .vt-btn { font-size:11px; padding:5px 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--muted); cursor:pointer; }
+.view-toggle .vt-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.view-toggle .vt-hint { font-size:10px; color:var(--muted); margin-left:8px; }
+.agent-map { position:relative; border:1px solid var(--border); border-radius:12px; background:
+  radial-gradient(circle, var(--border) 1px, transparent 1px) 0 0/22px 22px, var(--card);
+  height:560px; overflow:hidden; cursor:grab; user-select:none; }
+.agent-map:active { cursor:grabbing; }
+.agent-map svg { width:100%; height:100%; display:block; }
+.map-node { cursor:pointer; }
+.map-card { border-radius:10px; border:1.5px solid var(--border); background:var(--card2); padding:7px 9px;
+  font-size:11px; line-height:1.35; box-shadow:0 2px 6px rgba(0,0,0,.18); overflow:hidden; height:100%;
+  box-sizing:border-box; display:flex; flex-direction:column; gap:2px; }
+.map-card .mr { font-size:9px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; display:flex; gap:4px; align-items:center; }
+.map-card .mn { font-weight:600; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.map-card .mt { font-family:var(--mono); font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.map-card .mp { font-size:10px; color:var(--muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.map-card .mbadge { font-size:9px; padding:1px 6px; border-radius:999px; font-weight:600; }
+.map-card.mk-write { border-color:#3b82f6; background:color-mix(in srgb, #3b82f6 9%, var(--card2)); }
+.map-card.mk-critic { border-color:#14b8a6; background:color-mix(in srgb, #14b8a6 9%, var(--card2)); }
+.map-card.mk-think { border-color:#a855f7; border-style:dashed; background:color-mix(in srgb, #a855f7 8%, var(--card2)); border-radius:16px; }
+.map-card.mk-tool { border-color:#eab308; background:color-mix(in srgb, #eab308 8%, var(--card2)); font-family:var(--mono); }
+.map-card.mk-orch { border-color:#64748b; border-width:2px; background:color-mix(in srgb, #64748b 10%, var(--card2)); }
+.map-card.mk-final { border-color:#f97316; border-width:2px; background:color-mix(in srgb, #f97316 10%, var(--card2)); }
+.map-card.mk-mem { border-color:#94a3b8; border-style:dotted; border-width:2px; border-radius:4px 4px 14px 14px;
+  background:color-mix(in srgb, #94a3b8 12%, var(--card2)); font-family:var(--mono); }
+.map-edge.mem { stroke-dasharray:4 4; stroke:#94a3b8; opacity:.7; }
+.map-card.selected { box-shadow:0 0 0 2px var(--accent); }
+.map-card.running { animation:mapPulse 1.6s ease-in-out infinite; }
+@keyframes mapPulse { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.5);} 50%{box-shadow:0 0 0 6px rgba(59,130,246,0);} }
+.map-edge { fill:none; stroke:var(--muted); stroke-width:1.5; opacity:.55; }
+.map-edge.hot { stroke:var(--accent); opacity:.9; stroke-width:2; }
+.map-controls { position:absolute; top:10px; right:10px; display:flex; gap:4px; z-index:5; }
+.map-controls button { width:26px; height:26px; border-radius:6px; border:1px solid var(--border); background:var(--card2); color:var(--fg); cursor:pointer; font-size:13px; }
+.map-legend { position:absolute; left:10px; bottom:8px; display:flex; gap:10px; font-size:9.5px; color:var(--muted); z-index:5; background:color-mix(in srgb, var(--card) 82%, transparent); padding:4px 8px; border-radius:8px; }
+.map-legend i { display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:3px; vertical-align:-1px; }
+.pipeline-wrap { overflow-x: auto; padding-bottom: 12px; }
+.pipeline { display: flex; gap: 0; min-width: max-content; }
+.stage-col { min-width: 200px; max-width: 240px; border: 1px solid var(--border); border-radius: 10px; margin-right: 8px; background: var(--card); }
+.stage-hdr { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; border-radius: 10px 10px 0 0; }
+.stage-hdr .stitle { color: var(--muted); font-weight: 400; font-size: 11px; margin-top: 2px; }
+.stage-body { padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 80px; }
+.agent-node { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: border-color .15s, transform .1s; font-size: 12px; }
+.agent-node:hover { border-color: var(--accent); transform: translateY(-1px); }
+.agent-node.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.agent-node .role { font-size: 10px; color: var(--accent2); text-transform: uppercase; letter-spacing: .05em; }
+.agent-node .name { font-weight: 500; margin: 3px 0; word-break: break-all; }
+.agent-node .tok { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.agent-node .tok b { color: var(--cyan); }
+.agent-node.outcome-ok { border-left: 3px solid var(--ok); }
+.agent-node.outcome-fail { border-left: 3px solid var(--err); }
+.agent-node.outcome-warn { border-left: 3px solid var(--warn); }
+.agent-node.outcome-neutral { border-left: 3px solid var(--border); }
+.agent-node .badge { font-size: 9px; margin-left: 4px; vertical-align: middle; }
+.agent-node .cost-bar { height: 3px; background: #1e293b; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.agent-node .cost-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--accent)); opacity: .85; }
+.agent-node.cost-high-mark { outline: 1px dashed rgba(148,163,184,.85); outline-offset: 2px; }
+.agent-node.cost-high-mark .cost-bar > i { background: linear-gradient(90deg, #94a3b8, #64748b); }
+.agent-node.is-waste { background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.55); }
+.agent-node.is-waste .cost-bar > i { background: linear-gradient(90deg, #ef4444, #f97316); }
+.agent-node.is-waste .waste-tag { color: #fca5a5; }
+.agent-node.in-cycle { box-shadow: inset 0 0 0 1px rgba(239,68,68,.35); }
+.agent-node.dimmed { opacity: .28; pointer-events: none; }
+.agent-node .repeat-tag { float: right; font-size: 9px; color: var(--warn); font-family: var(--mono); }
+.stage-col.stage-heat-critical .stage-hdr { background: rgba(239,68,68,.12); }
+.stage-col.stage-heat-high .stage-hdr { background: rgba(249,115,22,.1); }
+.stage-hdr .stage-cost { font-size: 10px; color: var(--warn); font-family: var(--mono); margin-top: 4px; }
+.visual-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 11px; }
+.visual-legend span { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); }
+.visual-legend .sw-high-cost { border-style: dashed; border-color: #94a3b8; }
+.visual-legend .sw-waste { background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.45); }
+.filter-bar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.filter-bar button { background: var(--card2); border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+.filter-bar button.active { border-color: var(--accent); color: var(--fg); background: #1e2a3d; }
+tr.cost-high-mark td { border-left: 3px dashed rgba(148,163,184,.55); }
+tr.is-waste td { background: rgba(239,68,68,.1) !important; }
+.insights { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.insights h2 { font-size: 14px; margin-bottom: 10px; color: var(--fg); }
+.insights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 1100px) { .insights-grid { grid-template-columns: 1fr; } }
+.insight-block { background: var(--card2); border-radius: 8px; padding: 10px 12px; }
+.insight-block h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.stage-bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 11px; }
+.stage-bar-row .lbl { width: 120px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stage-bar-row .bar { flex: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+.stage-bar-row .bar > i { display: block; height: 100%; border-radius: 4px; }
+.stage-bar-row .val { width: 72px; text-align: right; font-family: var(--mono); color: var(--cyan); }
+.flag-list { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow: auto; }
+.flag-item { font-size: 11px; padding: 6px 8px; border-radius: 6px; background: #1e293b; cursor: pointer; line-height: 1.4; }
+.flag-item:hover { background: #243044; }
+.flag-item.info { border-left: 3px solid var(--accent); }
+.flag-item.warn { border-left: 3px solid var(--warn); }
+.flag-item.err { border-left: 3px solid var(--err); }
+.top-list { font-size: 11px; }
+.top-row { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); cursor: pointer; align-items: baseline; }
+.top-row:hover { color: var(--accent); }
+.top-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-row .c { font-family: var(--mono); color: var(--cyan); width: 56px; text-align: right; }
+.chain-row { font-size: 11px; padding: 6px 0; border-bottom: 1px solid var(--border); line-height: 1.45; }
+.chain-row .stages { color: var(--muted); font-family: var(--mono); font-size: 10px; margin-top: 2px; }
+.compare-wrap { margin-bottom: 16px; overflow-x: auto; }
+.compare-wrap h2 { font-size: 14px; margin-bottom: 8px; color: var(--muted); }
+.pill.err { background: #3d1515; color: var(--err); }
+.pill.info { background: #1e2a3d; color: var(--accent); }
+.table-wrap { margin-top: 20px; }
+.table-wrap h2 { font-size: 14px; margin-bottom: 8px; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--bg); }
+tr:hover td { background: var(--card2); cursor: pointer; }
+tr.sel td { background: #1e2a3d; }
+.pill { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; background: #243044; color: var(--cyan); margin: 1px; }
+.pill.warn { background: #3d3010; color: var(--warn); }
+.pill.ok { background: #14301a; color: var(--ok); }
+.sidebar-hdr { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-hdr h2 { font-size: 15px; }
+.sidebar-hdr .meta { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+.tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tab { flex: 1; padding: 8px; text-align: center; font-size: 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.detail-body { padding: 12px 16px; flex: 1; overflow: auto; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.field { background: var(--card2); border-radius: 6px; padding: 8px 10px; }
+.field .fl { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.field .fv { font-size: 12px; margin-top: 3px; font-family: var(--mono); word-break: break-all; }
+.pre { font-family: var(--mono); font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: var(--card2); border-radius: 6px; padding: 10px; max-height: 50vh; overflow: auto; }
+.sec { font-size: 11px; color: var(--muted); text-transform: uppercase; margin: 12px 0 6px; letter-spacing: .04em; }
+.stage-body.empty-stage { justify-content: center; align-items: center; min-height: 60px; }
+.stage-skip { font-size: 11px; color: var(--muted); text-align: center; padding: 8px; font-style: italic; }
+.stage-note { font-size: 11px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
+.empty { color: var(--muted); font-size: 13px; padding: 40px; text-align: center; }
+.loading { color: var(--muted); padding: 20px; }
+#status { margin-left: auto; font-size: 12px; color: var(--muted); }
+.flow-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.flow-wrap h2 { font-size: 14px; margin-bottom: 4px; }
+.flow-sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+.pipe-strip { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding-bottom: 4px; margin-bottom: 16px; }
+.pipe-stage { flex: 1 1 0; min-width: 108px; max-width: 160px; background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; border-top: 3px solid var(--border); }
+.pipe-stage-hdr { font-size: 10px; font-weight: 700; color: var(--fg); margin-bottom: 2px; }
+.pipe-stage-sub { font-size: 9px; color: var(--muted); margin-bottom: 6px; line-height: 1.3; min-height: 24px; }
+.pipe-stage-tot { font-size: 10px; color: var(--muted); margin-bottom: 8px; }
+.pipe-role { display: flex; justify-content: space-between; gap: 6px; font-size: 9px; padding: 3px 0; border-top: 1px solid var(--border); }
+.pipe-role:first-of-type { border-top: none; }
+.pipe-role.waste { color: #fca5a5; }
+.pipe-role .nm { color: var(--muted); text-transform: uppercase; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipe-arrow { flex: 0 0 28px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 18px; padding-top: 20px; }
+.pipe-links { width: 100%; border-collapse: collapse; font-size: 11px; }
+.pipe-links th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 10px; }
+.pipe-links td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.pipe-links tr:last-child td { border-bottom: none; }
+.pipe-links .arrow { color: var(--muted); text-align: center; width: 28px; }
+.pipe-links .type { font-size: 10px; }
+.pipe-links .type-dispatch { color: #c4b5fd; }
+.pipe-links .type-verify { color: #5eead4; }
+.pipe-links .type-refine, .pipe-links .type-reverify { color: #86efac; }
+.pipe-links .type-proof { color: #7dd3fc; }
+.proof-wrap { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.proof-wrap h2 { font-size: 14px; margin-bottom: 4px; }
+.proof-sub { font-size: 11px; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
+.proof-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.proof-tabs button { background: var(--card2); border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; }
+.proof-tabs button.active { border-color: var(--accent); color: var(--fg); background: #1e2a3d; }
+.proof-pdf { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.proof-source { max-height: 420px; }
+.prov-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+.prov-table th, .prov-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.prov-table tr { cursor: pointer; }
+.prov-table tr:hover td { background: var(--card2); }
+.prov-table tr.sel td { background: #1e2a3d; }
+.prov-preview { color: var(--muted); font-size: 10px; line-height: 1.4; max-width: 360px; }
+.prov-lines { font-family: var(--mono); color: var(--cyan); white-space: nowrap; }
+.proof-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: 11px; }
+.proof-meta span { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); color: var(--muted); }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 5px; }
+.md-render { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 22px 28px; font-size: 13.5px; line-height: 1.7; max-height: 640px; overflow-y: auto; }
+.md-render h1, .md-render h2, .md-render h3 { margin: 1em 0 .45em; line-height: 1.3; }
+.md-render h1 { font-size: 1.4em; border-bottom: 1px solid var(--border); padding-bottom: .25em; }
+.md-render code { background: var(--card2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; font-family: var(--mono); font-size: .9em; }
+.md-render pre { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+.md-render blockquote { border-left: 3px solid var(--accent); margin: .7em 0; padding: 2px 12px; color: var(--muted); }
+.md-render .katex-display { overflow-x: auto; padding: 4px 0; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>Harness Pipeline Monitor</h1>
+  <span class="sub">stage · agent · token trace</span>
+  <span class="sub" id="run-hdr-label"></span>
+  <button id="btn-rebuild" title="Rebuild from calls.jsonl">↻ Rebuild</button>
+  <div class="hdr-actions">
+    <button class="theme-btn" id="theme-btn" title="Toggle light / dark mode">☾</button>
+    <span id="status">loading…</span>
+  </div>
+</header>
+<div class="layout">
+  <div class="main" id="main">
+    <div class="empty">Select a run from the left Runs panel</div>
+  </div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-hdr">
+      <h2 id="d-title">Agent Detail</h2>
+      <div class="meta" id="d-meta">Click an agent node or table row</div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-tab="overview">Overview</div>
+      <div class="tab" data-tab="prompt">Prompt</div>
+      <div class="tab" data-tab="thinking">Thinking</div>
+      <div class="tab" data-tab="output">Output</div>
+      <div class="tab" data-tab="memory">Memory</div>
+    </div>
+    <div class="detail-body" id="detail-body">
+      <div class="empty">No agent selected</div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const THEME_KEY = 'proving-console-theme';
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem(THEME_KEY, t);
+  const btn = $('theme-btn');
+  if (btn) {
+    btn.textContent = t === 'light' ? '☀' : '☾';
+    btn.title = t === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+  }
+}
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+  applyTheme(saved || (prefersLight ? 'light' : 'dark'));
+}
+window.addEventListener('message', e => {
+  if (e.data?.type === 'proving-console-theme' && (e.data.theme === 'light' || e.data.theme === 'dark')) {
+    applyTheme(e.data.theme);
+  }
+  if (e.data?.type === 'proving-console-run') {
+    const rid = e.data.run_id || '';
+    if (rid) loadRun(rid);
+    else clearRunView();
+  }
+});
+$('theme-btn')?.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+});
+initTheme();
+
+const fmtN = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n||0);
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+const State = { runs: [], run: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map' };
+const isEmbedded = window.parent !== window;
+if (isEmbedded) document.body.classList.add('embedded');
+
+function notifyParentHeight() {
+  if (!isEmbedded) return;
+  requestAnimationFrame(() => {
+    const h = Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight,
+      document.querySelector('.layout')?.scrollHeight || 0,
+      720,
+    );
+    window.parent.postMessage({ type: 'proving-console-resize', height: h }, '*');
+  });
+}
+let _resizeObs = null;
+function watchContentHeight() {
+  if (!isEmbedded || typeof ResizeObserver === 'undefined') return;
+  if (_resizeObs) _resizeObs.disconnect();
+  const target = document.querySelector('.layout') || document.body;
+  _resizeObs = new ResizeObserver(() => notifyParentHeight());
+  _resizeObs.observe(target);
+}
+
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function roleColor(role) {
+  const m = { orchestrator_advisor:'#8b5cf6', solver:'#3b82f6', writeup:'#0ea5e9', verifier:'#14b8a6', refiner:'#22c55e', directions_advisor:'#a855f7' };
+  return m[role] || '#64748b';
+}
+
+function outcomeClass(outcome) {
+  return outcome ? ` outcome-${outcome}` : ' outcome-neutral';
+}
+
+function costHeatClass(mon) {
+  const t = mon?.cost_tier;
+  if (t === 'critical' || t === 'high') return ' cost-high-mark';
+  return '';
+}
+
+function wasteVisualClass(mon) {
+  return mon?.is_token_waste ? ' is-waste' : '';
+}
+
+function isHighCost(mon) {
+  return mon?.cost_tier === 'critical' || mon?.cost_tier === 'high';
+}
+
+function isWasteMark(mon) {
+  return !!mon?.is_token_waste;
+}
+
+function agentDimmed(mon) {
+  if (State.filterHigh && !isHighCost(mon)) return true;
+  if (State.filterWaste && !isWasteMark(mon)) return true;
+  return false;
+}
+
+function renderVisualLegend() {
+  return `<div class="visual-legend">
+    <span class="sw-high-cost">Dashed border · high cost (see below)</span>
+    <span class="sw-waste">Red fill · wasted / ineffective tokens</span>
+    <span>Left border · green ✓ / yellow loop / red fail (outcome)</span>
+  </div>
+  <div class="stage-note" style="margin-bottom:10px">
+    <b>High cost</b> (dashed): <code>cost_tier</code> critical or high — critical: ≥$10, ≥2.5% of run, or top 8%; high: ≥$5, ≥1.2%, or top 18%.
+    <br><b>Token waste</b> (red): duplicate or near-duplicate output; refine with no real change; writeup/verify/refine chain never verified; verify fail with cost ≥$2; costly solver with no verified downstream; high-cost fail outcome.
+    <br><b>Hash match</b>: not word-level — outputs are lowercased, whitespace collapsed, then SHA-256 compared; identical normalized text = duplicate (≥40 chars).
+    <br><span style="color:var(--muted)">Same stage called many times (e.g. proof_sketch×13) is not red if each output differs.</span>
+  </div>
+  <div class="filter-bar">
+    <button id="btn-filter-high" class="${State.filterHigh?'active':''}">High cost only</button>
+    <button id="btn-filter-waste" class="${State.filterWaste?'active':''}">Wasted / ineffective only</button>
+    <button id="btn-filter-clear" class="${State.filterHigh||State.filterWaste?'':'active'}">Show all</button>
+  </div>`;
+}
+
+function renderInsights(run) {
+  const a = run.analysis;
+  if (!a) return '';
+  const stages = Object.entries(a.stage_costs || {});
+  const pipeline = run.pipeline || [];
+  const order = Object.fromEntries(pipeline.map((s, i) => [String(s.id), i]));
+  stages.sort((x, y) => (order[x[0]] ?? 99) - (order[y[0]] ?? 99));
+  const colors = { '1':'#6366f1','2':'#8b5cf6','3':'#a855f7','4':'#3b82f6','5':'#0ea5e9','6':'#14b8a6','7':'#22c55e','8':'#eab308','9':'#f97316',
+    'wf':'#8b5cf6','author':'#3b82f6','critic':'#14b8a6','council':'#6366f1','compute':'#0ea5e9','finalize':'#f97316','other':'#64748b' };
+  let stageBars = stages.map(([id, s]) => `<div class="stage-bar-row">
+    <div class="lbl" title="${esc(s.label)}">${esc(id)} ${esc((s.label||'').slice(0,14))}</div>
+    <div class="bar"><i style="width:${Math.max(s.pct_cost,2)}%;background:${colors[id]||colors.other}"></i></div>
+    <div class="val">$${s.cost_usd.toFixed(0)}</div>
+  </div>`).join('');
+
+  const flags = (a.flags || []);
+  let flagHtml = flags.length
+    ? flags.map(f => `<div class="flag-item ${esc(f.severity||'warn')}" data-trace="${esc(f.trace_id||'')}">${esc(f.message)}</div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No flags</div>';
+
+  const top = (a.top_expensive || []).slice(0, 6).map(t => {
+    const oc = t.outcome === 'ok' ? 'ok' : t.outcome === 'fail' ? 'err' : t.outcome === 'warn' ? 'warn' : '';
+    return `<div class="top-row" data-trace="${esc(t.trace_id)}">
+      <div class="nm">${esc(t.stage_name)}</div>
+      <span class="pill ${oc}">${esc(t.outcome_label||'—')}</span>
+      <div class="c">$${t.cost_usd.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+
+  const chains = (a.verify_chains || []).filter(c => c.refine_rounds > 0 || c.verify_failures > 0).slice(0, 5);
+  let chainHtml = chains.length
+    ? chains.map(c => `<div class="chain-row">
+      <b>${esc(c.task_id)}</b> · $${c.cost_usd.toFixed(1)} · verify✗×${c.verify_failures} · refine×${c.refine_rounds}
+      ${c.final_verdict != null ? ` · final: ${esc(c.final_verdict)}` : ''}
+      <div class="stages">${esc((c.stages||[]).join(' → '))}</div>
+    </div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No verify/refine loops</div>';
+
+  const repeats = (a.repeat_groups || []).slice(0, 6);
+  let repeatHtml = repeats.length
+    ? repeats.map(r => `<div class="chain-row">
+      <b>${esc(r.label || r.key)}</b> · ×${r.count} · $${r.total_cost_usd.toFixed(1)}
+      <span class="pill warn">${esc(r.kind)}</span>
+    </div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No significant repeat calls</div>';
+
+  const wastes = (a.waste_groups || []).slice(0, 6);
+  let wasteHtml = wastes.length
+    ? wastes.map(w => `<div class="chain-row">
+      <b>${esc(w.label || w.reason)}</b> · ×${w.count} · $${w.total_cost_usd.toFixed(1)}
+      <span class="pill err">waste</span>
+    </div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No significant token waste detected</div>';
+
+  const eff = a.effective || {};
+  const lit = a.literature || {};
+  const bm = a.benchmark || {};
+
+  return `<div class="insights">
+    <h2>Run Analysis · Cost &amp; Effectiveness</h2>
+    <div class="insights-grid">
+      <div class="insight-block">
+        <h3>Stage cost breakdown</h3>
+        ${stageBars || '<div class="empty" style="padding:8px">No data</div>'}
+        <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+          Literature stages 1–3: $${(lit.cost_usd||0).toFixed(0)} (${lit.pct_cost||0}%) ·
+          Effective output cost share: ${eff.cost_efficiency_pct||0}%
+          ${bm.is_relaxation === true ? ' · <span class="pill warn">partial result</span>' : bm.is_relaxation === false ? ' · <span class="pill ok">full result</span>' : ''}
+        </div>
+      </div>
+      <div class="insight-block">
+        <h3>Flags (${flags.length})</h3>
+        <div class="flag-list">${flagHtml}</div>
+      </div>
+      <div class="insight-block">
+        <h3>Top expensive agents</h3>
+        <div class="top-list">${top || '—'}</div>
+      </div>
+      <div class="insight-block">
+        <h3>Verify / refine chains</h3>
+        ${chainHtml}
+      </div>
+      <div class="insight-block">
+        <h3>Repeat / batch calls</h3>
+        ${repeatHtml}
+      </div>
+      <div class="insight-block">
+        <h3>Token waste / ineffective</h3>
+        ${wasteHtml}
+      </div>
+    </div>
+  </div>`;
+}
+
+function flowTypeClass(type) {
+  if (type === 'dispatch') return 'type-dispatch';
+  if (type === 'verify') return 'type-verify';
+  if (type === 'refine' || type === 'reverify') return 'type-refine';
+  if (type === 'proof') return 'type-proof';
+  return '';
+}
+
+function renderAgentFlowSection(run) {
+  const flow = run.analysis?.agent_flow;
+  const strip = flow?.compact?.pipeline_strip || [];
+  const links = flow?.compact?.link_rows || [];
+  if (!strip.length && !flow?.columns?.length) return '';
+  if (!strip.length) return '';
+
+  const nodeCount = (flow.nodes || []).length;
+  let stripHtml = '';
+  strip.forEach((st, i) => {
+    if (i > 0) stripHtml += '<div class="pipe-arrow">→</div>';
+    const roles = (st.roles || []).map(r => {
+      const waste = r.waste_count ? ' waste' : '';
+      return `<div class="pipe-role${waste}"><span class="nm" title="${esc(r.label)}">${esc(r.label)}</span><span>×${r.count}</span></div>`;
+    }).join('');
+    stripHtml += `<div class="pipe-stage" style="border-top-color:${esc(st.color)}">
+      <div class="pipe-stage-hdr">${esc(st.label)}</div>
+      <div class="pipe-stage-sub">${esc(st.title)}</div>
+      <div class="pipe-stage-tot">${st.agent_count} agents · $${(st.cost_usd||0).toFixed(0)}</div>
+      ${roles || '<div class="pipe-role"><span class="nm">—</span></div>'}
+    </div>`;
+  });
+
+  const linkRows = links.map(row => `<tr>
+    <td>${esc(row.from_label)}</td>
+    <td class="arrow">→</td>
+    <td>${esc(row.to_label)}</td>
+    <td><span class="type ${flowTypeClass(row.type)}">${esc(row.type)}</span> ×${row.count}</td>
+  </tr>`).join('');
+
+  return `<div class="flow-wrap">
+    <h2>Agent Flow</h2>
+    <div class="flow-sub">${nodeCount} agents · stages flow left to right · see table for role-to-role links · click Pipeline below for each agent</div>
+    <div class="pipe-strip">${stripHtml}</div>
+    ${links.length ? `<table class="pipe-links">
+      <thead><tr><th>From</th><th></th><th>To</th><th>Link</th></tr></thead>
+      <tbody>${linkRows}</tbody>
+    </table>` : ''}
+  </div>`;
+}
+
+function initAgentFlow(_run) {}
+
+function formatMemoryContext(ctx) {
+  if (!ctx || typeof ctx !== 'object') return '';
+  return Object.entries(ctx).map(([k, v]) => {
+    const body = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+    return `### ${k} ###\n${body}`;
+  }).join('\n\n');
+}
+
+function renderFinalProofSection(run) {
+  const fl = run.final_latex;
+  if (!fl) {
+    return `<div class="proof-wrap">
+      <h2>Final Proof</h2>
+      <div class="proof-sub">No final LaTeX/Markdown proof file found for this run.</div>
+    </div>`;
+  }
+
+  const mdAvail = (fl.format === 'markdown') || String(fl.source_label || '').endsWith('.md');
+  const pdfAvail = fl.is_latex && !mdAvail;
+  let tab = State.proofTab || 'pdf';
+  if (tab === 'pdf' && mdAvail) tab = 'rendered';
+  if (tab === 'rendered' && !mdAvail) tab = pdfAvail ? 'pdf' : 'source';
+  const meta = `<div class="proof-meta">
+    <span>${esc(fl.source_label || 'proof')}</span>
+    <span>${fl.line_count || 0} lines · ${fmtN(fl.char_count || 0)} chars</span>
+    <span>${esc(fl.format || 'text')}</span>
+    ${fl.matched_line_pct != null ? `<span>${fl.matched_line_pct}% lines attributed to agents</span>` : ''}
+    ${fl.selector?.selected_is_relaxation === true ? '<span class="pill warn">partial result</span>' : fl.selector?.selected_is_relaxation === false ? '<span class="pill ok">full result</span>' : ''}
+    ${fl.selector?.selected_verified === true ? '<span class="pill ok">verified</span>' : ''}
+  </div>`;
+
+  let body = '';
+  if (tab === 'rendered') {
+    body = `<div class="md-render" id="proof-md-render"><div class="loading">Rendering markdown…</div></div>
+      <div class="proof-sub" style="margin-top:8px">Markdown proof rendered with math — every block is text-traceable to agents (see Agent trace).</div>`;
+  } else if (tab === 'pdf') {
+    if (pdfAvail) {
+      body = `<iframe class="proof-pdf" src="/api/run/${encodeURIComponent(run.run_id)}/final.pdf" title="Final proof PDF"></iframe>
+        <div class="proof-sub" style="margin-top:8px">PDF compiled on demand via pdflatex. If blank, switch to Source tab.</div>`;
+    } else {
+      body = `<div class="empty" style="padding:20px">This proof is ${esc(fl.format || 'plain text')} (not LaTeX) — open the Source tab to read it.</div>`;
+    }
+  } else if (tab === 'source') {
+    const cached = State.finalTexCache[run.run_id];
+    body = cached
+      ? `<div class="pre proof-source">${esc(cached)}</div>`
+      : `<div class="loading" id="proof-source-loading">Loading source…</div>`;
+  } else {
+    const prov = fl.provenance || [];
+    if (!prov.length) {
+      body = `<div class="empty" style="padding:16px">Per-agent attribution unavailable — this engine reports a single session trace (an activity log rather than raw proof text), so lines in the compiled proof can't be matched back to individual agent outputs. Multi-agent engines (IMProof / UCLA) show a full attribution table here.</div>`;
+    } else {
+      body = `<table class="prov-table"><thead><tr>
+        <th>Agent</th><th>Role</th><th>Lines</th><th>Share</th><th>Preview</th>
+      </tr></thead><tbody>` + prov.map(p => {
+        const sel = State.agent?.trace_id === p.trace_id ? ' class="sel"' : '';
+        const regions = (p.regions || []).map(r => `L${r.start_line}–${r.end_line}`).join(', ');
+        const preview = (p.regions && p.regions[0]?.preview) || '';
+        return `<tr${sel} data-trace="${esc(p.trace_id)}">
+          <td>${esc(p.stage_name)}</td>
+          <td>${esc(p.role)}</td>
+          <td class="prov-lines">${esc(regions || '—')}</td>
+          <td>${p.contribution_pct != null ? p.contribution_pct + '%' : '—'}</td>
+          <td class="prov-preview">${esc(preview)}</td>
+        </tr>`;
+      }).join('') + '</tbody></table>';
+      body += `<div class="proof-sub" style="margin-top:8px">Click a row to jump to that agent. Attribution uses text matching between agent outputs and final proof blocks (writeup, refine, assembly, author, finalize).</div>`;
+    }
+  }
+
+  const tabs = [
+    mdAvail ? ['rendered', 'Rendered'] : null,
+    pdfAvail ? ['pdf', 'PDF'] : null,
+    ['source', 'Source'],
+    ['provenance', 'Agent trace'],
+  ].filter(Boolean).map(([id, label]) =>
+    `<button type="button" class="proof-tab${tab === id ? ' active' : ''}" data-proof-tab="${id}">${label}</button>`
+  ).join('');
+
+  return `<div class="proof-wrap">
+    <h2>Final Proof</h2>
+    <div class="proof-sub">Final compiled output and which agents contributed text that appears in it.</div>
+    ${meta}
+    <div class="proof-tabs">${tabs}</div>
+    ${body}
+  </div>`;
+}
+
+async function loadFinalTexSource(runId) {
+  if (State.finalTexCache[runId]) return State.finalTexCache[runId];
+  const r = await fetch(`/api/run/${encodeURIComponent(runId)}/final.tex`);
+  if (!r.ok) throw new Error('source not found');
+  const text = await r.text();
+  State.finalTexCache[runId] = text;
+  return text;
+}
+
+function ensureProofSourceLoaded(run) {
+  if (!run?.final_latex) return;
+  const mdEl = $('proof-md-render');
+  if (mdEl) {
+    loadFinalTexSource(run.run_id).then(text => {
+      mdEl.innerHTML = window.marked ? marked.parse(text, {mangle:false, headerIds:false}) : `<pre>${esc(text)}</pre>`;
+      if (window.renderMathInElement) {
+        try { renderMathInElement(mdEl, {delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}], throwOnError:false}); } catch(e) {}
+      }
+    }).catch(e => { mdEl.textContent = 'Failed to load: ' + e.message; });
+  }
+  if (State.proofTab !== 'source') return;
+  if (State.finalTexCache[run.run_id]) {
+    const el = $('proof-source-loading');
+    if (el) el.outerHTML = `<div class="pre proof-source">${esc(State.finalTexCache[run.run_id])}</div>`;
+    return;
+  }
+  loadFinalTexSource(run.run_id).then(() => {
+    const el = $('proof-source-loading');
+    if (el) el.outerHTML = `<div class="pre proof-source">${esc(State.finalTexCache[run.run_id])}</div>`;
+  }).catch(e => {
+    const el = $('proof-source-loading');
+    if (el) el.textContent = 'Failed to load source: ' + e.message;
+  });
+}
+
+function renderRunMemorySection(run) {
+  const mem = run.memory;
+  if (!mem) return '';
+
+  if (run.source === 'improofbench_artifacts') {
+    const rounds = mem.rounds || [];
+    if (!rounds.length && !mem.resume_state) return '';
+    let roundHtml = rounds.map(r => {
+      const files = Object.keys(r.files || {});
+      const previews = files.map(f => {
+        const val = r.files[f];
+        const text = typeof val === 'string' ? val : JSON.stringify(val, null, 2);
+        const preview = text.length > 600 ? text.slice(0, 600) + '…' : text;
+        return `<div class="chain-row"><b>${esc(f)}</b><div class="stages">${esc(preview)}</div></div>`;
+      }).join('');
+      return `<div class="chain-row"><b>Round ${r.round}</b> · ${files.length} file(s)${previews}</div>`;
+    }).join('');
+    const resume = mem.resume_state;
+    const resumeHtml = resume ? `<div class="chain-row"><b>Resume state</b> · next round ${esc(resume.next_round)} · last run ${esc(resume.last_round_run)} · reviews ${(resume.review_history||[]).length}</div>` : '';
+    return `<div class="insights" style="margin-bottom:16px">
+      <h2>AC Workspace Memory</h2>
+      <div class="flow-sub">Persistent scratchpad / round snapshots from ac_workspaces</div>
+      ${resumeHtml}
+      ${roundHtml || '<div style="font-size:11px;color:var(--muted)">No round snapshots indexed</div>'}
+    </div>`;
+  }
+
+  if (run.source !== 'ucla_artifacts') return '';
+
+  const advisor = mem.advisor_rounds || [];
+  const kb = mem.kb || {};
+  const vr = mem.verify_refine || [];
+  const finals = mem.final_solutions || [];
+
+  const advisorHtml = advisor.length
+    ? advisor.map(r => `<div class="chain-row"><b>R${r.round}</b> · ${esc(r.action||'?')} · ${r.task_count||0} tasks · budget ${r.budget_remaining??'—'}${r.frontier?`<div class="stages">${esc(String(r.frontier).slice(0,200))}</div>`:''}</div>`).join('')
+    : '<div style="font-size:11px;color:var(--muted)">No advisor rounds</div>';
+
+  const kbHtml = kb.total_events ? `<div class="chain-row"><b>KB</b> · ${kb.proven_results||0} proven · ${kb.failed_attempts||0} failed · ${kb.total_events} events${kb.frontier?`<div class="stages">${esc(String(kb.frontier).slice(0,240))}</div>`:''}</div>` : '';
+
+  const vrHtml = vr.length
+    ? vr.slice(0,8).map(v => `<div class="chain-row"><b>${esc(v.task_id)}</b> r${v.round} · ${esc(v.verdict||'?')}${v.has_refine?' · refined':''}</div>`).join('')
+    : '';
+
+  const finHtml = finals.length
+    ? finals.slice(0,4).map(f => `<div class="chain-row"><b>${esc(f.task_id)}</b>${f.is_relaxation?'<span class="pill warn">partial</span>':'<span class="pill ok">full</span>'}</div>`).join('')
+    : '';
+
+  if (!advisor.length && !kb.total_events && !vr.length && !finals.length) return '';
+
+  return `<div class="insights" style="margin-bottom:16px">
+    <h2>Harness Memory (UCLA)</h2>
+    <div class="flow-sub">Advisor rounds · KB frontier · verify/refine · click agent Memory tab for per-call context</div>
+    ${kbHtml}
+    ${advisorHtml}
+    ${vrHtml ? `<div class="sec" style="margin-top:8px;font-size:11px;color:var(--muted)">Verify / Refine</div>${vrHtml}` : ''}
+    ${finHtml ? `<div class="sec" style="margin-top:8px;font-size:11px;color:var(--muted)">Final solutions</div>${finHtml}` : ''}
+  </div>`;
+}
+
+function renderCompare(runs) {
+  const ucla = runs.filter(r => r.source === 'ucla_artifacts' && r.cost_usd != null);
+  const improof = runs.filter(r => r.source === 'improofbench_artifacts' && r.cost_usd != null);
+  let html = '';
+  if (ucla.length >= 2) {
+    const rows = ucla.map(r => `<tr data-run="${esc(r.run_id)}" style="cursor:pointer">
+      <td>${esc((r.trace_name||r.run_id).replace(/^\[UCLA\] /,'').slice(0,36))}</td>
+      <td>$${(r.cost_usd||0).toFixed(0)}</td>
+      <td>${r.stage4_pct != null ? r.stage4_pct+'%' : '—'}</td>
+      <td>${r.cost_efficiency_pct != null ? r.cost_efficiency_pct+'%' : '—'}</td>
+      <td>${r.refine_loops != null ? r.refine_loops : '—'}</td>
+      <td>${r.is_relaxation === true ? '<span class="pill warn">partial</span>' : r.is_relaxation === false ? '<span class="pill ok">full</span>' : '—'}</td>
+      <td>${r.flag_count != null ? r.flag_count : '—'}</td>
+    </tr>`).join('');
+    html += `<div class="compare-wrap"><h2>UCLA cross-run comparison</h2>
+      <table><thead><tr>
+        <th>Problem</th><th>Cost</th><th>Stage4%</th><th>Eff. cost%</th><th>Refine loops</th><th>Result</th><th>Flags</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  if (improof.length >= 2) {
+    const rows = improof.map(r => `<tr data-run="${esc(r.run_id)}" style="cursor:pointer">
+      <td>${esc((r.trace_name||r.run_id).replace(/^\[IMProofBench\] /,'').slice(0,36))}</td>
+      <td>$${(r.cost_usd||0).toFixed(0)}</td>
+      <td>${r.author_pct != null ? r.author_pct+'%' : '—'}</td>
+      <td>${r.ac_rounds != null ? r.ac_rounds : '—'}</td>
+      <td>${r.answer_ready === true ? '<span class="pill ok">accepted</span>' : r.answer_ready === false ? '<span class="pill warn">rejected</span>' : '—'}</td>
+      <td>${r.refine_loops != null ? r.refine_loops : '—'}</td>
+      <td>${r.flag_count != null ? r.flag_count : '—'}</td>
+    </tr>`).join('');
+    html += `<div class="compare-wrap"><h2>IMProofBench cross-run comparison</h2>
+      <table><thead><tr>
+        <th>Problem</th><th>Cost</th><th>Author%</th><th>AC Rounds</th><th>Critic</th><th>Refine</th><th>Flags</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  return html;
+}
+
+function renderPipeline(run) {
+  const stages = run.pipeline || [];
+  const agents = run.agents || [];
+  const present = new Set(run.stages_present || []);
+  const byStage = {};
+  for (const a of agents) {
+    const ps = a.pipeline_stage || 'other';
+    if (!byStage[ps]) byStage[ps] = [];
+    byStage[ps].push(a);
+  }
+
+  let html = renderCompare(State.runs);
+  html += renderFinalProofSection(run);
+  html += renderRunMemorySection(run);
+  html += renderAgentFlowSection(run);
+  html += renderInsights(run);
+  html += renderVisualLegend();
+  const isImproof = run.source === 'improofbench_artifacts';
+  const stageNote = isImproof
+    ? 'IMProofBench pipeline: Workflow → Author → Critic (+ Council / Compute when used).'
+    : 'Pipeline stages 1–9.';
+  html += `<div class="stage-note">${stageNote}${run.source === 'previous_log'
+      ? `<br><span class="pill warn">Historical stdout log</span> source: <code>${esc(run.log_file||'')}</code>`
+      : ''
+  }</div>`;
+  html += `<div class="stats">
+    <div class="stat"><div class="lbl">Agents</div><div class="val">${run.totals?.agents||0}</div></div>
+    <div class="stat"><div class="lbl">Input tokens</div><div class="val">${fmtN(run.totals?.input_tokens)}</div></div>
+    <div class="stat"><div class="lbl">Output tokens</div><div class="val">${fmtN(run.totals?.output_tokens)}</div></div>
+    <div class="stat"><div class="lbl">Latency</div><div class="val">${(run.totals?.latency_s||0).toFixed(0)}s</div></div>
+    ${run.totals?.cost_usd?`<div class="stat"><div class="lbl">Cost</div><div class="val">$${run.totals.cost_usd.toFixed(2)}</div></div>`:''}
+  </div>`;
+
+  html += `<div class="view-toggle">
+    <button class="vt-btn ${State.viewMode==='map'?'active':''}" data-view="map">🗺 Map</button>
+    <button class="vt-btn ${State.viewMode==='pipeline'?'active':''}" data-view="pipeline">☰ Pipeline</button>
+    <span class="vt-hint">${State.viewMode==='map'?'drag to pan · scroll to zoom · click a node for details':'fixed stage columns'}</span>
+  </div>`;
+  if (State.viewMode === 'map') {
+    html += `<div class="agent-map" id="agent-map">
+      <div class="map-controls">
+        <button id="map-zin" title="Zoom in">+</button>
+        <button id="map-zout" title="Zoom out">−</button>
+        <button id="map-fit" title="Fit">⤢</button>
+      </div>
+      <div class="map-legend">
+        <span><i style="background:#3b82f6"></i>write</span>
+        <span><i style="background:#14b8a6"></i>critic/verify</span>
+        <span><i style="background:#a855f7"></i>reasoning</span>
+        <span><i style="background:#eab308"></i>tools</span>
+        <span><i style="background:#f97316"></i>finalize</span>
+        <span><i style="background:#94a3b8"></i>memory</span>
+      </div>
+    </div>`;
+    html += renderAllAgentsTable(run, agents);
+    return html;
+  }
+  html += '<div class="pipeline-wrap"><div class="pipeline">';
+  for (const st of stages) {
+    const list = byStage[st.id] || [];
+    const emptyCls = list.length ? '' : ' empty-stage';
+    const stageCost = list.reduce((s,a) => s + (a.cost_usd||0), 0);
+    const stagePct = run.totals?.cost_usd ? (stageCost / run.totals.cost_usd * 100) : 0;
+    const stageHeat = stagePct >= 40 ? ' stage-heat-critical' : stagePct >= 22 ? ' stage-heat-high' : '';
+    const skipHint = list.length ? '' : (st.env ? `<div class="stage-skip">Not run<br><span style="font-size:10px">${esc(st.env)}${st.default_on===false?'=0 (off by default)':''}</span></div>` : '<div class="stage-skip">Not run</div>');
+    html += `<div class="stage-col${stageHeat}">
+      <div class="stage-hdr" style="border-top:3px solid ${st.color};${list.length?'':'opacity:.55'}">
+        ${esc(st.label)}
+        <div class="stitle">${esc(st.title)}</div>
+        ${list.length ? `<div class="stage-cost">$${stageCost.toFixed(0)} · ${stagePct.toFixed(0)}% · ${list.length} calls</div>` : ''}
+      </div>
+      <div class="stage-body${emptyCls}">`;
+    if (list.length) {
+      for (const a of list) {
+        const sel = State.agent?.trace_id === a.trace_id ? ' active' : '';
+        const mon = a.monitor || {};
+        const oc = outcomeClass(mon.outcome);
+        const heat = costHeatClass(mon);
+        const waste = wasteVisualClass(mon);
+        const dim = agentDimmed(mon) ? ' dimmed' : '';
+        const status = a.status && a.status !== 'completed'
+          ? `<span class="pill ${a.status==='interrupted'?'warn':'err'}">${esc(a.status)}</span> `
+          : '';
+        const outBadge = mon.outcome_label && mon.outcome_label !== '—'
+          ? `<span class="pill ${mon.outcome==='ok'?'ok':mon.outcome==='fail'?'err':mon.outcome==='warn'?'warn':''} badge">${esc(mon.outcome_label)}</span>`
+          : '';
+        const wasteTag = mon.is_token_waste
+          ? `<span class="waste-tag" title="${esc(mon.waste_reason||'')}">${esc((mon.waste_label||'waste').slice(0,12))}</span>`
+          : '';
+        const barW = Math.min(Math.max(mon.cost_share_pct || 0, 0), 100);
+        html += `<div class="agent-node${sel}${oc}${heat}${waste}${dim}" data-trace="${esc(a.trace_id)}" data-seq="${a.call_seq}">
+          <div class="role">${wasteTag}${status}${esc(a.role)}${outBadge}</div>
+          <div class="name">${esc(a.stage_name)}</div>
+          <div class="tok">in <b>${fmtN(a.total_input_tokens)}</b> · out <b>${fmtN(a.output_tokens)}</b>${a.cost_usd?` · <b>$${a.cost_usd.toFixed(2)}</b>`:''} · ${a.latency_s ? (a.latency_s).toFixed(0)+'s' : '—'}</div>
+          ${barW > 0.5 ? `<div class="cost-bar" title="${barW.toFixed(1)}% of run cost"><i style="width:${barW}%"></i></div>` : ''}
+        </div>`;
+      }
+    } else {
+      html += skipHint;
+    }
+    html += '</div></div>';
+  }
+  // misc agents without pipeline_stage
+  const other = byStage['other'] || [];
+  if (other.length) {
+    html += `<div class="stage-col"><div class="stage-hdr" style="border-top:3px solid #64748b">Other<div class="stitle">Unclassified</div></div><div class="stage-body">`;
+    for (const a of other) {
+      html += `<div class="agent-node" data-trace="${esc(a.trace_id)}">${esc(a.stage_name)}</div>`;
+    }
+    html += '</div></div>';
+  }
+  html += '</div></div>';
+  html += renderAllAgentsTable(run, agents);
+  return html;
+}
+
+function renderAllAgentsTable(run, agents) {
+  let html = `<div class="table-wrap"><h2>All Agents <span style="font-weight:400;color:var(--muted)">· sorted by cost below</span></h2>
+    <table><thead><tr>
+      <th>Pipeline</th><th>Stage</th><th>Role</th><th>Round</th><th>Cost</th><th>In</th><th>Out</th><th>Outcome</th><th>Flags</th><th>Impact</th>
+    </tr></thead><tbody>`;
+  const sortedAgents = [...agents].sort((x,y) => (y.cost_usd||0) - (x.cost_usd||0));
+  for (const a of sortedAgents) {
+    const sel = State.agent?.trace_id === a.trace_id ? ' class="sel"' : '';
+    const mon = a.monitor || {};
+    let impact = '—';
+    if (a.decision_impact) {
+      const d = a.decision_impact;
+      if (d.verdict !== undefined) impact = `<span class="pill ${d.verdict==='true'||d.verdict===true?'ok':''}">${esc(d.verdict)}</span>`;
+      else if (d.action) impact = `<span class="pill">${esc(d.action)} · ${d.task_count||0}t ${d.writeup_count||0}w</span>`;
+      else if (d.task_description) impact = `<span class="pill">${esc((d.task_description||'').slice(0,40))}</span>`;
+    }
+    const flags = (mon.flags||[]).map(x=>`<span class="pill warn">${esc(x)}</span>`).join(' ') || '—';
+    const oc = mon.outcome_label || '—';
+    const rep = mon.is_repeat ? ` <span class="pill warn">×${mon.repeat_count}</span>` : '';
+    const waste = mon.is_token_waste ? ` <span class="pill err">${esc(mon.waste_label||'waste')}</span>` : '';
+    const rowClasses = [
+      State.agent?.trace_id === a.trace_id ? 'sel' : '',
+      isHighCost(mon) ? 'cost-high-mark' : '',
+      isWasteMark(mon) ? 'is-waste' : '',
+    ].filter(Boolean).join(' ');
+    html += `<tr${rowClasses ? ` class="${rowClasses}"` : ''} data-trace="${esc(a.trace_id)}" data-seq="${a.call_seq}">
+      <td>Stage ${esc(a.pipeline_stage??'?')}</td>
+      <td>${esc(a.stage_name)}${rep}${waste}</td><td>${esc(a.role)}</td>
+      <td>${esc(a.round_id??'—')}</td>
+      <td>${a.cost_usd != null ? '$'+a.cost_usd.toFixed(2) : '—'}</td>
+      <td>${fmtN(a.total_input_tokens)}</td><td>${fmtN(a.output_tokens)}</td>
+      <td><span class="pill ${mon.outcome==='ok'?'ok':mon.outcome==='fail'?'err':mon.outcome==='warn'?'warn':''}">${esc(oc)}</span></td>
+      <td>${flags}</td><td>${impact}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+
+/* ── Agent Map: free-form node graph (per-engine layouts) ─────────────── */
+function mapKind(a) {
+  const role = (a.role || '').toLowerCase();
+  const stage = (a.pipeline_stage || '').toLowerCase();
+  if (stage === 'finalize' || /final/.test(a.stage_name || '')) return 'final';
+  if (['author','writer','prover','assistant','writeup'].includes(role) || stage === 'write' || stage === 'draft' || stage === 'author') return 'write';
+  if (['critic','checker','evaluator','verifier'].includes(role) || stage === 'critic' || stage === 'verify') return 'critic';
+  if (['tools','tool','exec'].includes(role) || stage === 'act') return 'tool';
+  if (['orchestrator','workflow','system'].includes(role)) return 'orch';
+  return 'think';
+}
+
+function mapNodeHtml(a) {
+  const kind = mapKind(a);
+  const mon = a.monitor || {};
+  const kcolor = { write:'#3b82f6', critic:'#14b8a6', think:'#a855f7', tool:'#eab308', orch:'#64748b', final:'#f97316' }[kind];
+  const badge = mon.outcome_label && mon.outcome_label !== '—'
+    ? `<span class="mbadge" style="background:${mon.outcome==='ok'?'var(--ok)':mon.outcome==='fail'?'var(--err)':'var(--warn)'};color:#fff">${esc(mon.outcome_label)}</span>` : '';
+  const run = a.status === 'running' ? ' running' : '';
+  const sel = State.agent?.trace_id === a.trace_id ? ' selected' : '';
+  const tok = (a.total_input_tokens || a.output_tokens)
+    ? `<div class="mt">in ${fmtN(a.total_input_tokens)} · out ${fmtN(a.output_tokens)}${a.cost_usd?` · $${a.cost_usd.toFixed(2)}`:''}</div>` : '';
+  // Per-kind body: each node type shows what matters for it.
+  let body = '';
+  if (kind === 'tool') {
+    body = `<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
+  } else if (kind === 'think') {
+    body = `<div class="mp" style="font-style:italic">${esc((a.thinking||a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
+  } else if (kind === 'critic') {
+    body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,80))}</div>`;
+  } else if (kind === 'final') {
+    body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,80))}</div>`;
+  } else {
+    body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,80))}</div>`;
+  }
+  return `<div class="map-card mk-${kind}${run}${sel}" data-trace="${esc(a.trace_id)}">
+    <div class="mr" style="color:${kcolor}">${esc(a.role||'agent')} ${badge}</div>
+    <div class="mn">${esc(a.stage_name||a.trace_id)}</div>
+    ${body}
+  </div>`;
+}
+
+function layoutAgentMap(run) {
+  const agents = run.agents || [];
+  const edges = (run.edges || []).filter(e => (e.from||e.source) && (e.to||e.target));
+  const byId = Object.fromEntries(agents.map(a => [a.trace_id, a]));
+  const adj = {}, indeg = {};
+  agents.forEach(a => { adj[a.trace_id] = []; indeg[a.trace_id] = 0; });
+  edges.forEach(e => {
+    const f = e.from || e.source, t = e.to || e.target;
+    if (byId[f] && byId[t]) { adj[f].push(t); indeg[t]++; }
+  });
+  // depth = longest path from any root (fallback: call_seq order)
+  const depth = {};
+  const sorted = [...agents].sort((a,b) => (a.call_seq||0) - (b.call_seq||0));
+  sorted.forEach(a => { depth[a.trace_id] = 0; });
+  let changed = true, guard = 0;
+  while (changed && guard++ < 60) {
+    changed = false;
+    for (const a of sorted) for (const t of adj[a.trace_id]) {
+      if (depth[t] < depth[a.trace_id] + 1) { depth[t] = depth[a.trace_id] + 1; changed = true; }
+    }
+  }
+  if (!edges.length) sorted.forEach((a,i) => depth[a.trace_id] = i);
+  // lanes by node kind — different engines produce different lane sets
+  const laneOrder = ['orch','think','write','critic','tool','final'];
+  const lanes = [...new Set(sorted.map(mapKind))].sort((x,y) => laneOrder.indexOf(x) - laneOrder.indexOf(y));
+  const NW = 195, NH = 86, DX = 235, DY = 128;
+  const cellCount = {};
+  const pos = {};
+  for (const a of sorted) {
+    const d = depth[a.trace_id];
+    const lane = lanes.indexOf(mapKind(a));
+    const key = d + ':' + lane;
+    const n = cellCount[key] = (cellCount[key] || 0) + 1;
+    pos[a.trace_id] = {
+      x: 40 + d * DX + ((lane % 2) ? 26 : 0),
+      y: 30 + lane * DY + (n - 1) * (NH + 10) + (d % 2 ? 14 : 0),
+      w: NW, h: NH,
+    };
+  }
+  // Memory side-nodes: one per agent that carries memory_context, plus the
+  // run-level workspace memory (improof rounds etc.) — visible together with agents.
+  const memNodes = [];
+  const memEdges = [];
+  const maxLaneY = 30 + lanes.length * DY;
+  for (const a of sorted) {
+    const ctx = a.memory_context;
+    if (!ctx || typeof ctx !== 'object' || !Object.keys(ctx).length) continue;
+    const p = pos[a.trace_id];
+    if (!p) continue;
+    const mid = a.trace_id + '::mem';
+    pos[mid] = { x: p.x + 18, y: maxLaneY + 40 + memNodes.length * 96, w: 185, h: 78 };
+    memNodes.push({ id: mid, host: a, ctx });
+    memEdges.push({ from: a.trace_id, to: mid, mem: true });
+  }
+  if (run.memory && typeof run.memory === 'object') {
+    const rounds = (run.memory.rounds || []).length;
+    const mid = '::run-memory';
+    const lastWrite = [...sorted].reverse().find(a => ['write','final'].includes(mapKind(a))) || sorted[sorted.length-1];
+    pos[mid] = { x: 40, y: maxLaneY + 40 + memNodes.length * 96, w: 185, h: 78 };
+    memNodes.push({ id: mid, host: null, ctx: run.memory, label: `run memory · ${rounds} round(s)` });
+    if (lastWrite) memEdges.push({ from: lastWrite.trace_id, to: mid, mem: true });
+  }
+  return { pos, edges, memNodes, memEdges, byId,
+    w: 80 + (Math.max(0,...Object.values(depth)) + 1) * DX,
+    h: maxLaneY + 60 + Math.max(1, memNodes.length) * 96 + 100 };
+}
+
+function initAgentMap(run) {
+  const host = document.getElementById('agent-map');
+  if (!host || !run?.agents?.length) return;
+  const { pos, edges, memNodes, memEdges, w, h } = layoutAgentMap(run);
+  const svgNS = 'http://www.w3.org/2000/svg';
+  let edgePaths = '';
+  for (const e of edges) {
+    const f = pos[e.from || e.source], t = pos[e.to || e.target];
+    if (!f || !t) continue;
+    const x1 = f.x + f.w, y1 = f.y + f.h/2, x2 = t.x, y2 = t.y + t.h/2;
+    const mx = (x1 + x2) / 2;
+    edgePaths += `<path class="map-edge" d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" marker-end="url(#map-arrow)"/>`;
+  }
+  for (const e of memEdges || []) {
+    const f = pos[e.from], t = pos[e.to];
+    if (!f || !t) continue;
+    const x1 = f.x + f.w/2, y1 = f.y + f.h, x2 = t.x + t.w/2, y2 = t.y;
+    const my = (y1 + y2) / 2;
+    edgePaths += `<path class="map-edge mem" d="M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}" marker-end="url(#map-arrow)"/>`;
+  }
+  let nodeFO = '';
+  for (const a of run.agents) {
+    const p = pos[a.trace_id];
+    if (!p) continue;
+    nodeFO += `<foreignObject class="map-node" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" data-trace="${esc(a.trace_id)}">
+      ${mapNodeHtml(a)}</foreignObject>`;
+  }
+  for (const m of memNodes || []) {
+    const p = pos[m.id];
+    if (!p) continue;
+    const keys = Object.keys(m.ctx || {});
+    const preview = m.label || keys.slice(0, 3).join(' · ');
+    const body = (() => {
+      const v = m.ctx?.[keys[0]];
+      const text = typeof v === 'string' ? v : JSON.stringify(v || '');
+      return String(text).replace(/\s+/g, ' ').slice(0, 70);
+    })();
+    const host_ = m.host ? esc(m.host.trace_id) : '';
+    nodeFO += `<foreignObject class="map-node" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" data-mem="${host_}">
+      <div class="map-card mk-mem" data-mem="${host_}">
+        <div class="mr" style="color:#94a3b8">🗄 memory</div>
+        <div class="mn">${esc(preview || 'memory')}</div>
+        <div class="mp">${esc(body)}</div>
+      </div></foreignObject>`;
+  }
+  const svg = `<svg xmlns="${svgNS}" viewBox="0 0 ${Math.max(w, 800)} ${Math.max(h, 520)}">
+    <defs><marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/></marker></defs>
+    <g id="map-vp">${edgePaths}${nodeFO}</g>
+  </svg>`;
+  // keep controls/legend, replace/insert svg
+  host.querySelector('svg')?.remove();
+  host.insertAdjacentHTML('afterbegin', svg);
+
+  const vp = host.querySelector('#map-vp');
+  let scale = 1, tx = 0, ty = 0;
+  const apply = () => vp.setAttribute('transform', `translate(${tx} ${ty}) scale(${scale})`);
+  host.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const ds = ev.deltaY < 0 ? 1.12 : 0.9;
+    scale = Math.min(3, Math.max(0.25, scale * ds));
+    apply();
+  }, { passive: false });
+  let drag = null;
+  host.addEventListener('pointerdown', ev => {
+    if (ev.target.closest('.map-card')) return;
+    drag = { x: ev.clientX, y: ev.clientY, tx, ty };
+    host.setPointerCapture(ev.pointerId);
+  });
+  host.addEventListener('pointermove', ev => {
+    if (!drag) return;
+    tx = drag.tx + (ev.clientX - drag.x);
+    ty = drag.ty + (ev.clientY - drag.y);
+    apply();
+  });
+  host.addEventListener('pointerup', () => { drag = null; });
+  host.querySelector('#map-zin')?.addEventListener('click', () => { scale = Math.min(3, scale * 1.25); apply(); });
+  host.querySelector('#map-zout')?.addEventListener('click', () => { scale = Math.max(0.25, scale * 0.8); apply(); });
+  host.querySelector('#map-fit')?.addEventListener('click', () => { scale = 1; tx = ty = 0; apply(); });
+  host.querySelectorAll('.map-card[data-trace], .map-node').forEach(el => {
+    el.addEventListener('click', ev => {
+      const memHost = el.dataset.mem ?? el.closest('[data-mem]')?.dataset.mem;
+      if (memHost !== undefined) {
+        ev.stopPropagation();
+        // Memory node: open the host agent's Memory tab (run-level memory → first agent).
+        const tid2 = memHost || (State.run?.agents?.[0]?.trace_id ?? '');
+        if (tid2) selectAgent(tid2, 'memory');
+        return;
+      }
+      const tid = el.dataset.trace || el.closest('[data-trace]')?.dataset.trace;
+      if (tid) { ev.stopPropagation(); selectAgent(tid); 
+        host.querySelectorAll('.map-card.selected').forEach(c => c.classList.remove('selected'));
+        el.closest('foreignObject')?.querySelector('.map-card')?.classList.add('selected');
+        el.classList.add('selected');
+      }
+    });
+  });
+}
+
+function textTab(content, source, emptyMsg) {
+  if (!content) return `<div class="empty" style="padding:16px">${esc(emptyMsg)}</div>`;
+  const src = source ? `<div class="sec">source: ${esc(source)}</div>` : '';
+  return src + `<div class="pre">${esc(content)}</div>`;
+}
+
+function renderDetail(agent) {
+  if (!agent) return '<div class="empty">No agent selected</div>';
+  $('d-title').textContent = agent.stage_name || 'Agent';
+  $('d-meta').textContent = `${agent.trace_id} · seq ${agent.call_seq}`;
+
+  if (State.tab === 'overview') {
+    let html = `<div class="field-grid">
+      <div class="field"><div class="fl">trace_id</div><div class="fv">${esc(agent.trace_id)}</div></div>
+      <div class="field"><div class="fl">round_id</div><div class="fv">${esc(agent.round_id??'—')}</div></div>
+      <div class="field"><div class="fl">agent_id</div><div class="fv">${esc(agent.agent_id??'—')}</div></div>
+      <div class="field"><div class="fl">role</div><div class="fv">${esc(agent.role)}</div></div>
+      <div class="field"><div class="fl">input_tokens</div><div class="fv">${agent.input_tokens} (+cache ${agent.cache_read_tokens}/${agent.cache_write_tokens}) = ${fmtN(agent.total_input_tokens)}</div></div>
+      <div class="field"><div class="fl">output_tokens</div><div class="fv">${fmtN(agent.output_tokens)}${agent.reasoning_tokens?` (reasoning ${fmtN(agent.reasoning_tokens)})`:''}</div></div>
+      <div class="field"><div class="fl">model</div><div class="fv">${esc(agent.model)}</div></div>
+      <div class="field"><div class="fl">latency</div><div class="fv">${agent.latency_s != null ? (agent.latency_s).toFixed(1)+'s' : '—'}</div></div>
+      ${agent.status ? `<div class="field"><div class="fl">status</div><div class="fv">${esc(agent.status)}</div></div>` : ''}
+      ${agent.cost_usd != null ? `<div class="field"><div class="fl">cost_usd</div><div class="fv">$${agent.cost_usd.toFixed(4)} (${(agent.monitor?.cost_share_pct||0).toFixed(1)}% of run)</div></div>` : ''}
+      ${agent.monitor ? `<div class="field"><div class="fl">outcome</div><div class="fv">${esc(agent.monitor.outcome_label)} (${esc(agent.monitor.outcome)})</div></div>` : ''}
+      ${agent.monitor ? `<div class="field"><div class="fl">cost tier</div><div class="fv">${esc(agent.monitor.cost_tier)}</div></div>` : ''}
+      ${agent.monitor?.is_repeat ? `<div class="field"><div class="fl">repeat</div><div class="fv">#${agent.monitor.repeat_index} / ${agent.monitor.repeat_count} same stage (stats only, not red)</div></div>` : ''}
+      ${agent.monitor?.in_verify_refine_cycle ? `<div class="field"><div class="fl">cycle</div><div class="fv">in verify/refine loop (stats only, not red)</div></div>` : ''}
+      ${agent.monitor?.is_token_waste ? `<div class="field"><div class="fl">token waste</div><div class="fv">${esc(agent.monitor.waste_label||'—')}${agent.monitor.waste_ref_stage?` · vs ${esc(agent.monitor.waste_ref_stage)}`:''}${agent.monitor.waste_similarity!=null?` · ${(agent.monitor.waste_similarity*100).toFixed(0)}% similar`:''}</div></div>` : ''}
+    </div>`;
+    html += `<div class="sec">received from</div><div>${(agent.received_from||[]).map(x=>`<span class="pill">${esc(x)}</span>`).join(' ')||'<span class="muted">—</span>'}</div>`;
+    html += `<div class="sec">sent to</div><div>${(agent.sent_to||[]).map(x=>`<span class="pill">${esc(x)}</span>`).join(' ')||'—'}</div>`;
+    html += `<div class="sec">tool calls</div><div>${(agent.tool_calls||[]).map(x=>`<span class="pill warn">${esc(x)}</span>`).join(' ')||'—'}</div>`;
+    if (agent.final_used_span) {
+      html += `<div class="sec">final used span</div><div class="pre">${esc(agent.final_used_span)}</div>`;
+    }
+    if (agent.final_latex_contribution) {
+      const fc = agent.final_latex_contribution;
+      const regions = (fc.regions || []).map(r => `L${r.start_line}–${r.end_line}`).join(', ');
+      html += `<div class="sec">final proof contribution</div>
+        <div class="field"><div class="fl">lines in final proof</div><div class="fv">${esc(regions || '—')}</div></div>
+        <div class="field"><div class="fl">share of document</div><div class="fv">${fc.contribution_pct != null ? fc.contribution_pct + '%' : '—'}</div></div>`;
+      if (fc.regions && fc.regions[0]?.preview) {
+        html += `<div class="pre">${esc(fc.regions[0].preview)}</div>`;
+      }
+    }
+    if (agent.monitor?.flags?.length) {
+      html += `<div class="sec">monitor flags</div><div>${agent.monitor.flags.map(x=>`<span class="pill warn">${esc(x)}</span>`).join(' ')}</div>`;
+    }
+    if (agent.response_id) {
+      html += `<div class="field"><div class="fl">response_id</div><div class="fv">${esc(agent.response_id)}</div></div>`;
+    }
+    if (agent.decision_impact) {
+      html += `<div class="sec">decision impact</div><div class="pre">${esc(JSON.stringify(agent.decision_impact,null,2))}</div>`;
+    }
+    if (agent.memory_context) {
+      html += `<div class="sec">memory context (${esc(agent.memory_source||'—')})</div><div class="pre">${esc(formatMemoryContext(agent.memory_context).slice(0, 1200))}${formatMemoryContext(agent.memory_context).length>1200?'…':''}</div>`;
+    }
+    return html;
+  }
+  if (State.tab === 'prompt') return textTab(agent.prompt, agent.prompt_source, 'No prompt available');
+  if (State.tab === 'thinking') return textTab(agent.thinking, agent.thinking_source, 'No thinking text (reasoning may not have been logged)');
+  if (State.tab === 'output') return textTab(agent.output, agent.output_source, 'No output available');
+  if (State.tab === 'memory') {
+    const text = formatMemoryContext(agent.memory_context);
+    return textTab(text, agent.memory_source, 'No cross-round memory context');
+  }
+  return '';
+}
+
+function selectAgent(traceId, tab) {
+  const agent = (State.run?.agents||[]).find(a => a.trace_id === traceId);
+  State.agent = agent || null;
+  if (tab) {
+    State.tab = tab;
+    document.querySelectorAll('.tabs .tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+  }
+  $('detail-body').innerHTML = renderDetail(State.agent);
+  document.querySelectorAll('.agent-node, tr[data-trace]').forEach(el => {
+    el.classList.toggle('active', el.dataset.trace === traceId);
+    el.classList.toggle('sel', el.dataset.trace === traceId);
+  });
+}
+
+async function loadRun(runId) {
+  State.currentRunId = runId || null;
+  const lbl = $('run-hdr-label');
+  if (lbl) lbl.textContent = runId ? `· ${runId}` : '';
+  if (!runId) { clearRunView(); return; }
+  $('main').innerHTML = '<div class="loading">Loading run…</div>';
+  try {
+    State.run = await api(`/api/run/${encodeURIComponent(runId)}`);
+  } catch (e) {
+    $('main').innerHTML = `<div class="empty">Load failed: ${esc(e.message)}</div>`;
+    $('status').textContent = 'load error';
+    return;
+  }
+  $('main').innerHTML = renderPipeline(State.run);
+  const rerender = () => {
+    $('main').innerHTML = renderPipeline(State.run);
+    bindMainClicks();
+    initAgentFlow(State.run);
+    try { initAgentMap(State.run); } catch (e) { console.warn('agent map', e); }
+    ensureProofSourceLoaded(State.run);
+    if (State.agent) selectAgent(State.agent.trace_id);
+  };
+  function bindMainClicks() {
+    $('main').querySelectorAll('.agent-node, tr[data-trace], .top-row, .flag-item[data-trace]').forEach(el => {
+      const tid = el.dataset.trace;
+      if (!tid) return;
+      el.addEventListener('click', () => selectAgent(tid));
+    });
+    $('main').querySelectorAll('.prov-table tr[data-trace]').forEach(el => {
+      el.addEventListener('click', () => selectAgent(el.dataset.trace));
+    });
+    $('main').querySelectorAll('.proof-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        State.proofTab = btn.dataset.proofTab;
+        rerender();
+      });
+    });
+    $('main').querySelectorAll('tr[data-run]').forEach(el => {
+      el.addEventListener('click', () => loadRun(el.dataset.run));
+    });
+    const fh = $('btn-filter-high'), fw = $('btn-filter-waste'), fc = $('btn-filter-clear');
+    if (fh) fh.onclick = () => { State.filterHigh = !State.filterHigh; if (State.filterHigh) State.filterWaste = false; rerender(); };
+    if (fw) fw.onclick = () => { State.filterWaste = !State.filterWaste; if (State.filterWaste) State.filterHigh = false; rerender(); };
+    if (fc) fc.onclick = () => { State.filterHigh = false; State.filterWaste = false; rerender(); };
+    $('main').querySelectorAll('.vt-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        State.viewMode = btn.dataset.view;
+        localStorage.setItem('hd-view-mode', State.viewMode);
+        rerender();
+      });
+    });
+  }
+  bindMainClicks();
+  ensureProofSourceLoaded(State.run);
+  try { initAgentFlow(State.run); } catch (e) { console.warn('agent flow', e); }
+  try { initAgentMap(State.run); } catch (e) { console.warn('agent map', e); }
+  if (State.run.agents?.length) selectAgent(State.run.agents[0].trace_id);
+  notifyParentHeight();
+}
+
+function loadRunsManifest(runs) {
+  const seen = new Set();
+  State.runs = [];
+  for (const r of runs) {
+    if (!r.run_id || seen.has(r.run_id)) continue;
+    seen.add(r.run_id);
+    State.runs.push(r);
+  }
+  State.runs.sort((a, b) => (b.last_ts || '').localeCompare(a.last_ts || ''));
+}
+
+function clearRunView() {
+  State.run = null;
+  State.agent = null;
+  State.currentRunId = null;
+  const lbl = $('run-hdr-label');
+  if (lbl) lbl.textContent = '';
+  $('main').innerHTML = '<div class="empty">Select a run from the left Runs panel</div>';
+  $('detail-body').innerHTML = '<div class="empty">No agent selected</div>';
+  notifyParentHeight();
+}
+
+async function init() {
+  try {
+    const manifest = await api('/api/runs');
+    loadRunsManifest(manifest.runs || []);
+    $('status').textContent = `${State.runs.length} run(s)`;
+    const fromUrl = new URLSearchParams(location.search).get('run_id');
+    if (fromUrl) {
+      await loadRun(fromUrl);
+    } else if (!isEmbedded && State.runs[0]?.run_id) {
+      await loadRun(State.runs[0].run_id);
+    }
+  } catch(e) {
+    $('status').textContent = 'error: '+e.message;
+  }
+}
+
+function formatRunTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString('en-US', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+  } catch { return ''; }
+}
+
+$('btn-rebuild').addEventListener('click', async () => {
+  $('status').textContent = 'rebuilding…';
+  const prev = State.currentRunId || State.run?.run_id;
+  await api('/api/rebuild');
+  await init();
+  if (prev && State.runs.some(r => r.run_id === prev)) {
+    await loadRun(prev);
+  }
+});
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    State.tab = t.dataset.tab;
+    $('detail-body').innerHTML = renderDetail(State.agent);
+  });
+});
+
+init();
+watchContentHeight();
+notifyParentHeight();
+</script>
+</body>
+</html>

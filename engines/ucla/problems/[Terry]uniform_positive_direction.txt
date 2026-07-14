@@ -1,0 +1,1 @@
+Let v_1,...,v_k be non-zero vectors in R^k such that <v_i, v_j> is non-negative for all i,j.  Then there exists a unit vector w such that <v_i, w'> > 0 whenever w' lies within epsilon_k of w, where epsilon_k>0 is a constant that depends only on k.

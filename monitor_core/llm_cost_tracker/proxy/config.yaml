@@ -1,0 +1,149 @@
+# LiteLLM proxy config for LLM cost monitoring.
+#
+# Start with:
+#   litellm --config llm_cost_tracker/proxy/config.yaml --port 4000
+#
+# Point any OpenAI-compatible client at this proxy:
+#   export OPENAI_BASE_URL=http://localhost:4000/v1
+#   export OPENAI_API_KEY=sk-tau-local-1234
+#
+# All calls are routed through the proxy, logged by trace_logger.py,
+# and prompt caching is auto-injected for supported models.
+
+model_list:
+  # =========================================================================
+  # Bedrock Claude models (prompt caching auto-injected)
+  # Pricing source: https://aws.amazon.com/bedrock/pricing/ (Anthropic section)
+  # =========================================================================
+  - model_name: us.anthropic.claude-3-5-haiku-20241022-v1:0
+    litellm_params:
+      model: bedrock/us.anthropic.claude-3-5-haiku-20241022-v1:0
+      aws_region_name: us-east-1
+      cache_control_injection_points:
+        - location: message
+          role: system
+        - location: message
+          index: -1
+
+  - model_name: us.anthropic.claude-haiku-4-5-20251001-v1:0
+    litellm_params:
+      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
+      aws_region_name: us-east-1
+      cache_control_injection_points:
+        - location: message
+          role: system
+        - location: message
+          index: -1
+
+  - model_name: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    litellm_params:
+      model: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
+      aws_region_name: us-east-1
+      cache_control_injection_points:
+        - location: message
+          role: system
+        - location: message
+          index: -1
+
+  - model_name: us.anthropic.claude-opus-4-5-20251101-v1:0
+    litellm_params:
+      model: bedrock/us.anthropic.claude-opus-4-5-20251101-v1:0
+      aws_region_name: us-east-1
+      cache_control_injection_points:
+        - location: message
+          role: system
+        - location: message
+          index: -1
+
+  # =========================================================================
+  # OpenAI GPT models (direct API)
+  # Pricing source: https://openai.com/api/pricing/
+  # =========================================================================
+  - model_name: gpt-5-mini
+    litellm_params:
+      model: openai/gpt-5-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-5.5
+    litellm_params:
+      model: openai/gpt-5.5
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-5.5-pro
+    litellm_params:
+      model: openai/gpt-5.5
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-5.2-pro
+    litellm_params:
+      model: openai/gpt-5.2-pro
+      api_key: os.environ/OPENAI_API_KEY
+
+  # =========================================================================
+  # Azure OpenAI GPT models
+  # Pricing source: https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/
+  # =========================================================================
+  - model_name: gpt-5-chat
+    litellm_params:
+      model: azure/gpt-5-chat
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+
+  - model_name: gpt-5.2
+    litellm_params:
+      model: azure/gpt-5.2
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+
+  - model_name: gpt-5.2-chat
+    litellm_params:
+      model: azure/gpt-5.2-chat
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+
+  - model_name: gpt-5.4
+    litellm_params:
+      model: azure/gpt-5.4
+      api_base: os.environ/AZURE_OPENAI_ENDPOINT
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+
+  # =========================================================================
+  # SGLang-hosted models (RadixAttention handles caching internally)
+  # =========================================================================
+  - model_name: Qwen3-30B-A3B-zeroshot
+    litellm_params:
+      model: openai/Qwen3-30B-A3B-zeroshot
+      api_base: os.environ/SGLANG_BASE_URL
+      api_key: "none"
+
+  - model_name: Qwen3-30B-A3B-Thinking-2507-tau2-consecutive-tool-penalty
+    litellm_params:
+      model: openai/Qwen3-30B-A3B-Thinking-2507-tau2-consecutive-tool-penalty
+      api_base: os.environ/SGLANG_BASE_URL
+      api_key: "none"
+
+  - model_name: Qwen3-30B-A3B-Thinking-2507
+    litellm_params:
+      model: openai/Qwen3-30B-A3B-Thinking-2507
+      api_base: os.environ/SGLANG_BASE_URL
+      api_key: "none"
+
+  - model_name: sentinel-qwen3-4b-thinking-rl
+    litellm_params:
+      model: openai/sentinel-qwen3-4b-thinking-rl
+      api_base: os.environ/SGLANG_BASE_URL
+      api_key: "none"
+
+  - model_name: Qwen3-4B-zeroshot
+    litellm_params:
+      model: openai/Qwen3-4B-zeroshot
+      api_base: os.environ/SGLANG_BASE_URL
+      api_key: "none"
+
+litellm_settings:
+  # Custom logger that writes each call to monitor/calls.jsonl
+  callbacks: trace_logger.proxy_logger
+  drop_params: true
+
+general_settings:
+  master_key: sk-tau-local-1234
