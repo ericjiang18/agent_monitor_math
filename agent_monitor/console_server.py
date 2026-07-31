@@ -35,6 +35,38 @@ def _cache_harness() -> Path:
 WORKSPACES_ROOT = (RUNS_DIR / "workspaces").resolve()
 _TEXT_SUFFIXES = {".tex", ".txt", ".md", ".py", ".json", ".yaml", ".yml", ".log", ".sty", ".bib"}
 
+_PREVIEW_CACHE: dict[str, str] = {}
+
+
+def _problem_preview_for(run_id: str | None, cache_dir: Path) -> str:
+    """Backfill a short problem title for manifest entries written before
+    problem_preview existed. Reads the run's problem.txt / run record once."""
+    if not run_id or "/" in run_id or ".." in run_id:
+        return ""
+    if run_id in _PREVIEW_CACHE:
+        return _PREVIEW_CACHE[run_id]
+    text = ""
+    ws = _workspace_for_run(run_id)
+    if ws and (ws / "problem.txt").exists():
+        try:
+            text = (ws / "problem.txt").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+    if not text:
+        rec = cache_dir / f"{run_id}.json"
+        if rec.exists():
+            try:
+                run = json.loads(rec.read_text(encoding="utf-8"))
+                text = run.get("problem_text_preview") or ""
+                if not text:
+                    agents = run.get("agents") or []
+                    text = str(agents[0].get("prompt") or "") if agents else ""
+            except (json.JSONDecodeError, OSError):
+                text = ""
+    preview = next((ln.strip()[:140] for ln in text.splitlines() if ln.strip()), "")
+    _PREVIEW_CACHE[run_id] = preview
+    return preview
+
 
 def _workspace_for_run(run_id: str) -> Path | None:
     """Resolve a run's workspace dir, guarding against path escape."""
@@ -105,26 +137,77 @@ def _compile_workspace_pdf(ws: Path, tex_rel: str) -> Path | None:
     return None
 
 
+# Paths reachable without a session.
+_PUBLIC_PATHS = {"/login", "/health", "/api/auth/login", "/api/auth/register", "/api/auth/google", "/api/auth/me"}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: A003
         print(f"[console] {self.address_string()} {fmt % args}")
 
-    def _send(self, code: int, body: str, ctype: str = "application/json"):
+    def _send(self, code: int, body: str, ctype: str = "application/json", headers: dict[str, str] | None = None):
         data = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
+
+    # ── auth helpers ─────────────────────────────────────────────────────
+    def _session_token(self) -> str | None:
+        from http.cookies import SimpleCookie
+
+        from agent_monitor.auth import SESSION_COOKIE
+
+        raw = self.headers.get("Cookie") or ""
+        try:
+            jar = SimpleCookie(raw)
+        except Exception:  # noqa: BLE001
+            return None
+        morsel = jar.get(SESSION_COOKIE)
+        return morsel.value if morsel else None
+
+    def _current_user(self) -> dict | None:
+        from agent_monitor import auth
+
+        return auth.user_for_token(self._session_token())
+
+    def _session_cookie_header(self, token: str | None) -> str:
+        """Set-Cookie value; token=None clears the cookie."""
+        from agent_monitor.auth import SESSION_COOKIE, SESSION_TTL_DAYS
+
+        host = (self.headers.get("Host") or "").split(":")[0]
+        secure = "" if host in {"localhost", "127.0.0.1"} else " Secure;"
+        if token is None:
+            return f"{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly;{secure} SameSite=Lax"
+        max_age = SESSION_TTL_DAYS * 86400
+        return f"{SESSION_COOKIE}={token}; Path=/; Max-Age={max_age}; HttpOnly;{secure} SameSite=Lax"
+
+    def _require_user(self, path: str) -> dict | None:
+        """Return the user, or answer 401/redirect and return None."""
+        user = self._current_user()
+        if user:
+            return user
+        if path.startswith("/api/"):
+            self._send(401, json.dumps({"error": "not signed in", "login": "/login"}))
+        else:
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.end_headers()
+        return None
+
+    def _owns_run(self, run_id: str, user: dict) -> bool:
+        owner = job_manager.run_owner(run_id)
+        if owner is None:
+            return bool(user.get("is_admin"))  # legacy runs belong to the operator
+        return owner == user.get("id") or bool(user.get("is_admin"))
 
     def _send_bytes(self, code: int, body: bytes, ctype: str, *, download_name: str | None = None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
         if download_name:
             self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
         self.end_headers()
@@ -138,15 +221,22 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         qs = parse_qs(parsed.query)
 
-        if path in ("/", "/index.html", "/console"):
-            html_path = WEB_DIR / "console.html"
+        if path == "/login":
+            html_path = WEB_DIR / "login.html"
             self._send(200, html_path.read_text(encoding="utf-8"), "text/html; charset=utf-8")
             return
 
-        if path in ("/monitor", "/dashboard"):
-            html = (DASHBOARD_WEB / "index.html").read_text(encoding="utf-8")
-            # Soft-redirect note: keep classic monitor available
-            self._send(200, html, "text/html; charset=utf-8")
+        if path == "/api/auth/me":
+            from agent_monitor.auth import google_client_id
+
+            self._send(
+                200,
+                json.dumps({"user": self._current_user(), "google_client_id": google_client_id()}),
+            )
+            return
+
+        if path == "/health":
+            self._send(200, json.dumps({"ok": True, "service": "agent-monitor-console"}))
             return
 
         if path.startswith("/static/"):
@@ -158,6 +248,21 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_bytes(200, f.read_bytes(), ctype)
                     return
             self._send(404, json.dumps({"error": "not found"}))
+            return
+
+        user = self._require_user(path)
+        if user is None:
+            return
+
+        if path in ("/", "/index.html", "/console"):
+            html_path = WEB_DIR / "console.html"
+            self._send(200, html_path.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+            return
+
+        if path in ("/monitor", "/dashboard"):
+            html = (DASHBOARD_WEB / "index.html").read_text(encoding="utf-8")
+            # Soft-redirect note: keep classic monitor available
+            self._send(200, html, "text/html; charset=utf-8")
             return
 
         if path == "/api/engines":
@@ -175,19 +280,26 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/jobs":
-            self._send(200, json.dumps({"jobs": job_manager.list_jobs()}))
+            owner = None if user.get("is_admin") else user["id"]
+            self._send(200, json.dumps({"jobs": job_manager.list_jobs(owner_id=owner)}))
+            return
+
+        if path == "/api/agent/config":
+            from agent_monitor import agent_config
+
+            self._send(200, json.dumps(agent_config.get_agent_config(), ensure_ascii=False))
             return
 
         if path == "/api/settings":
             from agent_monitor.settings import get_settings
 
-            self._send(200, json.dumps(get_settings(), ensure_ascii=False))
+            self._send(200, json.dumps(get_settings(user), ensure_ascii=False))
             return
 
         if path.startswith("/api/jobs/"):
             job_id = path.removeprefix("/api/jobs/")
             job = job_manager.get_job(job_id)
-            if not job:
+            if not job or (job.get("owner_id") not in (None, user["id"]) and not user.get("is_admin")):
                 self._send(404, json.dumps({"error": "job not found"}))
                 return
             self._send(200, json.dumps(job))
@@ -195,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/runs/") and path.endswith("/chat"):
             run_id = path.removeprefix("/api/runs/").removesuffix("/chat")
-            if not run_id or "/" in run_id:
+            if not run_id or "/" in run_id or not self._owns_run(run_id, user):
                 self._send(404, json.dumps({"error": "not found"}))
                 return
             try:
@@ -205,24 +317,36 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/workspace/"):
-            self._handle_workspace(path, qs)
+            self._handle_workspace(path, qs, user)
+            return
+
+        if path.startswith("/api/run/") and path.endswith("/proof_graph"):
+            from agent_monitor import proof_graph
+
+            rid = path.removeprefix("/api/run/").removesuffix("/proof_graph")
+            ws = _workspace_for_run(rid)
+            if not ws or not self._owns_run(rid, user):
+                self._send(404, json.dumps({"error": "run not found"}))
+                return
+            cached = proof_graph.load_cached(ws)
+            self._send(200, json.dumps(cached or {"status": "none"}, ensure_ascii=False))
             return
 
         # Delegate classic dashboard APIs
-        if path in ("/api/runs", "/api/rebuild", "/health") or path.startswith("/api/run/") or path == "/api/call_detail":
-            self._proxy_dashboard_get(path, qs)
+        if path in ("/api/runs", "/api/rebuild") or path.startswith("/api/run/") or path == "/api/call_detail":
+            self._proxy_dashboard_get(path, qs, user)
             return
 
         self._send(404, json.dumps({"error": "not found"}))
 
-    def _handle_workspace(self, path: str, qs: dict):
+    def _handle_workspace(self, path: str, qs: dict, user: dict):
         # /api/workspace/{run_id}/files | /file?path= | /pdf?path=
         rest = path.removeprefix("/api/workspace/")
         parts = rest.split("/", 1)
         run_id = parts[0]
         action = parts[1] if len(parts) > 1 else "files"
         ws = _workspace_for_run(run_id)
-        if not ws:
+        if not ws or not self._owns_run(run_id, user):
             self._send(404, json.dumps({"error": "workspace not found", "run_id": run_id}))
             return
 
@@ -287,6 +411,113 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, json.dumps({"error": "invalid json"}))
             return
 
+        if path in ("/api/auth/register", "/api/auth/login", "/api/auth/google"):
+            from agent_monitor import auth
+
+            try:
+                if path == "/api/auth/register":
+                    account = auth.register(
+                        str(body.get("email") or ""),
+                        str(body.get("password") or ""),
+                        name=body.get("name"),
+                    )
+                elif path == "/api/auth/login":
+                    account = auth.login(str(body.get("email") or ""), str(body.get("password") or ""))
+                else:
+                    account = auth.login_with_google(str(body.get("credential") or ""))
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._send(400, json.dumps({"error": f"Sign-in failed: {exc}"}, ensure_ascii=False))
+                return
+            token = auth.create_session(int(account["id"]))
+            self._send(
+                200,
+                json.dumps({"ok": True, "user": account}, ensure_ascii=False),
+                headers={"Set-Cookie": self._session_cookie_header(token)},
+            )
+            return
+
+        if path == "/api/auth/logout":
+            from agent_monitor import auth
+
+            auth.destroy_session(self._session_token())
+            self._send(200, json.dumps({"ok": True}), headers={"Set-Cookie": self._session_cookie_header(None)})
+            return
+
+        user = self._require_user(path)
+        if user is None:
+            return
+
+        if path == "/api/agent/config":
+            from agent_monitor import agent_config
+
+            try:
+                if "system_prompt" in body:
+                    agent_config.save_system_prompt(str(body.get("system_prompt") or ""))
+                if "memory_enabled" in body:
+                    agent_config.set_memory_enabled(bool(body.get("memory_enabled")))
+                self._send(200, json.dumps({"ok": True}))
+            except Exception as exc:  # noqa: BLE001
+                self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+            return
+
+        if path == "/api/agent/skills":
+            from agent_monitor import agent_config
+
+            try:
+                name = str(body.get("name") or "")
+                if "content" in body:
+                    agent_config.save_skill(name, str(body.get("content") or ""))
+                if "enabled" in body:
+                    agent_config.set_skill_enabled(name, bool(body.get("enabled")))
+                self._send(200, json.dumps({"ok": True, "skills": agent_config.list_skills()}, ensure_ascii=False))
+            except (ValueError, FileNotFoundError) as exc:
+                self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+            return
+
+        if path == "/api/agent/memory":
+            from agent_monitor import agent_config
+
+            try:
+                agent_config.save_memory(str(body.get("name") or ""), str(body.get("content") or ""))
+                self._send(200, json.dumps({"ok": True}))
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+            return
+
+        if path.startswith("/api/run/") and path.endswith("/proof_graph"):
+            from agent_monitor import proof_graph
+
+            rid = path.removeprefix("/api/run/").removesuffix("/proof_graph")
+            ws = _workspace_for_run(rid)
+            if not ws or not self._owns_run(rid, user):
+                self._send(404, json.dumps({"error": "run not found"}))
+                return
+            run_record = None
+            rec_path = _cache_harness() / f"{rid}.json"
+            if rec_path.exists():
+                try:
+                    run_record = json.loads(rec_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    run_record = None
+            try:
+                result = proof_graph.generate(
+                    workspace=ws,
+                    run_record=run_record,
+                    user=user,
+                    model=(str(body.get("model") or "").strip() or None),
+                )
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._send(500, json.dumps({"error": f"Graph generation failed: {exc}"}, ensure_ascii=False))
+                return
+            self._send(200, json.dumps(result, ensure_ascii=False))
+            return
+
         if path == "/api/runs":
             try:
                 job = job_manager.start_job(
@@ -295,16 +526,19 @@ class Handler(BaseHTTPRequestHandler):
                     problem_text=body.get("problem_text"),
                     model=body.get("model") or None,
                     max_iterations=int(body.get("max_iterations") or 40),
+                    user=user,
+                    use_subagents=body.get("use_subagents") is not False,
+                    subagent_model=(str(body.get("subagent_model") or "").strip() or None),
                 )
             except Exception as exc:  # noqa: BLE001
-                self._send(400, json.dumps({"error": str(exc)}))
+                self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
                 return
             self._send(200, json.dumps(job))
             return
 
         if path.startswith("/api/runs/") and path.endswith("/stop"):
             run_id = path.removeprefix("/api/runs/").removesuffix("/stop")
-            if not run_id or "/" in run_id:
+            if not run_id or "/" in run_id or not self._owns_run(run_id, user):
                 self._send(404, json.dumps({"error": "not found"}))
                 return
             try:
@@ -317,7 +551,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/runs/") and path.endswith("/continue"):
             run_id = path.removeprefix("/api/runs/").removesuffix("/continue")
-            if not run_id or "/" in run_id:
+            if not run_id or "/" in run_id or not self._owns_run(run_id, user):
                 self._send(404, json.dumps({"error": "not found"}))
                 return
             try:
@@ -326,6 +560,7 @@ class Handler(BaseHTTPRequestHandler):
                     message=body.get("message"),
                     model=body.get("model"),
                     max_iterations=int(body.get("max_iterations") or 40),
+                    user=user,
                 )
             except FileNotFoundError as exc:
                 self._send(404, json.dumps({"error": str(exc)}))
@@ -338,7 +573,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/runs/") and path.endswith("/chat"):
             run_id = path.removeprefix("/api/runs/").removesuffix("/chat")
-            if not run_id or "/" in run_id:
+            if not run_id or "/" in run_id or not self._owns_run(run_id, user):
                 self._send(404, json.dumps({"error": "not found"}))
                 return
             try:
@@ -347,6 +582,7 @@ class Handler(BaseHTTPRequestHandler):
                     str(body.get("message") or ""),
                     model=body.get("model"),
                     max_iterations=int(body.get("max_iterations") or 40),
+                    user=user,
                 )
             except (ValueError, FileNotFoundError) as exc:
                 self._send(400, json.dumps({"error": str(exc)}))
@@ -365,6 +601,7 @@ class Handler(BaseHTTPRequestHandler):
                     str(body.get("provider") or ""),
                     api_key=body.get("api_key"),
                     base_url=body.get("base_url"),
+                    user=user,
                 )
             except ValueError as exc:
                 self._send(400, json.dumps({"error": str(exc)}))
@@ -377,7 +614,7 @@ class Handler(BaseHTTPRequestHandler):
             from agent_monitor.settings import save_settings
 
             try:
-                result = save_settings(body)
+                result = save_settings(body, user=user)
             except Exception as exc:  # noqa: BLE001
                 self._send(400, json.dumps({"error": str(exc)}))
                 return
@@ -390,9 +627,39 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        user = self._require_user(path)
+        if user is None:
+            return
+
+        if path.startswith("/api/agent/skills/"):
+            from urllib.parse import unquote
+
+            from agent_monitor import agent_config
+
+            name = unquote(path.removeprefix("/api/agent/skills/"))
+            try:
+                agent_config.delete_skill(name)
+                self._send(200, json.dumps({"ok": True}))
+            except (ValueError, FileNotFoundError) as exc:
+                self._send(404, json.dumps({"error": str(exc)}, ensure_ascii=False))
+            return
+
+        if path.startswith("/api/agent/memory/"):
+            from urllib.parse import unquote
+
+            from agent_monitor import agent_config
+
+            name = unquote(path.removeprefix("/api/agent/memory/"))
+            try:
+                agent_config.save_memory(name, "")
+                self._send(200, json.dumps({"ok": True}))
+            except ValueError as exc:
+                self._send(404, json.dumps({"error": str(exc)}, ensure_ascii=False))
+            return
+
         if path.startswith("/api/runs/"):
             run_id = path.removeprefix("/api/runs/")
-            if not run_id or "/" in run_id:
+            if not run_id or "/" in run_id or not self._owns_run(run_id, user):
                 self._send(404, json.dumps({"error": "not found"}))
                 return
             try:
@@ -405,7 +672,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send(404, json.dumps({"error": "not found"}))
 
-    def _proxy_dashboard_get(self, path: str, qs: dict):
+    def _proxy_dashboard_get(self, path: str, qs: dict, user: dict):
         """Reuse harness_dashboard.server handlers for run JSON APIs."""
         import harness_dashboard.server as dash
 
@@ -413,18 +680,59 @@ class Handler(BaseHTTPRequestHandler):
         dash.MANIFEST_PATH = dash.CACHE_DIR / "manifest.json"
 
         if path == "/api/runs":
+            payload: dict = {"runs": []}
             if dash.MANIFEST_PATH.exists():
-                self._send(200, dash.MANIFEST_PATH.read_text(encoding="utf-8"))
-            else:
-                self._send(200, json.dumps({"runs": []}))
-            return
-
-        if path == "/health":
-            self._send(200, json.dumps({"ok": True, "service": "agent-monitor-console"}))
+                try:
+                    payload = json.loads(dash.MANIFEST_PATH.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    payload = {"runs": []}
+            if not user.get("is_admin"):
+                payload["runs"] = [
+                    r for r in (payload.get("runs") or []) if r.get("owner_id") == user["id"]
+                ]
+            for entry in payload.get("runs") or []:
+                if not entry.get("problem_preview"):
+                    entry["problem_preview"] = _problem_preview_for(entry.get("run_id"), dash.CACHE_DIR)
+            self._send(200, json.dumps(payload, ensure_ascii=False))
             return
 
         if path == "/api/rebuild":
             self._send(200, json.dumps({"ok": True, "note": "use agent-monitor build"}))
+            return
+
+        if path.startswith("/api/run/"):
+            rid = path.removeprefix("/api/run/").split("/", 1)[0]
+            if not self._owns_run(rid, user):
+                self._send(404, json.dumps({"error": "run not found"}))
+                return
+
+        if path.startswith("/api/run/") and path.endswith("/export"):
+            run_id = path.removeprefix("/api/run/").removesuffix("/export")
+            data = dash._load_run(run_id)
+            if not data:
+                self._send(404, json.dumps({"error": "run not found"}))
+                return
+            from datetime import datetime, timezone
+
+            bundle: dict = {"run": data, "exported_at": datetime.now(timezone.utc).isoformat()}
+            try:
+                bundle["chat"] = job_manager.list_chat(run_id)
+            except Exception:  # noqa: BLE001
+                bundle["chat"] = []
+            ws = _workspace_for_run(run_id)
+            files: list[dict] = []
+            if ws:
+                for f in _list_workspace_files(ws):
+                    entry = dict(f)
+                    if f["kind"] == "text" and f["size"] <= 400_000:
+                        try:
+                            entry["content"] = (ws / f["path"]).read_text(encoding="utf-8", errors="replace")
+                        except OSError:
+                            pass
+                    files.append(entry)
+            bundle["workspace_files"] = files
+            body = json.dumps(bundle, ensure_ascii=False, indent=2).encode("utf-8")
+            self._send_bytes(200, body, "application/json", download_name=f"{run_id}_logs.json")
             return
 
         if path.startswith("/api/run/") and path.endswith("/final_latex"):

@@ -84,6 +84,21 @@ body {
 .run-act.cont:hover { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
 @keyframes pulse { 50% { opacity: .3; } }
 
+.sb-user {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-top: 1px solid var(--border); font-size: 12px;
+}
+.sb-user .avatar {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--grad); color: #fff;
+  display: grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0;
+  background-size: cover; background-position: center;
+}
+.sb-user .uname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.sb-user button {
+  border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 14px;
+  border-radius: 6px; padding: 2px 6px;
+}
+.sb-user button:hover { color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); }
 .sb-foot {
   padding: 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; align-items: center;
 }
@@ -272,6 +287,13 @@ button.start:disabled { opacity: .4; }
 .proc-log.collapsed .proc-body { display: none; }
 .proc-body .ln-new { color: var(--muted); }
 
+/* Prompt strip (sandbox): the exact prompt given to the engine */
+.prompt-strip { border-bottom: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
+.prompt-strip .chev { transition: transform .15s; }
+.prompt-strip.collapsed .chev { transform: rotate(-90deg); }
+.prompt-strip.collapsed .proc-body { display: none; }
+.prompt-strip .proc-body { max-height: 220px; color: var(--muted); font-size: 10.5px; }
+
 .chat-compose {
   padding: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
 }
@@ -291,6 +313,81 @@ button.start:disabled { opacity: .4; }
 
 #view-monitor { flex: 1; display: none; min-height: 0; overflow-y: auto; }
 #view-monitor iframe { width: 100%; min-height: 720px; height: 1200px; border: 0; display: block; }
+
+/* Proof-graph (DAG) view */
+#view-dag { flex: 1; display: none; flex-direction: column; min-height: 0; }
+.dag-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
+.dag-toolbar .title { font-weight: 700; font-size: 13px; }
+.dag-toolbar .sub { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.dag-toolbar select { background: var(--panel2); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; max-width: 220px; }
+.dag-toolbar button { padding: 7px 14px; border: 0; border-radius: 8px; background: var(--grad); color: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
+.dag-toolbar button:disabled { opacity: .55; cursor: default; }
+.dag-scroll { flex: 1; overflow: auto; position: relative; background: var(--bg); }
+.dag-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 90px 20px; line-height: 1.9; }
+.dag-stage { position: relative; margin: 0 auto; }
+#dag-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#dag-nodes { position: relative; }
+.dag-node { position: absolute; width: 230px; background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--kc, #64748b); border-radius: 10px; padding: 9px 11px; box-shadow: 0 1px 4px rgba(0,0,0,.12); cursor: pointer; transition: box-shadow .15s; }
+.dag-node:hover { box-shadow: 0 3px 12px rgba(0,0,0,.22); z-index: 3; }
+.dag-node .kd { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: var(--kc, #64748b); border-radius: 4px; padding: 1px 6px; margin-bottom: 5px; }
+.dag-node .lb { font-size: 12px; font-weight: 650; line-height: 1.35; }
+.dag-node .stm { font-size: 11px; color: var(--dim); line-height: 1.5; margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.dag-node.expanded .stm { display: block; -webkit-line-clamp: unset; color: var(--fg); }
+.dag-edge { fill: none; stroke: color-mix(in srgb, var(--fg) 30%, transparent); stroke-width: 1.4; }
+.dag-edge.contradicts { stroke: #ef4444; stroke-dasharray: 5 3; }
+.dag-edge-label { font-size: 9px; fill: color-mix(in srgb, var(--fg) 45%, transparent); font-family: var(--mono); }
+
+/* ── Conversation view ─────────────────────── */
+#view-conversation { flex: 1; display: none; min-height: 0; overflow-y: auto;
+  background: radial-gradient(800px 300px at 50% -8%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%), var(--bg); }
+.convo-col { max-width: 880px; margin: 0 auto; padding: 26px 22px 90px; }
+.convo-head { margin-bottom: 22px; }
+.convo-head h2 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.convo-head .sub { font-size: 12px; color: var(--dim); margin-top: 3px; }
+.convo-head .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.convo-chip { font-size: 10.5px; font-family: var(--mono); padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted); background: var(--panel); }
+.convo-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 70px 20px; line-height: 1.8; }
+.convo-empty .big { font-size: 30px; opacity: .35; }
+.turn { display: flex; gap: 14px; position: relative; padding-bottom: 20px; }
+.turn:not(:last-child)::before { content: ''; position: absolute; left: 17px; top: 42px; bottom: 0;
+  width: 2px; background: linear-gradient(var(--border), color-mix(in srgb, var(--border) 40%, transparent)); }
+.turn-av { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center;
+  font-size: 15px; color: #fff; flex-shrink: 0; z-index: 1; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.turn-card { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden; box-shadow: 0 1px 5px rgba(0,0,0,.06); }
+.turn-hdr { display: flex; align-items: center; gap: 9px; padding: 10px 15px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.turn-hdr .kb { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+  padding: 2px 8px; border-radius: 999px; color: #fff; }
+.turn-hdr .stg { font-size: 12.5px; font-weight: 650; }
+.turn-hdr .rl { font-size: 11px; color: var(--dim); }
+.turn-hdr .stats { margin-left: auto; display: flex; gap: 5px; flex-wrap: wrap; }
+.turn-hdr .tk { font-size: 9.5px; font-family: var(--mono); color: var(--dim);
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; background: var(--panel2); }
+.turn-hdr .tk.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); }
+.turn-hdr .tk.err { color: var(--err); border-color: color-mix(in srgb, var(--err) 35%, var(--border)); }
+.turn-hdr .tk.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
+.turn-body { padding: 13px 17px; font-size: 13.5px; line-height: 1.68; overflow-wrap: break-word; }
+.turn-body > :first-child { margin-top: 0; } .turn-body > :last-child { margin-bottom: 0; }
+.turn-body h1, .turn-body h2, .turn-body h3 { margin: 1em 0 .4em; line-height: 1.3; }
+.turn-body h1 { font-size: 1.25em; } .turn-body h2 { font-size: 1.15em; } .turn-body h3 { font-size: 1.05em; }
+.turn-body p { margin: .55em 0; }
+.turn-body code { background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-family: var(--mono); font-size: .88em; }
+.turn-body pre { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: .6em 0; }
+.turn-body pre code { border: 0; background: none; padding: 0; }
+.turn-body blockquote { border-left: 3px solid var(--accent); margin: .6em 0; padding: 2px 12px; color: var(--dim); }
+.turn-body .katex-display { overflow-x: auto; padding: 3px 0; }
+.turn-body.mono { font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; word-break: break-word;
+  color: var(--muted); max-height: 300px; overflow-y: auto; }
+.turn-body.thinkstyle { font-style: italic; color: var(--muted); }
+.turn-extra { border-top: 1px dashed var(--border); }
+.turn-extra summary { padding: 8px 17px; font-size: 10.5px; color: var(--dim); cursor: pointer;
+  user-select: none; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; list-style: none; }
+.turn-extra summary::before { content: '▸ '; }
+.turn-extra[open] summary::before { content: '▾ '; }
+.turn-extra[open] summary { color: var(--muted); }
+.turn-extra .pre-x { padding: 0 17px 13px; font-family: var(--mono); font-size: 11px;
+  white-space: pre-wrap; word-break: break-word; color: var(--muted); max-height: 340px; overflow-y: auto; }
 
 /* Settings modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; display: none; align-items: center; justify-content: center; padding: 24px; }
@@ -320,8 +417,14 @@ button.start:disabled { opacity: .4; }
     <button class="new-proof" id="new-proof-btn">＋ New proof</button>
     <div class="sb-sec">Runs</div>
     <div class="sb-runs" id="runs"></div>
+    <div class="sb-user" id="sb-user" style="display:none">
+      <span class="avatar" id="user-avatar"></span>
+      <span class="uname" id="user-name">—</span>
+      <button id="logout-btn" title="Sign out">⎋</button>
+    </div>
     <div class="sb-foot">
       <button id="settings-btn">⚙ Settings</button>
+      <button id="agent-btn" title="System prompt, skills &amp; memory">◈ Agent</button>
       <button class="theme-btn" id="theme-btn" title="Theme">☾</button>
       <span class="pill" id="live-pill">idle</span>
     </div>
@@ -340,6 +443,14 @@ button.start:disabled { opacity: .4; }
             <select id="model-select"></select>
             <input id="model-custom" type="text" placeholder="custom" style="display:none"/>
           </div>
+          <label class="model-pick" title="Allow the prover to spawn sub-agents (parallel explorers / verifiers). Applies to engines that support delegation (e.g. Hermes)." style="cursor:pointer;gap:5px">
+            <input type="checkbox" id="subagents-check" checked style="accent-color:var(--accent)"/>
+            <span>Subagents</span>
+          </label>
+          <div class="model-pick" id="subagent-model-pick" title="Model used by spawned sub-agents. Default: same model as the main agent.">
+            <span>Sub-model</span>
+            <select id="subagent-model-select"></select>
+          </div>
           <button class="start" id="start-btn">Prove ▸</button>
         </div>
       </div>
@@ -351,7 +462,9 @@ button.start:disabled { opacity: .4; }
       <div class="session-top">
         <div class="seg-control">
           <button class="active" data-view="sandbox">Sandbox</button>
+          <button data-view="conversation">Conversation</button>
           <button data-view="monitor">Monitor</button>
+          <button data-view="dag">DAG</button>
         </div>
         <div class="session-side">
           <button class="sess-btn stop" id="sess-stop">■ Stop</button>
@@ -367,6 +480,14 @@ button.start:disabled { opacity: .4; }
                 <span class="title">Proof</span>
                 <span class="sub" id="proof-label">—</span>
                 <button id="pdf-dl-btn" disabled>⬇ Download</button>
+              </div>
+              <div class="prompt-strip collapsed" id="prompt-strip" style="display:none">
+                <div class="proc-hdr" id="prompt-toggle">
+                  <span class="t">Prompt</span>
+                  <span class="n" id="prompt-len"></span>
+                  <span class="chev">▾</span>
+                </div>
+                <pre class="proc-body" id="prompt-body"></pre>
               </div>
               <div class="proof-body">
                 <div class="proof-empty" id="proof-empty">
@@ -406,8 +527,31 @@ button.start:disabled { opacity: .4; }
             </div>
           </div>
         </div>
+        <div id="view-conversation">
+          <div class="convo-col" id="convo-col"></div>
+        </div>
         <div id="view-monitor">
           <iframe id="monitor-frame" src="/monitor"></iframe>
+        </div>
+        <div id="view-dag">
+          <div class="dag-toolbar">
+            <span class="title">Proof graph</span>
+            <span class="sub" id="dag-meta">—</span>
+            <span style="flex:1"></span>
+            <span style="font-size:11px;color:var(--dim)">Model</span>
+            <select id="dag-model"></select>
+            <button id="dag-gen">◆ Generate</button>
+          </div>
+          <div class="dag-scroll" id="dag-scroll">
+            <div class="dag-empty" id="dag-empty">
+              <div style="font-size:28px;opacity:.4">◆</div>
+              <div>No proof graph yet.<br/>Pick a small model and press <b>Generate</b> — it reads the proof and extracts the logical DAG.</div>
+            </div>
+            <div class="dag-stage" id="dag-stage" style="display:none">
+              <svg id="dag-svg"></svg>
+              <div id="dag-nodes"></div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -424,6 +568,14 @@ button.start:disabled { opacity: .4; }
   </div>
 </div>
 
+<div class="modal-backdrop" id="agent-modal">
+  <div class="modal" style="width:min(860px,100%)">
+    <div class="modal-hdr"><div><h2>Agent</h2><p style="font-size:12px;color:var(--dim)">System prompt, skills &amp; memory — applies to the Hermes engine</p></div><button id="agent-close">✕</button></div>
+    <div class="modal-body" id="agent-body"></div>
+    <div class="modal-foot"><span id="agent-status" style="margin-right:auto;font-size:11px;color:var(--dim)"></span><button id="agent-cancel">Close</button></div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(window.pdfjsLib)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
@@ -432,6 +584,13 @@ button.start:disabled { opacity: .4; }
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script>
 const THEME_KEY='proving-console-theme';
+/* Session guard: any 401 from the API sends the user to /login. */
+const _fetch=window.fetch.bind(window);
+window.fetch=async(...a)=>{
+  const r=await _fetch(...a);
+  if(r.status===401&&!String(a[0]).includes('/api/auth/'))location.href='/login';
+  return r;
+};
 let ENGINES=[], SETTINGS=null, engine='hermes';
 let runId=null, jobId=null, proofPath=null, lastProofMtime=0, pollTimer=null, pdfRenderGen=0;
 let screen='landing', workspaceView='sandbox';
@@ -456,8 +615,12 @@ function setWorkspaceView(v){
     b.classList.toggle('active', b.dataset.view===v);
   });
   $('view-sandbox').style.display=v==='sandbox'?'flex':'none';
+  $('view-conversation').style.display=v==='conversation'?'block':'none';
   $('view-monitor').style.display=v==='monitor'?'block':'none';
+  $('view-dag').style.display=v==='dag'?'flex':'none';
   if(v==='monitor'){ syncThemeToMonitor(document.documentElement.dataset.theme||'dark'); syncRunToMonitor(runId); }
+  if(v==='conversation') refreshConversation(true);
+  if(v==='dag') refreshDagView();
 }
 $('go-home').onclick=goLanding;
 $('new-proof-btn').onclick=()=>{ runId=null; jobId=null; stopPolling(); goLanding(); $('problem-text').focus(); };
@@ -474,7 +637,10 @@ $('monitor-frame').onload=()=>{ syncThemeToMonitor(document.documentElement.data
 
 /* ── settings (compact) ── */
 function currentModel(){ const s=$('model-select').value; return s==='__custom__'?$('model-custom').value.trim():s||SETTINGS?.default_model||''; }
-async function loadSettings(){ try{ SETTINGS=await(await fetch('/api/settings')).json(); const sel=$('model-select'); const m=[...new Set([...(SETTINGS.model_presets||[]),SETTINGS.default_model].filter(Boolean))]; sel.innerHTML=m.map(x=>`<option value="${x}">${x}</option>`).join('')+'<option value="__custom__">custom…</option>'; if(SETTINGS.default_model&&m.includes(SETTINGS.default_model))sel.value=SETTINGS.default_model; }catch(e){} }
+async function loadSettings(){ try{ SETTINGS=await(await fetch('/api/settings')).json(); const sel=$('model-select'); const m=[...new Set([...(SETTINGS.model_presets||[]),SETTINGS.default_model].filter(Boolean))]; sel.innerHTML=m.map(x=>`<option value="${x}">${x}</option>`).join('')+'<option value="__custom__">custom…</option>'; if(SETTINGS.default_model&&m.includes(SETTINGS.default_model))sel.value=SETTINGS.default_model; const ss=$('subagent-model-select'); if(ss)ss.innerHTML='<option value="">same as main</option>'+m.map(x=>`<option value="${x}">${x}</option>`).join('');
+  const ds=$('dag-model'); if(ds){ ds.innerHTML=m.map(x=>`<option value="${x}">${x}</option>`).join(''); const small=m.find(x=>/mini|flash|haiku|nano|lite/i.test(x)); if(small)ds.value=small; } }catch(e){} }
+function subagentModel(){ const on=$('subagents-check')?.checked!==false; if(!on)return null; return $('subagent-model-select')?.value||null; }
+function syncSubagentPick(){ const p=$('subagent-model-pick'); if(p)p.style.display=($('subagents-check')?.checked!==false)?'':'none'; }
 function openSettings(){ $('settings-modal').classList.add('open'); loadSettings().then(renderSettingsModal); }
 function closeSettings(){ $('settings-modal').classList.remove('open'); }
 function renderSettingsModal(){
@@ -497,19 +663,82 @@ async function saveSettings(){
 }
 $('settings-btn').onclick=openSettings; $('settings-close').onclick=closeSettings; $('settings-cancel').onclick=closeSettings; $('settings-save').onclick=saveSettings;
 
+/* ── agent panel: system prompt / skills / memory ── */
+let AGENTCFG=null;
+function agentStatus(t,ok){ const s=$('agent-status'); s.textContent=t||''; s.style.color=ok===false?'#ef4444':'var(--dim)'; if(t)setTimeout(()=>{if(s.textContent===t)s.textContent='';},4000); }
+async function reloadAgentCfg(){ try{ const r=await fetch('/api/agent/config'); AGENTCFG=r.ok?await r.json():null; }catch(e){ AGENTCFG=null; } renderAgentCfg(); }
+function openAgentCfg(){ $('agent-modal').classList.add('open'); $('agent-body').innerHTML='<div style="color:var(--dim);font-size:12px;padding:8px">Loading…</div>'; reloadAgentCfg(); }
+function closeAgentCfg(){ $('agent-modal').classList.remove('open'); }
+function renderAgentCfg(){
+  const b=$('agent-body');
+  if(!AGENTCFG){ b.innerHTML='<div style="color:var(--dim);font-size:12px">Failed to load agent config.</div>'; return; }
+  const esc=escapeHtml;
+  const skills=(AGENTCFG.skills||[]).map(s=>`
+    <div class="prov-card" data-skill="${esc(s.name)}" style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11.5px;color:var(--dim)"><input type="checkbox" class="sk-en" ${s.enabled?'checked':''} style="accent-color:var(--accent)"/>Include</label>
+        <b style="font-size:13px">${esc(s.name)}</b>
+        <span style="font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${esc(s.description||'')}</span>
+        <button class="sk-edit">Edit</button><button class="sk-del">Delete</button>
+      </div>
+      <div class="sk-editor" style="display:none;margin-top:8px">
+        <textarea class="sk-content" rows="8" style="width:100%;font-family:var(--mono);font-size:11.5px;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px">${esc(s.content||'')}</textarea>
+        <button class="sk-save" style="margin-top:6px">Save skill</button>
+      </div>
+    </div>`).join('')||'<div style="font-size:12px;color:var(--dim);padding:2px 0 8px">No skills yet — add one below.</div>';
+  const mem=Object.fromEntries((AGENTCFG.memory||[]).map(m=>[m.name,m.content||'']));
+  const ta='width:100%;font-family:var(--mono);font-size:11.5px;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px';
+  b.innerHTML=`
+    <div class="prov-card">
+      <b>System prompt (SOUL.md)</b>
+      <p style="font-size:11px;color:var(--dim);margin:4px 0 8px">Injected as the agent identity at the top of every Hermes run's system prompt. Leave empty to use the built-in default.</p>
+      <textarea id="ag-soul" rows="8" style="${ta}">${esc(AGENTCFG.system_prompt||'')}</textarea>
+      <button id="ag-soul-save" style="margin-top:6px">Save system prompt</button>
+    </div>
+    <div class="prov-card">
+      <b>Skills</b>
+      <p style="font-size:11px;color:var(--dim);margin:4px 0 8px">Each skill is a SKILL.md the agent can consult during runs. Untick "Include" to disable a skill without deleting it.</p>
+      ${skills}
+      <div style="display:flex;gap:8px;margin-top:8px"><input id="ag-skill-name" placeholder="new-skill-name" style="flex:1;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px"/><button id="ag-skill-add">Add skill</button></div>
+    </div>
+    <div class="prov-card">
+      <b>Memory</b>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:8px 0;cursor:pointer"><input type="checkbox" id="ag-mem-en" ${AGENTCFG.memory_enabled?'checked':''} style="accent-color:var(--accent)"/>Include memory in runs (MEMORY.md + USER.md)</label>
+      <label style="font-size:11px;color:var(--dim)">MEMORY.md — the agent's own notes</label>
+      <textarea id="ag-mem-a" rows="5" style="${ta}">${esc(mem['MEMORY.md']||'')}</textarea>
+      <label style="font-size:11px;color:var(--dim);display:block;margin-top:8px">USER.md — what the agent knows about you</label>
+      <textarea id="ag-mem-b" rows="5" style="${ta}">${esc(mem['USER.md']||'')}</textarea>
+      <div style="margin-top:8px;display:flex;gap:8px"><button id="ag-mem-save">Save memory</button><button id="ag-mem-clear">Clear both</button></div>
+    </div>`;
+  const post=(url,payload)=>fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  $('ag-soul-save').onclick=async()=>{ const r=await post('/api/agent/config',{system_prompt:$('ag-soul').value}); agentStatus(r.ok?'System prompt saved':'Save failed',r.ok); };
+  $('ag-mem-en').onchange=async e=>{ const r=await post('/api/agent/config',{memory_enabled:e.target.checked}); agentStatus(r.ok?(e.target.checked?'Memory enabled':'Memory disabled'):'Failed',r.ok); };
+  $('ag-mem-save').onclick=async()=>{ let ok=true; for(const [n,el] of [['MEMORY.md','ag-mem-a'],['USER.md','ag-mem-b']]){ const r=await post('/api/agent/memory',{name:n,content:$(el).value}); ok=ok&&r.ok; } agentStatus(ok?'Memory saved':'Save failed',ok); };
+  $('ag-mem-clear').onclick=async()=>{ if(!confirm('Clear MEMORY.md and USER.md?'))return; for(const n of ['MEMORY.md','USER.md'])await fetch('/api/agent/memory/'+n,{method:'DELETE'}); $('ag-mem-a').value=''; $('ag-mem-b').value=''; agentStatus('Memory cleared',true); };
+  $('ag-skill-add').onclick=async()=>{ const name=$('ag-skill-name').value.trim(); if(!name)return; const r=await post('/api/agent/skills',{name,content:'# '+name+'\n\nDescribe when and how to use this skill.'}); if(r.ok){ reloadAgentCfg(); agentStatus('Skill added',true); } else { const d=await r.json().catch(()=>({})); agentStatus(d.error||'Add failed',false); } };
+  b.querySelectorAll('[data-skill]').forEach(card=>{
+    const name=card.dataset.skill;
+    card.querySelector('.sk-edit').onclick=()=>{ const ed=card.querySelector('.sk-editor'); ed.style.display=ed.style.display==='none'?'block':'none'; };
+    card.querySelector('.sk-save').onclick=async()=>{ const r=await post('/api/agent/skills',{name,content:card.querySelector('.sk-content').value}); agentStatus(r.ok?'Skill saved':'Save failed',r.ok); };
+    card.querySelector('.sk-en').onchange=async e=>{ const r=await post('/api/agent/skills',{name,enabled:e.target.checked}); agentStatus(r.ok?(e.target.checked?'Skill enabled':'Skill disabled'):'Failed',r.ok); };
+    card.querySelector('.sk-del').onclick=async()=>{ if(!confirm('Delete skill "'+name+'"?'))return; const r=await fetch('/api/agent/skills/'+encodeURIComponent(name),{method:'DELETE'}); if(r.ok){ reloadAgentCfg(); agentStatus('Skill deleted',true); } };
+  });
+}
+$('agent-btn').onclick=openAgentCfg; $('agent-close').onclick=closeAgentCfg; $('agent-cancel').onclick=closeAgentCfg;
+
 /* ── engines ── */
 async function loadEngines(){ try{ENGINES=(await(await fetch('/api/engines')).json()).engines||[];}catch(e){ENGINES=[{id:'hermes',label:'Hermes',available:true}];} renderEngines(); }
 function renderEngines(){
   $('engines').innerHTML=ENGINES.map(e=>`<div class="eng ${e.id===engine?'active':''} ${e.available?'':'unavail'}" data-id="${e.id}"><span class="dot"></span><span>${e.label}</span>${e.vendor?`<span class="v">${e.vendor}</span>`:''}</div>`).join('');
-  $('engines').querySelectorAll('.eng').forEach(el=>el.onclick=()=>{ engine=el.dataset.id; renderEngines(); const s=ENGINES.find(x=>x.id===engine); if(s&&!s.available){$('form-error').style.display='block';$('form-error').textContent=s.label+' 未配置 — '+(s.hint||'');}else $('form-error').style.display='none'; });
+  $('engines').querySelectorAll('.eng').forEach(el=>el.onclick=()=>{ engine=el.dataset.id; renderEngines(); const s=ENGINES.find(x=>x.id===engine); if(s&&!s.available){$('form-error').style.display='block';$('form-error').textContent=s.label+' is not configured — '+(s.hint||'');}else $('form-error').style.display='none'; });
 }
 
 async function startRun(){
   const text=$('problem-text').value.trim(); const eb=$('form-error'); eb.style.display='none';
-  if(!text){eb.style.display='block';eb.textContent='请输入题目。';return;}
+  if(!text){eb.style.display='block';eb.textContent='Please enter a problem.';return;}
   $('start-btn').disabled=true; setPill('running','starting…');
   try{
-    const r=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({engine,problem_text:text,model:currentModel()||null,max_iterations:Number(SETTINGS?.max_iterations)||40})});
+    const r=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({engine,problem_text:text,model:currentModel()||null,max_iterations:Number(SETTINGS?.max_iterations)||40,use_subagents:$('subagents-check')?.checked!==false,subagent_model:subagentModel()})});
     const d=await r.json(); if(!r.ok)throw new Error(d.error);
     selectRun(d.run_id,d.job_id); goSession('sandbox');
   }catch(err){eb.style.display='block';eb.textContent=String(err.message); setPill('failed','failed');}
@@ -522,13 +751,14 @@ async function loadRuns(){
   const seen=new Set();
   jobs=jobs.filter(j=>{ if(seen.has(j.run_id))return false; seen.add(j.run_id); return true; });
   const manifest=((await(await fetch('/api/runs')).json()).runs||[]).filter(r=>!seen.has(r.run_id));
-  const item=(rid,jid,en,pid,st)=>{
+  const item=(rid,jid,en,pid,st,preview)=>{
     const act=st==='running'
       ?`<button class="run-act stop" data-run="${rid}" title="Stop">■</button>`
       :`<button class="run-act cont" data-run="${rid}" title="Continue">▶</button>`;
-    return `<div class="run-item ${rid===runId?'active':''}" data-run="${rid}" ${jid?`data-job="${jid}"`:''}><div class="run-top"><div class="en"><span class="sdot ${st||'archived'}"></span>${en}</div>${act}<button class="run-del" data-run="${rid}">×</button></div><div class="st">${pid}</div></div>`;
+    const title=(preview||'').trim()||pid;
+    return `<div class="run-item ${rid===runId?'active':''}" data-run="${rid}" ${jid?`data-job="${jid}"`:''} title="${escapeHtml(title)}"><div class="run-top"><div class="en"><span class="sdot ${st||'archived'}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(title)}</span></div>${act}<button class="run-del" data-run="${rid}">×</button></div><div class="st">${escapeHtml(en||'?')}</div></div>`;
   };
-  $('runs').innerHTML=jobs.map(j=>item(j.run_id,j.job_id,j.engine,j.problem_id,j.status)).join('')+manifest.map(r=>item(r.run_id,null,r.engine||'?',r.problem_id||r.run_id,r.status)).join('')||'<div style="color:var(--dim);font-size:11px;padding:8px">No runs yet</div>';
+  $('runs').innerHTML=jobs.map(j=>item(j.run_id,j.job_id,j.engine,j.problem_id,j.status,j.problem_preview)).join('')+manifest.map(r=>item(r.run_id,null,r.engine||'?',r.problem_id||r.run_id,r.status,r.problem_preview)).join('')||'<div style="color:var(--dim);font-size:11px;padding:8px">No runs yet</div>';
   $('runs').querySelectorAll('.run-item').forEach(el=>el.onclick=()=>{ selectRun(el.dataset.run,el.dataset.job||null); goSession(workspaceView||'sandbox'); });
   $('runs').querySelectorAll('.run-del').forEach(b=>b.onclick=e=>{e.stopPropagation();deleteRun(b.dataset.run);});
   $('runs').querySelectorAll('.run-act.stop').forEach(b=>b.onclick=e=>{e.stopPropagation();stopRun(b.dataset.run);});
@@ -536,14 +766,16 @@ async function loadRuns(){
 }
 
 function selectRun(rid,jid){
-  runId=rid; jobId=jid; lastProofMtime=0; lastChatKey=''; resetProofView(); loadRuns();
+  runId=rid; jobId=jid; lastProofMtime=0; lastChatKey=''; convoKey=''; convoOpen.clear(); dagRunKey=''; resetProofView(); loadRuns();
   syncRunToMonitor(rid); loadChat(); $('chat-send').disabled=!rid;
   updateChatStatus(null);
+  if(workspaceView==='conversation')refreshConversation(true);
+  if(workspaceView==='dag')refreshDagView();
   startPolling();
 }
 
 async function deleteRun(rid){
-  if(!confirm('删除此 run？'))return;
+  if(!confirm('Delete this run?'))return;
   await fetch('/api/runs/'+encodeURIComponent(rid),{method:'DELETE'});
   if(runId===rid){runId=null;stopPolling();resetProofView();$('chat-msgs').innerHTML='';goLanding();}
   loadRuns(); syncRunToMonitor(null);
@@ -578,6 +810,8 @@ async function tick(){
       $('run-meta').textContent=`${run.run_id} · ${run.status} · $${Number(t.cost_usd||0).toFixed(2)}`;
       setPill(run.status,(run.status||'')+' · '+(run.engine||''));
       updateChatStatus(run);
+      updatePromptStrip(run);
+      if(workspaceView==='conversation')renderConversation(run);
       if(run.status==='finished'||run.status==='failed'||run.status==='stopped'){ await refreshProofPreview(true); stopPolling(); loadRuns(); loadChat(); return; }
     }
   }catch(e){}
@@ -640,11 +874,29 @@ function updateProcLog(run){
   body.scrollTop=body.scrollHeight;
 }
 $('proc-toggle').onclick=()=>{ procCollapsed=!procCollapsed; $('proc-log').classList.toggle('collapsed',procCollapsed); };
+
+/* ── prompt strip: the exact prompt the engine was given ── */
+let lastPromptText='';
+function updatePromptStrip(run){
+  const strip=$('prompt-strip'); if(!strip)return;
+  let best='';
+  for(const a of (run?.agents||[])){
+    const p=String(a.prompt||'');
+    if(p.length>best.length)best=p;
+  }
+  if(!best){ strip.style.display='none'; lastPromptText=''; return; }
+  strip.style.display='block';
+  if(best===lastPromptText)return;
+  lastPromptText=best;
+  $('prompt-body').textContent=best;
+  $('prompt-len').textContent=best.length.toLocaleString()+' chars';
+}
+$('prompt-toggle').onclick=()=>$('prompt-strip').classList.toggle('collapsed');
 $('sess-stop').onclick=()=>{ if(runId)stopRun(runId); };
 $('sess-cont').onclick=()=>{ if(runId)continueRun(runId); };
 
 /* ── proof preview ── */
-function resetProofView(){ pdfRenderGen++; $('proof-label').textContent='—'; $('pdf-dl-btn').disabled=true; const p=$('pdf-pages'); p.style.display='none'; p.innerHTML=''; p.dataset.cur=''; const m=$('md-view'); m.style.display='none'; m.innerHTML=''; m.dataset.cur=''; $('proof-empty').style.display='flex'; }
+function resetProofView(){ pdfRenderGen++; $('proof-label').textContent='—'; $('pdf-dl-btn').disabled=true; const p=$('pdf-pages'); p.style.display='none'; p.innerHTML=''; p.dataset.cur=''; const m=$('md-view'); m.style.display='none'; m.innerHTML=''; m.dataset.cur=''; $('proof-empty').style.display='flex'; lastPromptText=''; const ps=$('prompt-strip'); if(ps){ps.style.display='none';ps.classList.add('collapsed');} }
 function renderMathIn(el){ if(window.renderMathInElement){ try{ renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false}); }catch(e){} } }
 async function showProofMd(url){
   $('proof-empty').style.display='none'; $('pdf-pages').style.display='none';
@@ -715,6 +967,253 @@ async function refreshProofPreview(force){
     showProofPdf(u); setDownloadUrl(u+'&download=1','proof.pdf'); return;
   }
   $('proof-label').textContent='waiting for proof.md…';
+}
+
+/* ── conversation view: all agent turns as a pretty timeline ── */
+const KIND_META={
+  write:['✍','#3b82f6','write'], critic:['✓','#14b8a6','critic / verify'],
+  think:['◐','#a855f7','reasoning'], tool:['⚙','#eab308','tool'],
+  orch:['◈','#64748b','orchestrator'], final:['∎','#f97316','finalize'],
+};
+function convoKind(a){
+  const role=(a.role||'').toLowerCase(), stage=(a.pipeline_stage||'').toLowerCase();
+  if(stage==='finalize'||/final/.test(a.stage_name||''))return 'final';
+  if(['author','writer','prover','assistant','writeup'].includes(role)||['write','draft','author'].includes(stage))return 'write';
+  if(['critic','checker','evaluator','verifier'].includes(role)||['critic','verify'].includes(stage))return 'critic';
+  if(['tools','tool','exec'].includes(role)||stage==='act')return 'tool';
+  if(['orchestrator','workflow','system'].includes(role))return 'orch';
+  return 'think';
+}
+const fmtTok=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n||0);
+let convoKey=''; const convoOpen=new Set();
+function renderConversation(run,force){
+  const col=$('convo-col'); if(!col)return;
+  if(!run){ col.innerHTML='<div class="convo-empty"><div class="big">◌</div>Select a run to see the agent conversation.</div>'; convoKey=''; return; }
+  const agents=(run.agents||[]).slice().sort((a,b)=>(a.call_seq||0)-(b.call_seq||0));
+  const last=agents[agents.length-1];
+  const key=run.run_id+':'+agents.length+':'+String(last?.output||'').length+':'+run.status;
+  if(!force&&key===convoKey)return; convoKey=key;
+  if(!agents.length){ col.innerHTML='<div class="convo-empty"><div class="big">◌</div>No agent turns recorded yet.</div>'; return; }
+  const t=run.totals||{};
+  const chips=[
+    agents.length+' turns',
+    t.input_tokens?('in '+fmtTok(t.input_tokens)):null,
+    t.output_tokens?('out '+fmtTok(t.output_tokens)):null,
+    t.cost_usd?('$'+Number(t.cost_usd).toFixed(3)):null,
+    (run.engine||'')+' · '+(run.status||''),
+  ].filter(Boolean).map(c=>`<span class="convo-chip">${escapeHtml(c)}</span>`).join('');
+  let html=`<div class="convo-head">
+    <h2>Agent conversation</h2>
+    <div class="sub">Every model call in order — prompts and thinking are collapsed under each turn.</div>
+    <div class="chips">${chips}</div>
+  </div>`;
+  /* Task prompt card — the exact prompt the engine was given, pinned at the top */
+  let promptFull=''; for(const a of agents){ const p=String(a.prompt||''); if(p.length>promptFull.length)promptFull=p; }
+  if(promptFull){
+    const dk=run.run_id+'::task-prompt';
+    html+=`<div class="turn">
+      <div class="turn-av" style="background:#0ea5e9">➤</div>
+      <div class="turn-card">
+        <div class="turn-hdr" style="background:color-mix(in srgb, #0ea5e9 6%, var(--panel))">
+          <span class="kb" style="background:#0ea5e9">task prompt</span>
+          <span class="stg">Prompt given to the engine</span>
+          <span class="stats"><span class="tk">${promptFull.length.toLocaleString()} chars</span></span>
+        </div>
+        <details class="turn-extra" data-k="${escapeHtml(dk)}"${convoOpen.has(dk)?' open':''}>
+          <summary>Show full prompt</summary>
+          <div class="pre-x">${escapeHtml(promptFull.slice(0,20000))}${promptFull.length>20000?'\n…(truncated)':''}</div>
+        </details>
+      </div>
+    </div>`;
+  }
+  for(const a of agents){
+    const kind=convoKind(a);
+    const [icon,color,klabel]=KIND_META[kind];
+    const stats=[];
+    if(a.total_input_tokens||a.input_tokens)stats.push(`<span class="tk">in ${fmtTok(a.total_input_tokens||a.input_tokens)}</span>`);
+    if(a.output_tokens)stats.push(`<span class="tk">out ${fmtTok(a.output_tokens)}</span>`);
+    if(a.reasoning_tokens)stats.push(`<span class="tk">rsn ${fmtTok(a.reasoning_tokens)}</span>`);
+    if(a.cost_usd)stats.push(`<span class="tk">$${Number(a.cost_usd).toFixed(3)}</span>`);
+    if(a.latency_s)stats.push(`<span class="tk">${Number(a.latency_s).toFixed(0)}s</span>`);
+    if(a.status&&a.status!=='completed')stats.push(`<span class="tk ${a.status==='running'?'warn':a.status==='failed'?'err':''}">${escapeHtml(a.status)}</span>`);
+    const mon=a.monitor||{};
+    if(mon.outcome_label&&mon.outcome_label!=='—')stats.push(`<span class="tk ${mon.outcome==='ok'?'ok':mon.outcome==='fail'?'err':'warn'}">${escapeHtml(mon.outcome_label)}</span>`);
+    const out=String(a.output||'').trim();
+    let body;
+    if(kind==='tool'){
+      body=`<div class="turn-body mono">${escapeHtml(out||'(no output)')}</div>`;
+    }else if(!out&&a.thinking){
+      body=`<div class="turn-body thinkstyle">${escapeHtml(String(a.thinking).slice(0,4000))}</div>`;
+    }else{
+      const md=window.marked?marked.parse(out||'*(no output)*',{mangle:false,headerIds:false}):('<pre>'+escapeHtml(out)+'</pre>');
+      body=`<div class="turn-body md">${md}</div>`;
+    }
+    const extras=[];
+    if(a.prompt)extras.push(['prompt','Prompt',String(a.prompt)]);
+    if(a.thinking&&(out||kind==='tool'))extras.push(['thinking','Thinking',String(a.thinking)]);
+    const extraHtml=extras.map(([ek,el,tx])=>{
+      const dk=a.trace_id+'::'+ek;
+      return `<details class="turn-extra" data-k="${escapeHtml(dk)}"${convoOpen.has(dk)?' open':''}>
+        <summary>${el} · ${fmtTok(tx.length)} chars</summary>
+        <div class="pre-x">${escapeHtml(tx.slice(0,20000))}${tx.length>20000?'\n…(truncated)':''}</div>
+      </details>`;
+    }).join('');
+    html+=`<div class="turn">
+      <div class="turn-av" style="background:${color}">${icon}</div>
+      <div class="turn-card">
+        <div class="turn-hdr" style="background:color-mix(in srgb, ${color} 6%, var(--panel))">
+          <span class="kb" style="background:${color}">${klabel}</span>
+          <span class="stg">${escapeHtml(a.stage_name||a.trace_id||'')}</span>
+          <span class="rl">${escapeHtml(a.role||'')}${a.model?' · '+escapeHtml(a.model):''}</span>
+          <span class="stats">${stats.join('')}</span>
+        </div>
+        ${body}
+        ${extraHtml}
+      </div>
+    </div>`;
+  }
+  col.innerHTML=html;
+  col.querySelectorAll('details.turn-extra').forEach(d=>{
+    d.addEventListener('toggle',()=>{ const k=d.dataset.k; if(d.open)convoOpen.add(k); else convoOpen.delete(k); });
+  });
+  renderMathIn(col);
+}
+async function refreshConversation(force){
+  if(!runId){ renderConversation(null); return; }
+  try{
+    const r=await fetch('/api/run/'+encodeURIComponent(runId));
+    if(r.ok)renderConversation(await r.json(),force);
+  }catch(e){}
+}
+
+/* ── proof-graph (DAG) view: a small model distills the proof into a logical DAG ── */
+const DAG_KIND_COLOR={assumption:'#0ea5e9',definition:'#8b5cf6',lemma:'#a855f7',claim:'#3b82f6',case:'#eab308',step:'#64748b',contradiction:'#ef4444',conclusion:'#22c55e'};
+let dagRunKey='';
+function dagStatus(msg){ const m=$('dag-meta'); m.textContent=msg||'—'; }
+async function refreshDagView(){
+  if(!runId){ $('dag-empty').style.display='block'; $('dag-stage').style.display='none'; dagStatus('select a run'); return; }
+  try{
+    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/proof_graph');
+    const d=r.ok?await r.json():null;
+    if(d&&d.graph){ renderDag(d); return; }
+  }catch(e){}
+  dagRunKey='';
+  $('dag-empty').style.display='block'; $('dag-stage').style.display='none'; dagStatus('not generated yet');
+}
+async function generateDag(){
+  if(!runId)return;
+  const btn=$('dag-gen'); btn.disabled=true; const old=btn.textContent; btn.textContent='Generating…'; dagStatus('calling '+($('dag-model').value||'model')+'…');
+  try{
+    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/proof_graph',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:$('dag-model').value||null})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'generation failed');
+    dagRunKey=''; renderDag(d);
+  }catch(err){ dagStatus('✗ '+String(err.message).slice(0,160)); }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+$('dag-gen').onclick=generateDag;
+function dagLayers(graph){
+  /* Longest-path layering, tolerant of stray cycles. */
+  const ids=graph.nodes.map(n=>n.id), idset=new Set(ids);
+  const parents={}, children={}; ids.forEach(i=>{parents[i]=[];children[i]=[];});
+  for(const e of graph.edges){ if(idset.has(e.from)&&idset.has(e.to)){ children[e.from].push(e.to); parents[e.to].push(e.from); } }
+  const depth={}; ids.forEach(i=>depth[i]=0);
+  for(let pass=0; pass<ids.length; pass++){
+    let changed=false;
+    for(const e of graph.edges){ if(!idset.has(e.from)||!idset.has(e.to))continue;
+      if(depth[e.to]<depth[e.from]+1&&depth[e.from]+1<ids.length){ depth[e.to]=depth[e.from]+1; changed=true; } }
+    if(!changed)break;
+  }
+  const layers=[]; for(const n of graph.nodes){ (layers[depth[n.id]]=layers[depth[n.id]]||[]).push(n); }
+  const compact=layers.filter(l=>l&&l.length);
+  /* order within layers by parent barycenter (2 passes) */
+  const pos={};
+  compact.forEach(l=>l.forEach((n,i)=>pos[n.id]=i));
+  for(let p=0;p<2;p++){
+    for(const layer of compact){
+      layer.sort((a,b)=>{
+        const ba=parents[a.id].length?parents[a.id].reduce((s,x)=>s+(pos[x]||0),0)/parents[a.id].length:pos[a.id];
+        const bb=parents[b.id].length?parents[b.id].reduce((s,x)=>s+(pos[x]||0),0)/parents[b.id].length:pos[b.id];
+        return ba-bb;
+      });
+      layer.forEach((n,i)=>pos[n.id]=i);
+    }
+  }
+  return compact;
+}
+function renderDag(d){
+  const graph=d.graph||{};
+  const key=runId+':'+(d.generated_at||'')+':'+(graph.nodes||[]).length;
+  if(key===dagRunKey)return; dagRunKey=key;
+  dagStatus((graph.title?graph.title+' · ':'')+(graph.nodes||[]).length+' nodes · '+(d.model||'')+' · '+(d.generated_at||'').replace('T',' ').replace('Z',''));
+  $('dag-empty').style.display='none';
+  const stage=$('dag-stage'); stage.style.display='block';
+  const holder=$('dag-nodes'); const svg=$('dag-svg');
+  const layers=dagLayers(graph);
+  const W=230,GX=30,GY=64,PAD=30;
+  const maxCount=Math.max(1,...layers.map(l=>l.length));
+  const stageW=Math.max(maxCount*(W+GX)-GX+2*PAD, 500);
+  /* place cards: x now, y after measuring heights */
+  holder.innerHTML=graph.nodes.map(n=>{
+    const c=DAG_KIND_COLOR[n.kind]||'#64748b';
+    return `<div class="dag-node" id="dagn-${escapeHtml(n.id)}" style="--kc:${c}">
+      <span class="kd">${escapeHtml(n.kind)}</span>
+      <div class="lb">${escapeHtml(n.label||n.id)}</div>
+      ${n.statement?`<div class="stm">${escapeHtml(n.statement)}</div>`:''}
+    </div>`;
+  }).join('');
+  renderMathIn(holder);
+  stage.style.width=stageW+'px';
+  /* measure + position layer by layer */
+  const posXY={};
+  let y=PAD;
+  for(const layer of layers){
+    const rowW=layer.length*(W+GX)-GX;
+    let x=(stageW-rowW)/2, rowH=0;
+    for(const n of layer){
+      const el=document.getElementById('dagn-'+n.id);
+      el.style.left=x+'px'; el.style.top=y+'px';
+      posXY[n.id]={x,y,w:W,h:el.offsetHeight};
+      rowH=Math.max(rowH,el.offsetHeight);
+      x+=W+GX;
+    }
+    y+=rowH+GY;
+  }
+  const stageH=y-GY+PAD;
+  stage.style.height=stageH+'px'; holder.style.height=stageH+'px';
+  /* edges */
+  svg.setAttribute('viewBox',`0 0 ${stageW} ${stageH}`);
+  let paths=`<defs><marker id="dag-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="color-mix(in srgb, var(--fg) 35%, transparent)"/></marker></defs>`;
+  for(const e of (graph.edges||[])){
+    const a=posXY[e.from], b=posXY[e.to]; if(!a||!b)continue;
+    const x1=a.x+a.w/2, y1=a.y+a.h, x2=b.x+b.w/2, y2=b.y;
+    const my=(y1+y2)/2;
+    const cls='dag-edge'+(String(e.label||'').includes('contradict')?' contradicts':'');
+    paths+=`<path class="${cls}" d="M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}" marker-end="url(#dag-arrow)"/>`;
+    if(e.label)paths+=`<text class="dag-edge-label" x="${(x1+x2)/2+4}" y="${my-3}">${escapeHtml(e.label)}</text>`;
+  }
+  svg.innerHTML=paths;
+  holder.querySelectorAll('.dag-node').forEach(el=>el.onclick=()=>{ el.classList.toggle('expanded'); dagRunKey=''; relayoutDag(); });
+  function relayoutDag(){ /* re-measure heights after expand/collapse */
+    let yy=PAD;
+    for(const layer of layers){
+      let rowH=0;
+      for(const n of layer){ const el=document.getElementById('dagn-'+n.id); el.style.top=yy+'px'; posXY[n.id].y=yy; posXY[n.id].h=el.offsetHeight; rowH=Math.max(rowH,el.offsetHeight); }
+      yy+=rowH+GY;
+    }
+    const hh=yy-GY+PAD; stage.style.height=hh+'px'; holder.style.height=hh+'px';
+    svg.setAttribute('viewBox',`0 0 ${stageW} ${hh}`);
+    let pp=`<defs><marker id="dag-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="color-mix(in srgb, var(--fg) 35%, transparent)"/></marker></defs>`;
+    for(const e of (graph.edges||[])){
+      const a=posXY[e.from], b=posXY[e.to]; if(!a||!b)continue;
+      const x1=a.x+a.w/2, y1=a.y+a.h, x2=b.x+b.w/2, y2=b.y;
+      const my=(y1+y2)/2;
+      const cls='dag-edge'+(String(e.label||'').includes('contradict')?' contradicts':'');
+      pp+=`<path class="${cls}" d="M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}" marker-end="url(#dag-arrow)"/>`;
+      if(e.label)pp+=`<text class="dag-edge-label" x="${(x1+x2)/2+4}" y="${my-3}">${escapeHtml(e.label)}</text>`;
+    }
+    svg.innerHTML=pp;
+  }
 }
 
 /* ── chat ── */
@@ -791,8 +1290,25 @@ function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt
 $('start-btn').onclick=startRun;
 $('problem-text').onkeydown=e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='Enter')startRun(); };
 $('model-select').onchange=()=>{ $('model-custom').style.display=$('model-select').value==='__custom__'?'inline-block':'none'; };
+$('subagents-check').onchange=syncSubagentPick; syncSubagentPick();
 
-loadEngines(); loadSettings(); loadRuns(); goLanding();
+/* ── current user ── */
+async function loadUser(){
+  try{
+    const me=await(await fetch('/api/auth/me')).json();
+    if(!me.user){ location.href='/login'; return; }
+    const u=me.user;
+    $('sb-user').style.display='flex';
+    $('user-name').textContent=u.name||u.email;
+    $('user-name').title=u.email;
+    const av=$('user-avatar');
+    if(u.picture){ av.style.backgroundImage=`url(${u.picture})`; av.textContent=''; }
+    else av.textContent=(u.name||u.email||'?')[0].toUpperCase();
+  }catch(e){}
+}
+$('logout-btn').onclick=async()=>{ await fetch('/api/auth/logout',{method:'POST'}); location.href='/login'; };
+
+loadUser(); loadEngines(); loadSettings(); loadRuns(); goLanding();
 setInterval(loadRuns, 5000);
 </script>
 </body>

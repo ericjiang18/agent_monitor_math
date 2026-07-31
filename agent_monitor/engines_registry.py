@@ -77,7 +77,9 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         "binary": "codex",
         "cmd_env": "CODEX_CMD",
         # --json emits JSONL events (incl. per-turn token usage) instead of TTY text.
-        "default_cmd": 'codex exec --json --cd {workspace} --sandbox workspace-write --skip-git-repo-check {prompt}',
+        # Landlock (workspace-write) denies all writes on this kernel, so run
+        # unsandboxed — each run already gets its own workspace directory.
+        "default_cmd": 'codex exec --json --cd {workspace} --sandbox danger-full-access --skip-git-repo-check {prompt}',
         "install_hint": "npm install -g @openai/codex  (or: brew install --cask codex)",
     },
     "openclaude": {

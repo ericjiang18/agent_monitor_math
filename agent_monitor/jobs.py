@@ -64,11 +64,29 @@ def workspace_dir(run_id: str) -> Path:
 def _write_run(run: dict[str, Any]) -> Path:
     cache = _cache_dir()
     path = cache / f"{run['run_id']}.json"
+    # Runner flushes rebuild the dict from scratch — keep ownership sticky.
+    if run.get("owner_id") is None and path.exists():
+        try:
+            old = json.loads(path.read_text(encoding="utf-8"))
+            for k in ("owner_id", "owner"):
+                if old.get(k) is not None:
+                    run[k] = old[k]
+        except (json.JSONDecodeError, OSError):
+            pass
     path.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
     runs_path = RUNS_DIR / f"{run['run_id']}.json"
     runs_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
     _upsert_manifest(run)
     return path
+
+
+def _problem_preview(text: str | None) -> str:
+    """Short single-line problem title for run lists (first non-empty line)."""
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line:
+            return line[:140]
+    return ""
 
 
 def _upsert_manifest(run: dict[str, Any]) -> None:
@@ -90,8 +108,13 @@ def _upsert_manifest(run: dict[str, Any]) -> None:
         "agent_count": len(run.get("agents") or []),
         "total_cost_usd": totals.get("cost_usd"),
         "problem_id": run.get("problem_id"),
+        "problem_preview": _problem_preview(run.get("problem_text_preview")),
         "last_ts": run.get("updated_at") or _now(),
+        "owner_id": run.get("owner_id"),
     }
+    if not entry["problem_preview"]:
+        # Runner flushes don't carry problem_text_preview — keep the stored one.
+        entry.pop("problem_preview")
     by_id = {e.get("run_id"): e for e in entries if e.get("run_id")}
     by_id[entry["run_id"]] = {**(by_id.get(entry["run_id"]) or {}), **entry}
     payload = {"built_at": _now(), "runs": list(by_id.values())}
@@ -133,9 +156,20 @@ def _pipeline_for(engine: str) -> list[dict]:
     ]
 
 
-def list_jobs() -> list[dict[str, Any]]:
+def list_jobs(owner_id: int | None = None) -> list[dict[str, Any]]:
     with _LOCK:
-        return [dict(j) for j in _JOBS.values() if j.get("run_id") not in _DELETED_RUNS]
+        jobs = [dict(j) for j in _JOBS.values() if j.get("run_id") not in _DELETED_RUNS]
+    if owner_id is not None:
+        jobs = [j for j in jobs if j.get("owner_id") == owner_id]
+    return jobs
+
+
+def run_owner(run_id: str) -> int | None:
+    """Owner user id recorded on a run (None for legacy/ownerless runs)."""
+    try:
+        return _load_run_record(run_id).get("owner_id")
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
@@ -175,11 +209,18 @@ def start_job(
     problem_text: str | None = None,
     model: str | None = None,
     max_iterations: int = 40,
+    user: dict[str, Any] | None = None,
+    use_subagents: bool = True,
+    subagent_model: str | None = None,
 ) -> dict[str, Any]:
     from agent_monitor.engines_registry import all_engine_ids
 
     if engine not in all_engine_ids():
         raise ValueError(f"Unsupported engine: {engine}")
+
+    extra_env = _user_extra_env(user)
+    if user is not None and not any(k.endswith("_API_KEY") for k in extra_env):
+        raise ValueError("Please add your own API key in Settings first (e.g. OPENAI_API_KEY)")
 
     pid, text, path = resolve_problem(problem_id, problem_text)
     job_id = uuid.uuid4().hex[:10]
@@ -212,6 +253,8 @@ def start_job(
             "edges": [],
             "totals": {"cost_usd": 0, "latency_s": 0},
             "problem_text_preview": text[:500],
+            "owner_id": user.get("id") if user else None,
+            "owner": user.get("email") if user else None,
         },
         engine=engine,  # type: ignore[arg-type]
     )
@@ -227,6 +270,10 @@ def start_job(
         "updated_at": _now(),
         "error": None,
         "model": model,
+        "owner_id": user.get("id") if user else None,
+        "use_subagents": use_subagents,
+        "subagent_model": subagent_model,
+        "problem_preview": _problem_preview(text),
     }
     with _LOCK:
         _JOBS[job_id] = job
@@ -243,12 +290,24 @@ def start_job(
             "model": model,
             "max_iterations": max_iterations,
             "workspace": str(ws),
+            "extra_env": extra_env,
+            "use_subagents": use_subagents,
+            "subagent_model": subagent_model,
         },
         daemon=True,
         name=f"engine-{engine}-{job_id}",
     )
     thread.start()
     return dict(job)
+
+
+def _user_extra_env(user: dict[str, Any] | None) -> dict[str, str]:
+    """Provider keys / settings the run's subprocesses should see."""
+    if user is None:
+        return {}
+    from agent_monitor.settings import resolved_user_env
+
+    return resolved_user_env(user)
 
 
 def _update_job(job_id: str, **fields: Any) -> None:
@@ -269,10 +328,13 @@ def _execute_job(
     model: str | None,
     max_iterations: int,
     workspace: str,
+    extra_env: dict[str, str] | None = None,
+    use_subagents: bool = True,
+    subagent_model: str | None = None,
 ) -> None:
     started = time.time()
     ws = Path(workspace)
-    _append_chat(run_id, "system", f"▶ run started · engine {engine} · problem {problem_id}" + (f" · model {model}" if model else ""))
+    _append_chat(run_id, "system", f"▶ run started · engine {engine} · problem {problem_id}" + (f" · model {model}" if model else "") + (f" · subagent model {subagent_model}" if subagent_model else ""))
     try:
         if engine == "hermes":
             result_run = _run_hermes(
@@ -283,6 +345,9 @@ def _execute_job(
                 max_iterations=max_iterations,
                 started=started,
                 workspace=ws,
+                extra_env=extra_env,
+                use_subagents=use_subagents,
+                subagent_model=subagent_model,
             )
         elif engine == "improof":
             from agent_monitor.runners import improof as improof_runner
@@ -292,6 +357,7 @@ def _execute_job(
                 path,
                 problem_id=problem_id,
                 output_dir=ws,
+                extra_env=extra_env,
                 on_start=lambda p: _register_proc(run_id, p),
                 on_output=_live_output_flusher(
                     run_id=run_id, engine="improof", problem_id=problem_id,
@@ -316,6 +382,7 @@ def _execute_job(
                 path,
                 problem_id=problem_id,
                 output_dir=ws,
+                extra_env=extra_env,
                 on_start=lambda p: _register_proc(run_id, p),
                 on_output=_live_output_flusher(
                     run_id=run_id, engine="ucla", problem_id=problem_id,
@@ -340,6 +407,7 @@ def _execute_job(
                 problem_text=problem_text,
                 started=started,
                 workspace=ws,
+                extra_env=extra_env,
             )
 
         if _stop_event(run_id).is_set():
@@ -637,6 +705,9 @@ def _run_hermes(
     max_iterations: int,
     started: float,
     workspace: Path,
+    extra_env: dict[str, str] | None = None,
+    use_subagents: bool = True,
+    subagent_model: str | None = None,
 ) -> dict[str, Any]:
     from agent_monitor.runners import hermes as hermes_runner
 
@@ -678,7 +749,15 @@ def _run_hermes(
         _write_run(run)
 
     _flush()
-    agent = hermes_runner.create_agent(model=model, max_iterations=max_iterations)
+    ue = extra_env or {}
+    agent = hermes_runner.create_agent(
+        model=model or ue.get("AGENT_MONITOR_MODEL") or None,
+        api_key=ue.get("OPENAI_API_KEY") or ue.get("OPENROUTER_API_KEY") or None,
+        base_url=ue.get("AGENT_MONITOR_BASE_URL") or ue.get("OPENAI_BASE_URL") or None,
+        max_iterations=max_iterations,
+        enable_subagents=use_subagents,
+        subagent_model=subagent_model,
+    )
 
     stop_ev = _stop_event(run_id)
 
@@ -881,6 +960,42 @@ def _run_hermes(
     return _attach_analysis(run, workspace)
 
 
+def _ensure_codex_auth(env: dict[str, str]) -> None:
+    """Point codex at a per-key CODEX_HOME and log it in if needed.
+
+    Codex stores auth in $CODEX_HOME/auth.json; keying the home dir by the
+    API key keeps different users' credentials separate and auto-refreshes
+    when a key changes in Settings.
+    """
+    import hashlib
+    import shutil
+    import subprocess
+
+    key = env.get("OPENAI_API_KEY")
+    if not key:
+        return
+    home = CACHE_DIR.parent / "codex_home" / hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    home.mkdir(parents=True, exist_ok=True)
+    env["CODEX_HOME"] = str(home)
+    if (home / "auth.json").exists():
+        return
+    codex = shutil.which("codex", path=env.get("PATH"))
+    if not codex:
+        return
+    try:
+        subprocess.run(
+            [codex, "login", "--with-api-key"],
+            input=key,
+            text=True,
+            env=env,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def _run_cli_engine(
     *,
     run_id: str,
@@ -889,6 +1004,7 @@ def _run_cli_engine(
     problem_text: str,
     started: float,
     workspace: Path,
+    extra_env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Run an external CLI harness (codex / openclaude / openhands / …) live."""
     import subprocess
@@ -1040,12 +1156,19 @@ def _run_cli_engine(
 
     _flush(f"$ {' '.join(argv[:6])}…\n\nstarting…")
     env = os.environ.copy()
+    if extra_env:
+        env.update({k: v for k, v in extra_env.items() if v})
     env.setdefault("NO_COLOR", "1")
     from agent_monitor.engines_registry import engine_extra_path
 
     extra = engine_extra_path(engine)
     if extra:
         env["PATH"] = os.pathsep.join([*extra, env.get("PATH", "")])
+    if engine == "codex":
+        _ensure_codex_auth(env)
+    # Cap node heap so openclaw survives this small-RAM host (no swap).
+    if engine == "openclaw":
+        env.setdefault("NODE_OPTIONS", "--max-old-space-size=256")
     # OpenHands headless boots from LLM_MODEL / LLM_API_KEY (--override-with-envs).
     if engine == "openhands":
         key = env.get("LLM_API_KEY") or env.get("OPENAI_API_KEY")
@@ -1278,6 +1401,7 @@ def send_human_message(
     *,
     model: str | None = None,
     max_iterations: int = 40,
+    user: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Human-in-the-loop chat: queue feedback or continue a finished run."""
     message = (message or "").strip()
@@ -1320,6 +1444,7 @@ def send_human_message(
             "error": None,
             "model": model,
             "kind": "continue",
+            "owner_id": (user or {}).get("id") or run_data.get("owner_id"),
         }
 
     _append_chat(run_id, "system", "Continuing proof with your feedback…")
@@ -1334,6 +1459,7 @@ def send_human_message(
             "model": model,
             "max_iterations": max_iterations,
             "workspace": str(ws),
+            "extra_env": _user_extra_env(user),
         },
         daemon=True,
         name=f"continue-{run_id}-{job_id}",
@@ -1358,6 +1484,7 @@ def _execute_continue(
     model: str | None,
     max_iterations: int,
     workspace: str,
+    extra_env: dict[str, str] | None = None,
 ) -> None:
     started = time.time()
     ws = Path(workspace)
@@ -1402,6 +1529,7 @@ def _execute_continue(
                 max_iterations=max_iterations,
                 started=started,
                 workspace=ws,
+                extra_env=extra_env,
             )
             result_run["engine"] = engine
             result_run["source"] = engine
@@ -1414,6 +1542,7 @@ def _execute_continue(
                 problem_text=continuation,
                 started=started,
                 workspace=ws,
+                extra_env=extra_env,
             )
         result_run["job_id"] = job_id
         result_run["workspace"] = str(ws)
@@ -1469,6 +1598,7 @@ def continue_run(
     message: str | None = None,
     model: str | None = None,
     max_iterations: int = 40,
+    user: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Resume a stopped/finished/failed run, optionally with extra guidance."""
     if _run_is_active(run_id):
@@ -1503,6 +1633,7 @@ def continue_run(
             "error": None,
             "model": model,
             "kind": "continue",
+            "owner_id": (user or {}).get("id") or run_data.get("owner_id"),
         }
     _append_chat(run_id, "system", "Continuing run…")
     thread = threading.Thread(
@@ -1516,6 +1647,7 @@ def continue_run(
             "model": model,
             "max_iterations": max_iterations,
             "workspace": str(ws),
+            "extra_env": _user_extra_env(user),
         },
         daemon=True,
         name=f"continue-{run_id}-{job_id}",

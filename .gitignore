@@ -3,6 +3,8 @@ data/runs/*
 data/cache/*
 data/logs/*
 data/hermes/*
+data/users.db*
+data/codex_home/
 !data/runs/.gitkeep
 !data/cache/.gitkeep
 !data/logs/.gitkeep

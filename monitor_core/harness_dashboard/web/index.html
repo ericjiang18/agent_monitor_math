@@ -68,6 +68,9 @@ body.embedded .layout { min-height: 0; height: auto; }
 .map-card.mk-mem { border-color:#94a3b8; border-style:dotted; border-width:2px; border-radius:4px 4px 14px 14px;
   background:color-mix(in srgb, #94a3b8 12%, var(--card2)); font-family:var(--mono); }
 .map-edge.mem { stroke-dasharray:4 4; stroke:#94a3b8; opacity:.7; }
+.map-edge.sol { stroke:var(--ok); opacity:.95; stroke-width:2.5; }
+.map-edge.offpath { opacity:.15; }
+.map-card.offpath { opacity:.3; filter:grayscale(.6); }
 .map-card.selected { box-shadow:0 0 0 2px var(--accent); }
 .map-card.running { animation:mapPulse 1.6s ease-in-out infinite; }
 @keyframes mapPulse { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.5);} 50%{box-shadow:0 0 0 6px rgba(59,130,246,0);} }
@@ -95,7 +98,7 @@ body.embedded .layout { min-height: 0; height: auto; }
 .agent-node.outcome-warn { border-left: 3px solid var(--warn); }
 .agent-node.outcome-neutral { border-left: 3px solid var(--border); }
 .agent-node .badge { font-size: 9px; margin-left: 4px; vertical-align: middle; }
-.agent-node .cost-bar { height: 3px; background: #1e293b; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.agent-node .cost-bar { height: 3px; background: color-mix(in srgb, var(--fg) 10%, var(--card2)); border-radius: 2px; margin-top: 5px; overflow: hidden; }
 .agent-node .cost-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--accent)); opacity: .85; }
 .agent-node.cost-high-mark { outline: 1px dashed rgba(148,163,184,.85); outline-offset: 2px; }
 .agent-node.cost-high-mark .cost-bar > i { background: linear-gradient(90deg, #94a3b8, #64748b); }
@@ -114,7 +117,7 @@ body.embedded .layout { min-height: 0; height: auto; }
 .visual-legend .sw-waste { background: rgba(239,68,68,.16); border-color: rgba(239,68,68,.45); }
 .filter-bar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .filter-bar button { background: var(--card2); border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; }
-.filter-bar button.active { border-color: var(--accent); color: var(--fg); background: #1e2a3d; }
+.filter-bar button.active { border-color: var(--accent); color: var(--fg); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
 tr.cost-high-mark td { border-left: 3px dashed rgba(148,163,184,.55); }
 tr.is-waste td { background: rgba(239,68,68,.1) !important; }
 .insights { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
@@ -125,12 +128,12 @@ tr.is-waste td { background: rgba(239,68,68,.1) !important; }
 .insight-block h3 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
 .stage-bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 11px; }
 .stage-bar-row .lbl { width: 120px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stage-bar-row .bar { flex: 1; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+.stage-bar-row .bar { flex: 1; height: 8px; background: color-mix(in srgb, var(--fg) 10%, var(--card2)); border-radius: 4px; overflow: hidden; }
 .stage-bar-row .bar > i { display: block; height: 100%; border-radius: 4px; }
 .stage-bar-row .val { width: 72px; text-align: right; font-family: var(--mono); color: var(--cyan); }
 .flag-list { display: flex; flex-direction: column; gap: 4px; max-height: 160px; overflow: auto; }
-.flag-item { font-size: 11px; padding: 6px 8px; border-radius: 6px; background: #1e293b; cursor: pointer; line-height: 1.4; }
-.flag-item:hover { background: #243044; }
+.flag-item { font-size: 11px; padding: 6px 8px; border-radius: 6px; background: var(--card2); cursor: pointer; line-height: 1.4; }
+.flag-item:hover { background: color-mix(in srgb, var(--accent) 10%, var(--card2)); }
 .flag-item.info { border-left: 3px solid var(--accent); }
 .flag-item.warn { border-left: 3px solid var(--warn); }
 .flag-item.err { border-left: 3px solid var(--err); }
@@ -143,18 +146,18 @@ tr.is-waste td { background: rgba(239,68,68,.1) !important; }
 .chain-row .stages { color: var(--muted); font-family: var(--mono); font-size: 10px; margin-top: 2px; }
 .compare-wrap { margin-bottom: 16px; overflow-x: auto; }
 .compare-wrap h2 { font-size: 14px; margin-bottom: 8px; color: var(--muted); }
-.pill.err { background: #3d1515; color: var(--err); }
-.pill.info { background: #1e2a3d; color: var(--accent); }
+.pill.err { background: color-mix(in srgb, var(--err) 14%, var(--card)); color: var(--err); }
+.pill.info { background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--accent); }
 .table-wrap { margin-top: 20px; }
 .table-wrap h2 { font-size: 14px; margin-bottom: 8px; color: var(--muted); }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--bg); }
 tr:hover td { background: var(--card2); cursor: pointer; }
-tr.sel td { background: #1e2a3d; }
-.pill { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; background: #243044; color: var(--cyan); margin: 1px; }
-.pill.warn { background: #3d3010; color: var(--warn); }
-.pill.ok { background: #14301a; color: var(--ok); }
+tr.sel td { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+.pill { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; background: color-mix(in srgb, var(--cyan) 12%, var(--card)); color: var(--cyan); margin: 1px; }
+.pill.warn { background: color-mix(in srgb, var(--warn) 14%, var(--card)); color: var(--warn); }
+.pill.ok { background: color-mix(in srgb, var(--ok) 14%, var(--card)); color: var(--ok); }
 .sidebar-hdr { padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .sidebar-hdr h2 { font-size: 15px; }
 .sidebar-hdr .meta { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
@@ -202,14 +205,14 @@ tr.sel td { background: #1e2a3d; }
 .proof-sub { font-size: 11px; color: var(--muted); margin-bottom: 10px; line-height: 1.45; }
 .proof-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
 .proof-tabs button { background: var(--card2); border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; }
-.proof-tabs button.active { border-color: var(--accent); color: var(--fg); background: #1e2a3d; }
+.proof-tabs button.active { border-color: var(--accent); color: var(--fg); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
 .proof-pdf { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .proof-source { max-height: 420px; }
 .prov-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
 .prov-table th, .prov-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .prov-table tr { cursor: pointer; }
 .prov-table tr:hover td { background: var(--card2); }
-.prov-table tr.sel td { background: #1e2a3d; }
+.prov-table tr.sel td { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
 .prov-preview { color: var(--muted); font-size: 10px; line-height: 1.4; max-width: 360px; }
 .prov-lines { font-family: var(--mono); color: var(--cyan); white-space: nowrap; }
 .proof-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: 11px; }
@@ -297,7 +300,7 @@ initTheme();
 const fmtN = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n||0);
 const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-const State = { runs: [], run: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map' };
+const State = { runs: [], run: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map', showSolutionPath: false };
 const isEmbedded = window.parent !== window;
 if (isEmbedded) document.body.classList.add('embedded');
 
@@ -759,6 +762,7 @@ function renderPipeline(run) {
   let html = renderCompare(State.runs);
   html += renderFinalProofSection(run);
   html += renderRunMemorySection(run);
+  html += renderPapersSection(run);
   html += renderAgentFlowSection(run);
   html += renderInsights(run);
   html += renderVisualLegend();
@@ -778,9 +782,12 @@ function renderPipeline(run) {
     ${run.totals?.cost_usd?`<div class="stat"><div class="lbl">Cost</div><div class="val">$${run.totals.cost_usd.toFixed(2)}</div></div>`:''}
   </div>`;
 
+  const done = ['finished','stopped','failed'].includes(run.status || '') || !run.status;
   html += `<div class="view-toggle">
     <button class="vt-btn ${State.viewMode==='map'?'active':''}" data-view="map">🗺 Map</button>
     <button class="vt-btn ${State.viewMode==='pipeline'?'active':''}" data-view="pipeline">☰ Pipeline</button>
+    ${State.viewMode==='map' && done ? `<button class="vt-btn ${State.showSolutionPath?'active':''}" id="btn-sol-path" title="Highlight the DAG path that leads to the final proof">◆ Solution DAG</button>` : ''}
+    <button class="vt-btn" id="btn-export-logs" title="Download the full run record (agents, prompts, outputs, chat, workspace files) as JSON">⬇ Export logs</button>
     <span class="vt-hint">${State.viewMode==='map'?'drag to pan · scroll to zoom · click a node for details':'fixed stage columns'}</span>
   </div>`;
   if (State.viewMode === 'map') {
@@ -791,12 +798,15 @@ function renderPipeline(run) {
         <button id="map-fit" title="Fit">⤢</button>
       </div>
       <div class="map-legend">
+        <span style="font-weight:700">Agents:</span>
         <span><i style="background:#3b82f6"></i>write</span>
         <span><i style="background:#14b8a6"></i>critic/verify</span>
         <span><i style="background:#a855f7"></i>reasoning</span>
-        <span><i style="background:#eab308"></i>tools</span>
         <span><i style="background:#f97316"></i>finalize</span>
-        <span><i style="background:#94a3b8"></i>memory</span>
+        <span style="opacity:.4">|</span>
+        <span style="font-weight:700"><i style="background:#eab308"></i>Tools</span>
+        <span style="font-weight:700"><i style="background:#94a3b8"></i>Memory</span>
+        ${State.showSolutionPath ? '<span style="opacity:.4">|</span><span style="color:var(--ok);font-weight:700">— solution path</span>' : ''}
       </div>
     </div>`;
     html += renderAllAgentsTable(run, agents);
@@ -912,7 +922,7 @@ function mapKind(a) {
   return 'think';
 }
 
-function mapNodeHtml(a) {
+function mapNodeHtml(a, solPath) {
   const kind = mapKind(a);
   const mon = a.monitor || {};
   const kcolor = { write:'#3b82f6', critic:'#14b8a6', think:'#a855f7', tool:'#eab308', orch:'#64748b', final:'#f97316' }[kind];
@@ -920,26 +930,54 @@ function mapNodeHtml(a) {
     ? `<span class="mbadge" style="background:${mon.outcome==='ok'?'var(--ok)':mon.outcome==='fail'?'var(--err)':'var(--warn)'};color:#fff">${esc(mon.outcome_label)}</span>` : '';
   const run = a.status === 'running' ? ' running' : '';
   const sel = State.agent?.trace_id === a.trace_id ? ' selected' : '';
-  const tok = (a.total_input_tokens || a.output_tokens)
-    ? `<div class="mt">in ${fmtN(a.total_input_tokens)} · out ${fmtN(a.output_tokens)}${a.cost_usd?` · $${a.cost_usd.toFixed(2)}`:''}</div>` : '';
+  const off = solPath && !solPath.has(a.trace_id) ? ' offpath' : '';
+  // Stats line: tokens / cost / latency — shown on every node kind when available.
+  const stat = [];
+  if (a.total_input_tokens) stat.push(`in ${fmtN(a.total_input_tokens)}`);
+  if (a.output_tokens) stat.push(`out ${fmtN(a.output_tokens)}`);
+  if (a.reasoning_tokens) stat.push(`rsn ${fmtN(a.reasoning_tokens)}`);
+  if (a.cost_usd) stat.push(`$${a.cost_usd.toFixed(2)}`);
+  if (a.latency_s) stat.push(`${a.latency_s.toFixed(0)}s`);
+  const tok = stat.length ? `<div class="mt">${stat.join(' · ')}</div>` : '';
   // Per-kind body: each node type shows what matters for it.
   let body = '';
   if (kind === 'tool') {
-    body = `<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
+    const tools = (a.tool_calls || []).join(', ');
+    body = `${tok}<div class="mp">${esc((tools ? tools + ' · ' : '') + (a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
   } else if (kind === 'think') {
-    body = `<div class="mp" style="font-style:italic">${esc((a.thinking||a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
-  } else if (kind === 'critic') {
-    body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,80))}</div>`;
-  } else if (kind === 'final') {
-    body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,80))}</div>`;
+    body = `${tok}<div class="mp" style="font-style:italic">${esc((a.thinking||a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
   } else {
     body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,80))}</div>`;
   }
-  return `<div class="map-card mk-${kind}${run}${sel}" data-trace="${esc(a.trace_id)}">
+  return `<div class="map-card mk-${kind}${run}${sel}${off}" data-trace="${esc(a.trace_id)}">
     <div class="mr" style="color:${kcolor}">${esc(a.role||'agent')} ${badge}</div>
     <div class="mn">${esc(a.stage_name||a.trace_id)}</div>
     ${body}
   </div>`;
+}
+
+/* Solution path: nodes that lead into the final node (reverse reachability). */
+function solutionPathSet(run) {
+  const agents = run.agents || [];
+  if (!agents.length) return null;
+  const ids = new Set(agents.map(a => a.trace_id));
+  const rev = {};
+  agents.forEach(a => { rev[a.trace_id] = []; });
+  (run.edges || []).forEach(e => {
+    const f = e.from || e.source, t = e.to || e.target;
+    if (ids.has(f) && ids.has(t)) rev[t].push(f);
+  });
+  const finals = agents.filter(a => mapKind(a) === 'final');
+  const seeds = finals.length ? finals : [[...agents].sort((a,b)=>(a.call_seq||0)-(b.call_seq||0)).pop()];
+  const seen = new Set();
+  const queue = seeds.map(a => a.trace_id);
+  while (queue.length) {
+    const id = queue.pop();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    (rev[id] || []).forEach(p => { if (!seen.has(p)) queue.push(p); });
+  }
+  return seen;
 }
 
 function layoutAgentMap(run) {
@@ -964,10 +1002,13 @@ function layoutAgentMap(run) {
     }
   }
   if (!edges.length) sorted.forEach((a,i) => depth[a.trace_id] = i);
-  // lanes by node kind — different engines produce different lane sets
-  const laneOrder = ['orch','think','write','critic','tool','final'];
+  // lanes by node kind — different engines produce different lane sets.
+  // Agent lanes (orch/think/write/critic/final) group on top; the tools lane
+  // sits below them so agents and tools read as two separate bands.
+  const laneOrder = ['orch','think','write','critic','final','tool'];
   const lanes = [...new Set(sorted.map(mapKind))].sort((x,y) => laneOrder.indexOf(x) - laneOrder.indexOf(y));
   const NW = 195, NH = 86, DX = 235, DY = 128;
+  const LX = 128; // left margin reserved for lane labels
   const cellCount = {};
   const pos = {};
   for (const a of sorted) {
@@ -976,11 +1017,22 @@ function layoutAgentMap(run) {
     const key = d + ':' + lane;
     const n = cellCount[key] = (cellCount[key] || 0) + 1;
     pos[a.trace_id] = {
-      x: 40 + d * DX + ((lane % 2) ? 26 : 0),
+      x: LX + d * DX + ((lane % 2) ? 26 : 0),
       y: 30 + lane * DY + (n - 1) * (NH + 10) + (d % 2 ? 14 : 0),
       w: NW, h: NH,
     };
   }
+  // Lane metadata for the labelled bands (Agents vs Tools vs Memory).
+  const laneInfo = { orch:['orchestrator','#64748b','Agents'], think:['reasoning','#a855f7','Agents'],
+    write:['write','#3b82f6','Agents'], critic:['critic/verify','#14b8a6','Agents'],
+    final:['finalize','#f97316','Agents'], tool:['tools','#eab308','Tools'] };
+  const laneCounts = {};
+  sorted.forEach(a => { const k = mapKind(a); laneCounts[k] = (laneCounts[k] || 0) + 1; });
+  const laneMeta = lanes.map((k, i) => ({
+    kind: k, label: laneInfo[k][0], color: laneInfo[k][1], group: laneInfo[k][2],
+    y: 30 + i * DY, count: laneCounts[k] || 0,
+    cost: sorted.filter(a => mapKind(a) === k).reduce((s,a) => s + (a.cost_usd||0), 0),
+  }));
   // Memory side-nodes: one per agent that carries memory_context, plus the
   // run-level workspace memory (improof rounds etc.) — visible together with agents.
   const memNodes = [];
@@ -996,31 +1048,50 @@ function layoutAgentMap(run) {
     memNodes.push({ id: mid, host: a, ctx });
     memEdges.push({ from: a.trace_id, to: mid, mem: true });
   }
-  if (run.memory && typeof run.memory === 'object') {
+  if (run.memory && typeof run.memory === 'object' && Object.keys(run.memory).length) {
     const rounds = (run.memory.rounds || []).length;
     const mid = '::run-memory';
     const lastWrite = [...sorted].reverse().find(a => ['write','final'].includes(mapKind(a))) || sorted[sorted.length-1];
-    pos[mid] = { x: 40, y: maxLaneY + 40 + memNodes.length * 96, w: 185, h: 78 };
+    pos[mid] = { x: LX, y: maxLaneY + 40 + memNodes.length * 96, w: 185, h: 78 };
     memNodes.push({ id: mid, host: null, ctx: run.memory, label: `run memory · ${rounds} round(s)` });
     if (lastWrite) memEdges.push({ from: lastWrite.trace_id, to: mid, mem: true });
   }
-  return { pos, edges, memNodes, memEdges, byId,
-    w: 80 + (Math.max(0,...Object.values(depth)) + 1) * DX,
+  if (memNodes.length) {
+    laneMeta.push({ kind: 'mem', label: 'memory', color: '#94a3b8', group: 'Memory',
+      y: maxLaneY + 40, count: memNodes.length, cost: 0 });
+  }
+  return { pos, edges, memNodes, memEdges, byId, laneMeta, laneH: DY,
+    w: LX + 40 + (Math.max(0,...Object.values(depth)) + 1) * DX,
     h: maxLaneY + 60 + Math.max(1, memNodes.length) * 96 + 100 };
 }
 
 function initAgentMap(run) {
   const host = document.getElementById('agent-map');
   if (!host || !run?.agents?.length) return;
-  const { pos, edges, memNodes, memEdges, w, h } = layoutAgentMap(run);
+  const { pos, edges, memNodes, memEdges, laneMeta, laneH, w, h } = layoutAgentMap(run);
   const svgNS = 'http://www.w3.org/2000/svg';
+  const solPath = State.showSolutionPath ? solutionPathSet(run) : null;
+
+  // Lane bands + labels: agents lanes on top, tools band, then memory band.
+  let laneBands = '';
+  for (const lm of laneMeta || []) {
+    const bandH = lm.kind === 'mem' ? (Math.max(1, memNodes.length) * 96 + 20) : laneH - 8;
+    laneBands += `<rect x="6" y="${lm.y - 12}" width="${Math.max(w, 800) - 12}" height="${bandH}" rx="10"
+        fill="${lm.color}" opacity="0.045"/>
+      <text x="14" y="${lm.y + 6}" font-size="10" font-weight="700" fill="${lm.color}"
+        style="text-transform:uppercase;letter-spacing:.06em">${esc(lm.group === 'Agents' ? 'agent · ' + lm.label : lm.label)}</text>
+      <text x="14" y="${lm.y + 20}" font-size="9" fill="var(--muted)">×${lm.count}${lm.cost ? ' · $' + lm.cost.toFixed(2) : ''}</text>`;
+  }
+
   let edgePaths = '';
   for (const e of edges) {
-    const f = pos[e.from || e.source], t = pos[e.to || e.target];
+    const fid = e.from || e.source, tid = e.to || e.target;
+    const f = pos[fid], t = pos[tid];
     if (!f || !t) continue;
     const x1 = f.x + f.w, y1 = f.y + f.h/2, x2 = t.x, y2 = t.y + t.h/2;
     const mx = (x1 + x2) / 2;
-    edgePaths += `<path class="map-edge" d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" marker-end="url(#map-arrow)"/>`;
+    const cls = solPath ? (solPath.has(fid) && solPath.has(tid) ? ' sol' : ' offpath') : '';
+    edgePaths += `<path class="map-edge${cls}" d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" marker-end="url(#map-arrow${cls ? (cls === ' sol' ? '-sol' : '') : ''})"/>`;
   }
   for (const e of memEdges || []) {
     const f = pos[e.from], t = pos[e.to];
@@ -1034,7 +1105,7 @@ function initAgentMap(run) {
     const p = pos[a.trace_id];
     if (!p) continue;
     nodeFO += `<foreignObject class="map-node" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" data-trace="${esc(a.trace_id)}">
-      ${mapNodeHtml(a)}</foreignObject>`;
+      ${mapNodeHtml(a, solPath)}</foreignObject>`;
   }
   for (const m of memNodes || []) {
     const p = pos[m.id];
@@ -1055,9 +1126,13 @@ function initAgentMap(run) {
       </div></foreignObject>`;
   }
   const svg = `<svg xmlns="${svgNS}" viewBox="0 0 ${Math.max(w, 800)} ${Math.max(h, 520)}">
-    <defs><marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/></marker></defs>
-    <g id="map-vp">${edgePaths}${nodeFO}</g>
+    <defs>
+      <marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/></marker>
+      <marker id="map-arrow-sol" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ok)"/></marker>
+    </defs>
+    <g id="map-vp">${laneBands}${edgePaths}${nodeFO}</g>
   </svg>`;
   // keep controls/legend, replace/insert svg
   host.querySelector('svg')?.remove();
@@ -1106,6 +1181,69 @@ function initAgentMap(run) {
       }
     });
   });
+}
+
+async function exportRunLogs(runId) {
+  if (!runId) return;
+  const btn = $('btn-export-logs');
+  if (btn) { btn.disabled = true; btn.textContent = '⬇ exporting…'; }
+  try {
+    const r = await fetch(`/api/run/${encodeURIComponent(runId)}/export`);
+    if (!r.ok) throw new Error(await r.text());
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${runId}_logs.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    alert('Export failed: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇ Export logs'; }
+  }
+}
+
+/* Collected papers: scan literature/memory/output text for arXiv ids, DOIs
+   and bracketed citation titles so the memory panel can list them. */
+function extractPapers(run) {
+  const texts = [];
+  for (const a of run.agents || []) {
+    const stage = String(a.pipeline_stage || '') + ' ' + String(a.stage_name || '') + ' ' + String(a.role || '');
+    const isLit = /literature|search|advisor|research/i.test(stage);
+    if (a.output && (isLit || /arxiv|doi\.org/i.test(a.output))) texts.push(a.output);
+    if (a.memory_context) texts.push(JSON.stringify(a.memory_context));
+  }
+  if (run.memory) texts.push(JSON.stringify(run.memory));
+  const blob = texts.join('\n');
+  const papers = new Map();
+  for (const m of blob.matchAll(/arxiv[:/\s]*([0-9]{4}\.[0-9]{4,5})(v\d+)?/gi)) {
+    const id = m[1];
+    if (!papers.has('arxiv:' + id)) papers.set('arxiv:' + id, { kind: 'arXiv', id, url: 'https://arxiv.org/abs/' + id });
+  }
+  for (const m of blob.matchAll(/doi\.org\/(10\.\d{4,9}\/[^\s"'<>\\)\],]+)/gi)) {
+    const id = m[1].replace(/[.,;]+$/, '');
+    if (!papers.has('doi:' + id)) papers.set('doi:' + id, { kind: 'DOI', id, url: 'https://doi.org/' + id });
+  }
+  // Quoted or emphasised titles near citation-like context ("Title" (Author, 2024))
+  for (const m of blob.matchAll(/[“"']([A-Z][^"”'\n]{18,120})[”"']\s*[(（[]([^)）\]]{0,60}(19|20)\d{2})/g)) {
+    const t = m[1].trim();
+    if (!papers.has('t:' + t)) papers.set('t:' + t, { kind: 'title', id: t, meta: m[2] });
+  }
+  return [...papers.values()].slice(0, 40);
+}
+
+function renderPapersSection(run) {
+  const papers = extractPapers(run);
+  if (!papers.length) return '';
+  const rows = papers.map(p => {
+    const label = p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(p.id)}</a>` : esc(p.id);
+    return `<div class="chain-row"><span class="pill">${esc(p.kind)}</span> ${label}${p.meta ? ` <span style="color:var(--muted);font-size:10px">(${esc(p.meta)})</span>` : ''}</div>`;
+  }).join('');
+  return `<div class="insights" style="margin-bottom:16px">
+    <h2>Collected Papers (${papers.length})</h2>
+    <div class="flow-sub">References found in literature / memory / agent outputs (arXiv · DOI · quoted titles)</div>
+    ${rows}
+  </div>`;
 }
 
 function textTab(content, source, emptyMsg) {
@@ -1235,13 +1373,17 @@ async function loadRun(runId) {
     if (fh) fh.onclick = () => { State.filterHigh = !State.filterHigh; if (State.filterHigh) State.filterWaste = false; rerender(); };
     if (fw) fw.onclick = () => { State.filterWaste = !State.filterWaste; if (State.filterWaste) State.filterHigh = false; rerender(); };
     if (fc) fc.onclick = () => { State.filterHigh = false; State.filterWaste = false; rerender(); };
-    $('main').querySelectorAll('.vt-btn').forEach(btn => {
+    $('main').querySelectorAll('.vt-btn[data-view]').forEach(btn => {
       btn.addEventListener('click', () => {
         State.viewMode = btn.dataset.view;
         localStorage.setItem('hd-view-mode', State.viewMode);
         rerender();
       });
     });
+    const sp = $('btn-sol-path');
+    if (sp) sp.onclick = () => { State.showSolutionPath = !State.showSolutionPath; rerender(); };
+    const ex = $('btn-export-logs');
+    if (ex) ex.onclick = () => exportRunLogs(State.run?.run_id);
   }
   bindMainClicks();
   ensureProofSourceLoaded(State.run);

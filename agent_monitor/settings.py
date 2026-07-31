@@ -21,7 +21,14 @@ PROVIDERS: list[dict[str, Any]] = [
         "key_var": "OPENAI_API_KEY",
         "base_var": "OPENAI_BASE_URL",
         "default_base": "https://api.openai.com/v1",
-        "models": ["gpt-4.1", "gpt-4o", "gpt-4o-mini", "o3-mini", "gpt-5.6-sol"],
+        "models": [
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.5-2026-04-23",
+            "gpt-5.2-2025-12-11",
+            "gpt-5-mini-2025-08-07",
+        ],
         "docs": "https://docs.litellm.ai/docs/providers/openai",
     },
     {
@@ -30,7 +37,7 @@ PROVIDERS: list[dict[str, Any]] = [
         "key_var": "ANTHROPIC_API_KEY",
         "base_var": "ANTHROPIC_BASE_URL",
         "default_base": "https://api.anthropic.com",
-        "models": ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5"],
+        "models": ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
         "docs": "https://docs.litellm.ai/docs/providers/anthropic",
     },
     {
@@ -39,7 +46,7 @@ PROVIDERS: list[dict[str, Any]] = [
         "key_var": "OPENROUTER_API_KEY",
         "base_var": "OPENROUTER_BASE_URL",
         "default_base": "https://openrouter.ai/api/v1",
-        "models": ["openai/gpt-4o", "anthropic/claude-sonnet-4", "google/gemini-2.5-pro"],
+        "models": [],
         "docs": "https://docs.litellm.ai/docs/providers/openrouter",
     },
     {
@@ -49,7 +56,7 @@ PROVIDERS: list[dict[str, Any]] = [
         "alt_key_vars": ["GOOGLE_API_KEY"],
         "base_var": "GEMINI_API_BASE",
         "default_base": "https://generativelanguage.googleapis.com",
-        "models": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
+        "models": ["gemini-3.6-flash", "gemini-3.1-pro-preview"],
         "docs": "https://docs.litellm.ai/docs/providers/gemini",
     },
     {
@@ -58,7 +65,7 @@ PROVIDERS: list[dict[str, Any]] = [
         "key_var": "DEEPSEEK_API_KEY",
         "base_var": "DEEPSEEK_API_BASE",
         "default_base": "https://api.deepseek.com",
-        "models": ["deepseek-chat", "deepseek-reasoner"],
+        "models": [],
         "docs": "https://docs.litellm.ai/docs/providers/deepseek",
     },
     {
@@ -67,7 +74,7 @@ PROVIDERS: list[dict[str, Any]] = [
         "key_var": "GROQ_API_KEY",
         "base_var": "GROQ_API_BASE",
         "default_base": "https://api.groq.com/openai/v1",
-        "models": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
+        "models": [],
         "docs": "https://docs.litellm.ai/docs/providers/groq",
     },
     {
@@ -76,7 +83,7 @@ PROVIDERS: list[dict[str, Any]] = [
         "key_var": "TOGETHERAI_API_KEY",
         "base_var": "TOGETHERAI_API_BASE",
         "default_base": "https://api.together.xyz/v1",
-        "models": ["meta-llama/Llama-3.3-70B-Instruct-Turbo"],
+        "models": [],
         "docs": "https://docs.litellm.ai/docs/providers/together_ai",
     },
     {
@@ -85,7 +92,7 @@ PROVIDERS: list[dict[str, Any]] = [
         "key_var": "XAI_API_KEY",
         "base_var": "XAI_API_BASE",
         "default_base": "https://api.x.ai/v1",
-        "models": ["grok-3", "grok-3-mini"],
+        "models": ["grok-4.5"],
         "docs": "https://docs.litellm.ai/docs/providers/xai",
     },
 ]
@@ -98,6 +105,42 @@ GENERAL_VARS = {
 }
 
 _SECRET_RE = re.compile(r"^sk-[A-Za-z0-9._-]{8,}$|^[A-Za-z0-9._-]{20,}$")
+
+
+def _known_env_keys() -> set[str]:
+    keys: set[str] = set(GENERAL_VARS.keys())
+    for spec in PROVIDERS:
+        keys.add(spec["key_var"])
+        if spec.get("base_var"):
+            keys.add(spec["base_var"])
+        for alt in spec.get("alt_key_vars") or []:
+            keys.add(alt)
+    return keys
+
+
+def resolved_user_env(user: dict[str, Any] | None) -> dict[str, str]:
+    """Effective provider/general env for a user.
+
+    Per-user values (users.db) always win. The admin account additionally
+    falls back to the server .env, so the operator's keys keep working;
+    regular users only ever see their own keys.
+    """
+    out: dict[str, str] = {}
+    if user is None or user.get("is_admin"):
+        file_env = _read_env_file()
+        for k in _known_env_keys():
+            v = file_env.get(k) or os.environ.get(k) or ""
+            if v:
+                out[k] = v
+    if user is not None:
+        from agent_monitor.auth import get_user_env
+
+        for k, v in get_user_env(int(user["id"])).items():
+            if v:
+                out[k] = v
+            else:
+                out.pop(k, None)
+    return out
 
 
 def _mask(value: str | None) -> str | None:
@@ -201,10 +244,12 @@ def _provider_state(spec: dict[str, Any], env: dict[str, str]) -> dict[str, Any]
     }
 
 
-def get_settings() -> dict[str, Any]:
-    env = {**_read_env_file(), **{k: v for k, v in os.environ.items() if k.endswith("_API_KEY") or k in GENERAL_VARS}}
-    file_env = _read_env_file()
-    env.update(file_env)
+def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
+    if user is not None:
+        env = resolved_user_env(user)
+    else:
+        env = {**_read_env_file(), **{k: v for k, v in os.environ.items() if k.endswith("_API_KEY") or k in GENERAL_VARS}}
+        env.update(_read_env_file())
 
     providers = [_provider_state(p, env) for p in PROVIDERS]
     configured = [p["id"] for p in providers if p["api_key_set"]]
@@ -225,7 +270,7 @@ def get_settings() -> dict[str, Any]:
         all_models.insert(0, default_model)
 
     return {
-        "env_path": str(ENV_PATH),
+        "env_path": "users.db" if user is not None else str(ENV_PATH),
         "providers": providers,
         "configured_providers": configured,
         "default_model": default_model,
@@ -242,7 +287,7 @@ def get_settings() -> dict[str, Any]:
     }
 
 
-def save_settings(body: dict[str, Any]) -> dict[str, Any]:
+def save_settings(body: dict[str, Any], user: dict[str, Any] | None = None) -> dict[str, Any]:
     updates: dict[str, str] = {}
     clear: list[str] = list(body.get("clear") or [])
 
@@ -258,6 +303,17 @@ def save_settings(body: dict[str, Any]) -> dict[str, Any]:
     for key, val in list(updates.items()):
         if val in {"••••", "****"} or "••••" in val:
             updates.pop(key)
+
+    if user is not None:
+        from agent_monitor.auth import set_user_env
+
+        allowed = _known_env_keys()
+        set_user_env(
+            int(user["id"]),
+            {k: v for k, v in updates.items() if k in allowed},
+            clear=[k for k in clear if k in allowed],
+        )
+        return {"ok": True, "settings": get_settings(user)}
 
     current = _read_env_file()
     merged = {**current, **updates}
@@ -293,12 +349,13 @@ def verify_provider(
     *,
     api_key: str | None = None,
     base_url: str | None = None,
+    user: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     spec = next((p for p in PROVIDERS if p["id"] == provider_id), None)
     if not spec:
         raise ValueError(f"Unknown provider: {provider_id}")
 
-    env = _read_env_file()
+    env = resolved_user_env(user) if user is not None else _read_env_file()
     key = (api_key or "").strip() or env.get(spec["key_var"]) or ""
     for alt in spec.get("alt_key_vars") or []:
         if not key and env.get(alt):
@@ -328,7 +385,7 @@ def verify_provider(
                 "anthropic-version": "2023-06-01",
             },
             payload={
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-haiku-4-5",
                 "max_tokens": 8,
                 "messages": [{"role": "user", "content": "ping"}],
             },

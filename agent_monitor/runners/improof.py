@@ -22,6 +22,7 @@ def run_problem(
     workflow: str | None = None,
     extra_args: list[str] | None = None,
     output_dir: str | Path | None = None,
+    extra_env: dict[str, str] | None = None,
     on_start=None,
     on_output=None,
 ) -> dict[str, Any]:
@@ -66,6 +67,8 @@ def run_problem(
         *(extra_args or []),
     ]
     env = os.environ.copy()
+    if extra_env:
+        env.update({k: v for k, v in extra_env.items() if v})
     # Vendored package is not pip-installed; expose src/ (proofstack, mathagents).
     src_dir = IMPROOF_ROOT / "src"
     env["PYTHONPATH"] = os.pathsep.join(

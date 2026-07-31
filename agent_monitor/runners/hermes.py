@@ -60,12 +60,40 @@ def _load_env_files() -> None:
             load_dotenv(env_path, override=False)
 
 
+def _install_subagent_model_hook() -> None:
+    """Patch delegate_tool so each parent agent can pin its subagent model.
+
+    Hermes only reads the subagent model from the global config.yaml
+    (``delegation.model``), which is shared across concurrent runs. This hook
+    overlays ``cfg["model"]`` from a per-agent attribute
+    (``_monitor_subagent_model``) set by :func:`create_agent`, so different
+    runs can use different subagent models safely.
+    """
+    import tools.delegate_tool as dt  # type: ignore
+
+    if getattr(dt, "_monitor_submodel_hook", False):
+        return
+    orig = dt._resolve_delegation_credentials
+
+    def patched(cfg: dict, parent_agent):  # noqa: ANN001
+        override = getattr(parent_agent, "_monitor_subagent_model", None)
+        if override:
+            cfg = dict(cfg or {})
+            cfg["model"] = override
+        return orig(cfg, parent_agent)
+
+    dt._resolve_delegation_credentials = patched
+    dt._monitor_submodel_hook = True
+
+
 def create_agent(
     *,
     model: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
     max_iterations: int = 60,
+    enable_subagents: bool = True,
+    subagent_model: str | None = None,
 ) -> Any:
     """Construct a quiet embedded AIAgent for informal proving."""
     _configure_hermes_home()
@@ -91,10 +119,16 @@ def create_agent(
     if not base_url and os.environ.get("OPENAI_API_KEY"):
         base_url = "https://api.openai.com/v1"
 
+    toolsets = ["terminal", "file", "code_execution", "skills"]
+    if enable_subagents:
+        toolsets.append("delegation")
     kwargs: dict[str, Any] = {
         "model": model,
-        "enabled_toolsets": ["terminal", "file", "code_execution", "delegation"],
+        "enabled_toolsets": toolsets,
         "skip_context_files": True,
+        # Load HERMES_HOME/SOUL.md (editable in the console's Agent panel) as
+        # the agent identity; falls back to the default identity when absent.
+        "load_soul_identity": True,
         "quiet_mode": True,
         "max_iterations": max_iterations,
         "platform": "embedded",
@@ -103,15 +137,33 @@ def create_agent(
         kwargs["api_key"] = api_key
     if base_url:
         kwargs["base_url"] = base_url
-    # skip_memory may not exist on all versions; set if supported
+    # Persistent memory (memories/MEMORY.md + USER.md) is opt-in via the
+    # console's Agent panel — it toggles memory.memory_enabled in config.yaml.
     try:
-        return AIAgent(**kwargs, skip_memory=True)
+        from agent_monitor.agent_config import memory_enabled
+
+        skip_memory = not memory_enabled()
+    except Exception:  # noqa: BLE001
+        skip_memory = True
+
+    # skip_memory / load_soul_identity may not exist on all versions
+    agent = None
+    try:
+        agent = AIAgent(**kwargs, skip_memory=skip_memory)
     except TypeError:
         kwargs.pop("platform", None)
         try:
-            return AIAgent(**kwargs, skip_memory=True)
+            agent = AIAgent(**kwargs, skip_memory=skip_memory)
         except TypeError:
-            return AIAgent(**{k: v for k, v in kwargs.items() if k != "skip_memory"})
+            kwargs.pop("load_soul_identity", None)
+            agent = AIAgent(**{k: v for k, v in kwargs.items() if k != "skip_memory"})
+    if enable_subagents and subagent_model:
+        try:
+            _install_subagent_model_hook()
+            agent._monitor_subagent_model = subagent_model
+        except Exception as exc:  # noqa: BLE001
+            print(f"[agent-monitor] subagent model hook failed: {exc}")
+    return agent
 
 
 def run_problem(

@@ -19,6 +19,7 @@ def run_problem(
     problem_id: str | None = None,
     extra_args: list[str] | None = None,
     output_dir: str | Path | None = None,
+    extra_env: dict[str, str] | None = None,
     on_start=None,
     on_output=None,
 ) -> dict[str, Any]:
@@ -47,6 +48,8 @@ def run_problem(
     # Many UCLA harnesses are module-driven; try a conservative invocation and
     # capture output for the operator to inspect.
     env = os.environ.copy()
+    if extra_env:
+        env.update({k: v for k, v in extra_env.items() if v})
     # The harness resolves its problem via PROBLEM_FILE (it does not read argv)
     # and writes artifacts (solution.tex etc.) under OUTPUT_ROOT_DIR.
     env["PROBLEM_FILE"] = str(problem_path.resolve())
