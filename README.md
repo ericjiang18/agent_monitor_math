@@ -17,6 +17,23 @@ each node type renders its own card format) and **Pipeline** (fixed stage column
 
 Users select an engine and problem, then monitor agents, tokens, and cost in one UI.
 
+## Library (memory · skills · tools)
+
+Open **📚 Library** in the sidebar to store reusable items that are injected
+into *every* run, regardless of engine:
+
+- **Memory** — facts/context (e.g. results from earlier runs). A compact memory
+  entry is auto-saved after each run (disabled by default; enable what you want reused).
+- **Skills** — proof methods/strategies in Markdown.
+- **Tools** — bash scripts; saved as `_library/tools/<name>.sh` in the run
+  workspace so CLI agents can execute them. DeepAgents additionally registers
+  each script as a callable tool.
+
+Items live in `data/library/library.json`. At run start the enabled items are
+materialized into the workspace (`_library/MEMORY.md`, `_library/SKILLS.md`,
+`_library/tools/`) and a `USER LIBRARY` block is prepended to the prompt.
+API: `GET/POST /api/library`, `DELETE /api/library/{id}`, `POST /api/library/settings`.
+
 ## Quick start
 
 Everything is vendored in this repo — clone, run two scripts, done:

@@ -5,10 +5,12 @@ data/logs/*
 data/hermes/*
 data/users.db*
 data/codex_home/
+data/library/*
 !data/runs/.gitkeep
 !data/cache/.gitkeep
 !data/logs/.gitkeep
 !data/hermes/.gitkeep
+!data/library/.gitkeep
 
 # Python
 __pycache__/
