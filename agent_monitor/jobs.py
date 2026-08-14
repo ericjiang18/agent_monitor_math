@@ -219,7 +219,13 @@ def start_job(
         raise ValueError(f"Unsupported engine: {engine}")
 
     extra_env = _user_extra_env(user)
-    if user is not None and not any(k.endswith("_API_KEY") for k in extra_env):
+    has_api_key = any(k.endswith("_API_KEY") for k in extra_env)
+    has_codex_account = False
+    if engine == "codex" and user is not None:
+        from agent_monitor import codex_login
+
+        has_codex_account = codex_login.account_login_ready(codex_login.account_home(user["id"]))
+    if user is not None and not has_api_key and not has_codex_account:
         raise ValueError("Please add your own API key in Settings first (e.g. OPENAI_API_KEY)")
 
     pid, text, path = resolve_problem(problem_id, problem_text)
@@ -252,6 +258,7 @@ def start_job(
             ],
             "edges": [],
             "totals": {"cost_usd": 0, "latency_s": 0},
+            "problem_text": text[:20000],
             "problem_text_preview": text[:500],
             "owner_id": user.get("id") if user else None,
             "owner": user.get("email") if user else None,
@@ -293,6 +300,7 @@ def start_job(
             "extra_env": extra_env,
             "use_subagents": use_subagents,
             "subagent_model": subagent_model,
+            "owner_id": user.get("id") if user else None,
         },
         daemon=True,
         name=f"engine-{engine}-{job_id}",
@@ -331,6 +339,7 @@ def _execute_job(
     extra_env: dict[str, str] | None = None,
     use_subagents: bool = True,
     subagent_model: str | None = None,
+    owner_id: int | None = None,
 ) -> None:
     started = time.time()
     ws = Path(workspace)
@@ -408,6 +417,8 @@ def _execute_job(
                 started=started,
                 workspace=ws,
                 extra_env=extra_env,
+                requested_model=model,
+                owner_id=owner_id,
             )
 
         if _stop_event(run_id).is_set():
@@ -461,6 +472,7 @@ def _execute_job(
                 "updated_at": _now(),
                 "workspace": str(ws),
                 "pipeline": _pipeline_for(engine),
+                "problem_text": problem_text[:20000],
                 "agents": [
                     {
                         "trace_id": f"{run_id}::error",
@@ -667,6 +679,7 @@ def _live_output_flusher(
                 "updated_at": _now(),
                 "workspace": str(workspace),
                 "pipeline": _pipeline_for(engine),
+                "problem_text": problem_text[:20000],
                 "agents": [
                     {
                         "trace_id": f"{run_id}::{engine}_main",
@@ -714,17 +727,31 @@ def _run_hermes(
     # Live placeholder updates via step callback when available
     agents: list[dict[str, Any]] = []
     tool_log: list[str] = []
+    # Surfaced to the console's human-in-the-loop panel: which model is running
+    # and which tools it is touching right now.
+    live: dict[str, Any] = {
+        "engine": "hermes",
+        "model": model or (extra_env or {}).get("AGENT_MONITOR_MODEL") or None,
+        "subagent_model": subagent_model if use_subagents else None,
+        "subagents": bool(use_subagents),
+        "tools_active": [],
+        "tools_recent": [],
+        "tool_calls": 0,
+        "iteration": 0,
+    }
 
     def _flush(partial_output: str = "") -> None:
         run = normalize_run(
             {
                 "run_id": run_id,
+                "live": {**live, "tools_recent": live["tools_recent"][-10:]},
                 "problem_id": problem_id,
                 "trace_name": f"[HERMES] {problem_id}",
                 "status": "running",
                 "updated_at": _now(),
                 "workspace": str(workspace),
                 "pipeline": _pipeline_for("hermes"),
+                "problem_text": problem_text[:20000],
                 "agents": agents
                 or [
                     {
@@ -758,8 +785,57 @@ def _run_hermes(
         enable_subagents=use_subagents,
         subagent_model=subagent_model,
     )
+    live["model"] = getattr(agent, "model", None) or live["model"]
 
     stop_ev = _stop_event(run_id)
+
+    # Tool-level telemetry for the live panel. Flushes are throttled because a
+    # busy agent can start tools far faster than the console polls.
+    active_tools: dict[str, str] = {}
+    last_live_flush = [0.0]
+
+    def _flush_live() -> None:
+        now = time.monotonic()
+        if now - last_live_flush[0] < 1.0:
+            return
+        last_live_flush[0] = now
+        try:
+            _flush()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def tool_start_cb(tool_id: Any = None, name: Any = None, args: Any = None) -> None:
+        try:
+            active_tools[str(tool_id)] = str(name)
+            live["tool_calls"] = int(live.get("tool_calls") or 0) + 1
+            live["tools_active"] = list(active_tools.values())
+            live["tools_recent"].append(
+                {"name": str(name), "args": str(args or "")[:160], "state": "running"}
+            )
+            del live["tools_recent"][:-20]
+            _flush_live()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def tool_complete_cb(tool_id: Any = None, name: Any = None, args: Any = None, result: Any = None) -> None:
+        try:
+            active_tools.pop(str(tool_id), None)
+            live["tools_active"] = list(active_tools.values())
+            for rec in reversed(live["tools_recent"]):
+                if rec.get("name") == str(name) and rec.get("state") == "running":
+                    rec["state"] = "done"
+                    rec["result"] = str(result or "")[:200]
+                    break
+            _flush_live()
+        except Exception:  # noqa: BLE001
+            pass
+
+    for attr, cb in (("tool_start_callback", tool_start_cb), ("tool_complete_callback", tool_complete_cb)):
+        if hasattr(agent, attr):
+            try:
+                setattr(agent, attr, cb)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _tok_snapshot() -> dict[str, float]:
         return {
@@ -824,6 +900,7 @@ def _run_hermes(
             stage, role = _stage_for_tools(names)
             node["pipeline_stage"] = stage
             node["role"] = role
+            node["tools"] = names
             node["stage_name"] = f"iter-{node['round_id']} ({', '.join(names[:3])})"
             parts = []
             for t in prev_tools:
@@ -841,6 +918,7 @@ def _run_hermes(
             _close_last(prev_tools)
         except Exception:  # noqa: BLE001
             pass
+        live["iteration"] = iteration
         agents.append(
             {
                 "trace_id": f"{run_id}::iter-{iteration}",
@@ -849,6 +927,7 @@ def _run_hermes(
                 "pipeline_stage": "plan",
                 "call_seq": iteration,
                 "round_id": iteration,
+                "model": getattr(agent, "model", None) or model,
                 "prompt": problem_text[:4000] if iteration == 1
                 else "(agent loop continues — model sees the task, conversation history and previous tool results)",
                 "prompt_source": "task prompt" if iteration == 1 else "conversation context",
@@ -865,6 +944,8 @@ def _run_hermes(
         except Exception:  # noqa: BLE001
             pass
 
+    from agent_monitor.engines_registry import CITATION_REQUIREMENTS
+
     prompt = (
         "You are working on an informal mathematics proof problem.\n"
         "Use tools as needed (code, files, terminal, subagents).\n\n"
@@ -875,6 +956,7 @@ def _run_hermes(
         "Update this file as your proof develops — write early drafts, then refine.\n"
         f"2. You may create scratch files (notes, python checks) inside {workspace}.\n"
         "3. Finish by making proof.md a clean, self-contained informal proof.\n\n"
+        f"{CITATION_REQUIREMENTS}\n"
         f"PROBLEM:\n{problem_text}\n"
     )
     result = agent.run_conversation(prompt)
@@ -934,16 +1016,19 @@ def _run_hermes(
         {"from": a["trace_id"], "to": b["trace_id"]}
         for a, b in zip(agents, agents[1:])
     ]
+    live["tools_active"] = []
     run = normalize_run(
         {
             "run_id": run_id,
             "problem_id": problem_id,
             "trace_name": f"[HERMES] {problem_id}",
+            "live": {**live, "tools_recent": live["tools_recent"][-10:]},
             "status": "finished" if (result or {}).get("completed", True) else "failed",
             "completed": (result or {}).get("completed", True),
             "updated_at": _now(),
             "workspace": str(workspace),
             "pipeline": _pipeline_for("hermes"),
+            "problem_text": problem_text[:20000],
             "agents": agents,
             "edges": edges,
             "totals": {
@@ -960,16 +1045,35 @@ def _run_hermes(
     return _attach_analysis(run, workspace)
 
 
-def _ensure_codex_auth(env: dict[str, str]) -> None:
-    """Point codex at a per-key CODEX_HOME and log it in if needed.
+def _ensure_codex_auth(env: dict[str, str], owner_id: int | None = None) -> None:
+    """Point codex at a CODEX_HOME with valid credentials.
 
-    Codex stores auth in $CODEX_HOME/auth.json; keying the home dir by the
-    API key keeps different users' credentials separate and auto-refreshes
-    when a key changes in Settings.
+    Prefers the *run owner's* ChatGPT/OpenAI-account (OAuth) login — set up
+    once via the Settings panel's "Codex Account" card — over API-key
+    billing, so runs consume that account's subscription usage instead of
+    metered API calls. This is strictly per-user: ``owner_id`` must come from
+    the authenticated session that started the run, never from request data,
+    so one user's runs can never pick up another user's Codex login. Set
+    ``AGENT_MONITOR_CODEX_AUTH_MODE=apikey`` to force API-key mode even when
+    an account login exists.
+
+    Falls back to a per-key CODEX_HOME (auto logged in with OPENAI_API_KEY)
+    when no account login is present (or no owner is known); keying that
+    home dir by the API key keeps different users' credentials separate and
+    auto-refreshes when a key changes in Settings.
     """
     import hashlib
     import shutil
     import subprocess
+
+    if owner_id is not None:
+        from agent_monitor import codex_login
+
+        account_home = codex_login.account_home(owner_id)
+        force_apikey = os.environ.get("AGENT_MONITOR_CODEX_AUTH_MODE", "").lower() == "apikey"
+        if not force_apikey and codex_login.account_login_ready(account_home):
+            env["CODEX_HOME"] = str(account_home)
+            return
 
     key = env.get("OPENAI_API_KEY")
     if not key:
@@ -1005,6 +1109,8 @@ def _run_cli_engine(
     started: float,
     workspace: Path,
     extra_env: dict[str, str] | None = None,
+    requested_model: str | None = None,
+    owner_id: int | None = None,
 ) -> dict[str, Any]:
     """Run an external CLI harness (codex / openclaude / openhands / …) live."""
     import subprocess
@@ -1012,7 +1118,16 @@ def _run_cli_engine(
     from agent_monitor.engines_registry import CLI_ENGINES, build_cli_command, proof_prompt
 
     spec = CLI_ENGINES.get(engine) or {}
-    prompt = proof_prompt(problem_text, workspace=workspace)
+    # CLI engines can't read the agent home, so the operator's identity/skills/
+    # memory ride along in the prompt.
+    try:
+        from agent_monitor.agent_config import persona_preamble
+
+        preamble = persona_preamble()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[agent-monitor] persona preamble unavailable: {exc}")
+        preamble = ""
+    prompt = proof_prompt(problem_text, workspace=workspace, preamble=preamble)
     argv = build_cli_command(
         engine, prompt=prompt, workspace=workspace, problem_file=workspace / "problem.txt"
     )
@@ -1028,6 +1143,7 @@ def _run_cli_engine(
                 "updated_at": _now(),
                 "workspace": str(workspace),
                 "pipeline": _pipeline_for(engine),
+                "problem_text": problem_text[:20000],
                 "agents": [
                     {
                         "trace_id": f"{run_id}::setup",
@@ -1129,15 +1245,26 @@ def _run_cli_engine(
                     cache_read=int(u.get("cache_read_tokens") or 0),
                     cache_write=int(u.get("cache_write_tokens") or 0),
                 )
+        live = parser.live_state()
+        if status != "running":
+            live["tools_active"] = []
+        if not live.get("model"):
+            # Codex and friends don't report a model in their event stream, so
+            # fall back to what was asked for — flagged, since the CLI's own
+            # configuration wins if it disagrees.
+            live["model"] = requested_model or (extra_env or {}).get("AGENT_MONITOR_MODEL") or None
+            live["model_requested"] = bool(live["model"])
         run = normalize_run(
             {
                 "run_id": run_id,
                 "problem_id": problem_id,
                 "trace_name": f"[{spec.get('label', engine).upper()}] {problem_id}",
                 "status": status,
+                "live": live,
                 "updated_at": _now(),
                 "workspace": str(workspace),
                 "pipeline": _pipeline_for(engine),
+                "problem_text": problem_text[:20000],
                 "agents": agents,
                 "edges": edges,
                 "totals": {
@@ -1165,7 +1292,7 @@ def _run_cli_engine(
     if extra:
         env["PATH"] = os.pathsep.join([*extra, env.get("PATH", "")])
     if engine == "codex":
-        _ensure_codex_auth(env)
+        _ensure_codex_auth(env, owner_id)
     # Cap node heap so openclaw survives this small-RAM host (no swap).
     if engine == "openclaw":
         env.setdefault("NODE_OPTIONS", "--max-old-space-size=256")
@@ -1254,6 +1381,7 @@ def _wrap_subprocess_result(
             "error": result.get("error"),
             "updated_at": _now(),
             "pipeline": _pipeline_for(engine),
+            "problem_text": problem_text[:20000],
             "agents": [
                 {
                     "trace_id": f"{run_id}::{engine}_main",
@@ -1460,6 +1588,7 @@ def send_human_message(
             "max_iterations": max_iterations,
             "workspace": str(ws),
             "extra_env": _user_extra_env(user),
+            "owner_id": (user or {}).get("id") or run_data.get("owner_id"),
         },
         daemon=True,
         name=f"continue-{run_id}-{job_id}",
@@ -1485,6 +1614,7 @@ def _execute_continue(
     max_iterations: int,
     workspace: str,
     extra_env: dict[str, str] | None = None,
+    owner_id: int | None = None,
 ) -> None:
     started = time.time()
     ws = Path(workspace)
@@ -1543,6 +1673,8 @@ def _execute_continue(
                 started=started,
                 workspace=ws,
                 extra_env=extra_env,
+                requested_model=(run_data.get("live") or {}).get("model"),
+                owner_id=owner_id,
             )
         result_run["job_id"] = job_id
         result_run["workspace"] = str(ws)

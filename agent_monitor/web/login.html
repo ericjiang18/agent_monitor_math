@@ -111,7 +111,7 @@ $('form').onsubmit=async e=>{
     const r=await fetch('/api/auth/'+mode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'Request failed');
-    location.href='/';
+    location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
   }catch(err){ fail(String(err.message)); }
 };
 
@@ -120,14 +120,14 @@ async function handleGoogle(resp){
     const r=await fetch('/api/auth/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:resp.credential})});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'Google sign-in failed');
-    location.href='/';
+    location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
   }catch(err){ fail(String(err.message)); }
 }
 
 (async()=>{
   try{
     const me=await(await fetch('/api/auth/me')).json();
-    if(me.user){ location.href='/'; return; }
+    if(me.user){ location.href=(window.__pcUrl?window.__pcUrl('/'):'/'); return; }
     if(me.google_client_id){
       const s=document.createElement('script');
       s.src='https://accounts.google.com/gsi/client'; s.async=true;

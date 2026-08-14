@@ -28,8 +28,92 @@ DASHBOARD_WEB = ROOT / "monitor_core" / "harness_dashboard" / "web"
 PORT = int(os.environ.get("AGENT_MONITOR_PORT", os.environ.get("LLM_MONITOR_PORT", "4600")))
 
 
+def _normalize_base_path(raw: str | None) -> str:
+    """Return '' or '/secret' (leading slash, no trailing slash)."""
+    s = (raw or "").strip()
+    if not s or s == "/":
+        return ""
+    if not s.startswith("/"):
+        s = "/" + s
+    return s.rstrip("/")
+
+
+# Public URL prefix (security-through-obscurity gate in front of login).
+# Example: AGENT_MONITOR_BASE_PATH=/ohwoiebrbjrbiuasoo1123k
+BASE_PATH = _normalize_base_path(os.environ.get("AGENT_MONITOR_BASE_PATH"))
+
+
+def _with_base(path: str) -> str:
+    """Prefix an app-absolute path with BASE_PATH for redirects / cookies."""
+    if not path.startswith("/"):
+        path = "/" + path
+    return f"{BASE_PATH}{path}" if BASE_PATH else path
+
+
+def _inject_base(html: str) -> str:
+    """Inject window.__PC_BASE__ so frontends rewrite absolute /api URLs."""
+    snip = (
+        "<script>"
+        f"window.__PC_BASE__={json.dumps(BASE_PATH)};"
+        "(function(){"
+        "var B=window.__PC_BASE__||'';"
+        "if(!B)return;"
+        "function u(p){"
+        "if(typeof p!=='string')return p;"
+        "if(/^https?:\\/\\//i.test(p)||p.startsWith('//')||p.startsWith('data:')||p.startsWith('blob:'))return p;"
+        "if(p===B||p.startsWith(B+'/'))return p;"
+        "if(p.startsWith('/'))return B+p;"
+        "return p;"
+        "}"
+        "window.__pcUrl=u;"
+        "var _f=window.fetch.bind(window);"
+        "window.fetch=function(input,init){"
+        "if(typeof input==='string')input=u(input);"
+        "else if(input&&typeof Request!=='undefined'&&input instanceof Request)"
+        "input=new Request(u(input.url),input);"
+        "return _f(input,init);"
+        "};"
+        "})();"
+        "</script>"
+    )
+    lower = html.lower()
+    idx = lower.find("<head>")
+    if idx >= 0:
+        insert_at = idx + len("<head>")
+        return html[:insert_at] + snip + html[insert_at:]
+    return snip + html
+
+
+def _app_path(raw_path: str) -> tuple[str | None, str]:
+    """Strip BASE_PATH from the request path.
+
+    Returns (app_path, error). error is 'not_found' when the public path is
+    outside the secret prefix (except bare /health for local ops).
+    """
+    path = raw_path or "/"
+    if not BASE_PATH:
+        return path, ""
+    if path == "/health":
+        return path, ""
+    if path == BASE_PATH or path.startswith(BASE_PATH + "/"):
+        rest = path[len(BASE_PATH) :] or "/"
+        return rest, ""
+    return None, "not_found"
+
+
 def _cache_harness() -> Path:
     return Path(os.environ.get("LLM_DASHBOARD_CACHE", str(CACHE_DIR))) / "harness"
+
+
+def _run_record_for(run_id: str) -> dict | None:
+    """The cached run record for a run, or None if it isn't readable."""
+    rec_path = _cache_harness() / f"{run_id}.json"
+    if not rec_path.exists():
+        return None
+    try:
+        return json.loads(rec_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 WORKSPACES_ROOT = (RUNS_DIR / "workspaces").resolve()
@@ -180,23 +264,37 @@ class Handler(BaseHTTPRequestHandler):
 
         host = (self.headers.get("Host") or "").split(":")[0]
         secure = "" if host in {"localhost", "127.0.0.1"} else " Secure;"
+        cookie_path = BASE_PATH or "/"
         if token is None:
-            return f"{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly;{secure} SameSite=Lax"
+            return f"{SESSION_COOKIE}=; Path={cookie_path}; Max-Age=0; HttpOnly;{secure} SameSite=Lax"
         max_age = SESSION_TTL_DAYS * 86400
-        return f"{SESSION_COOKIE}={token}; Path=/; Max-Age={max_age}; HttpOnly;{secure} SameSite=Lax"
+        return f"{SESSION_COOKIE}={token}; Path={cookie_path}; Max-Age={max_age}; HttpOnly;{secure} SameSite=Lax"
 
     def _require_user(self, path: str) -> dict | None:
         """Return the user, or answer 401/redirect and return None."""
         user = self._current_user()
         if user:
             return user
+        login = _with_base("/login")
         if path.startswith("/api/"):
-            self._send(401, json.dumps({"error": "not signed in", "login": "/login"}))
+            self._send(401, json.dumps({"error": "not signed in", "login": login}))
         else:
             self.send_response(302)
-            self.send_header("Location", "/login")
+            self.send_header("Location", login)
             self.end_headers()
         return None
+
+    def _send_html(self, html: str, code: int = 200):
+        self._send(code, _inject_base(html), "text/html; charset=utf-8")
+
+    def _resolve_path(self) -> str | None:
+        """Parse URL path, enforce BASE_PATH gate, return app-relative path."""
+        parsed = urlparse(self.path)
+        app_path, err = _app_path(parsed.path)
+        if err:
+            self._send(404, "Not Found", "text/plain; charset=utf-8")
+            return None
+        return app_path
 
     def _owns_run(self, run_id: str, user: dict) -> bool:
         owner = job_manager.run_owner(run_id)
@@ -218,12 +316,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802
         parsed = urlparse(self.path)
-        path = parsed.path
+        path = self._resolve_path()
+        if path is None:
+            return
         qs = parse_qs(parsed.query)
 
         if path == "/login":
             html_path = WEB_DIR / "login.html"
-            self._send(200, html_path.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+            self._send_html(html_path.read_text(encoding="utf-8"))
             return
 
         if path == "/api/auth/me":
@@ -256,13 +356,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in ("/", "/index.html", "/console"):
             html_path = WEB_DIR / "console.html"
-            self._send(200, html_path.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+            self._send_html(html_path.read_text(encoding="utf-8"))
             return
 
         if path in ("/monitor", "/dashboard"):
             html = (DASHBOARD_WEB / "index.html").read_text(encoding="utf-8")
             # Soft-redirect note: keep classic monitor available
-            self._send(200, html, "text/html; charset=utf-8")
+            self._send_html(html)
             return
 
         if path == "/api/engines":
@@ -294,6 +394,18 @@ class Handler(BaseHTTPRequestHandler):
             from agent_monitor.settings import get_settings
 
             self._send(200, json.dumps(get_settings(user), ensure_ascii=False))
+            return
+
+        if path == "/api/settings/codex/status":
+            from agent_monitor import codex_login
+
+            self._send(200, json.dumps(codex_login.status(user["id"]), ensure_ascii=False))
+            return
+
+        if path == "/api/settings/codex/login/poll":
+            from agent_monitor import codex_login
+
+            self._send(200, json.dumps(codex_login.poll_login(user["id"]), ensure_ascii=False))
             return
 
         if path.startswith("/api/jobs/"):
@@ -328,8 +440,60 @@ class Handler(BaseHTTPRequestHandler):
             if not ws or not self._owns_run(rid, user):
                 self._send(404, json.dumps({"error": "run not found"}))
                 return
-            cached = proof_graph.load_cached(ws)
-            self._send(200, json.dumps(cached or {"status": "none"}, ensure_ascii=False))
+            kind = (qs.get("kind") or ["informal"])[0].strip().lower()
+            if kind not in {"informal", "formal"}:
+                kind = "informal"
+            if kind == "formal":
+                cached = proof_graph.load_or_parse_formal(ws)
+            else:
+                cached = proof_graph.load_cached(ws, kind="informal")
+            self._send(200, json.dumps(cached or {"status": "none", "kind": kind}, ensure_ascii=False))
+            return
+
+        if path == "/api/lean/status":
+            from agent_monitor import lean_verify
+
+            self._send(
+                200,
+                json.dumps(
+                    {
+                        **lean_verify.toolchain_status(),
+                        "engines": lean_verify.harness_engines(),
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            return
+
+        if path.startswith("/api/run/") and path.endswith("/lean_verify"):
+            from agent_monitor import lean_verify
+
+            rid = path.removeprefix("/api/run/").removesuffix("/lean_verify")
+            ws = _workspace_for_run(rid)
+            if not ws or not self._owns_run(rid, user):
+                self._send(404, json.dumps({"error": "run not found"}))
+                return
+            cached = lean_verify.load_cached(ws) or {"status": "none"}
+            # Backfill citations for older caches (from Lean docstring / proof.md).
+            if cached.get("lean") and not cached.get("citations"):
+                cached["citations"] = lean_verify._merge_citations(
+                    lean_verify._citations_from_lean(str(cached.get("lean") or "")),
+                    lean_verify._citations_from_proof_md(ws),
+                )
+            if cached.get("status") not in (None, "none") and "toolchain" not in cached:
+                cached["toolchain"] = lean_verify.toolchain_status()
+            job = lean_verify.harness_job(ws)
+            cached["harness_running"] = bool(job)
+            if job:
+                cached["harness"] = {**(cached.get("harness") or {}), **job}
+            elif cached.get("status") == "running":
+                # The worker died without writing a final record (restart, OOM).
+                cached["status"] = "failed"
+                cached["notes"] = (
+                    "Harness run did not finish — the server may have restarted. "
+                    "Press Compile/Check on the source below, or run it again."
+                )
+            self._send(200, json.dumps(cached, ensure_ascii=False))
             return
 
         # Delegate classic dashboard APIs
@@ -401,8 +565,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, json.dumps({"error": "unknown workspace action"}))
 
     def do_POST(self):  # noqa: N802
-        parsed = urlparse(self.path)
-        path = parsed.path
+        path = self._resolve_path()
+        if path is None:
+            return
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b"{}"
         try:
@@ -508,12 +673,80 @@ class Handler(BaseHTTPRequestHandler):
                     run_record=run_record,
                     user=user,
                     model=(str(body.get("model") or "").strip() or None),
+                    kind=str(body.get("kind") or "informal"),
                 )
             except ValueError as exc:
                 self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
                 return
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": f"Graph generation failed: {exc}"}, ensure_ascii=False))
+                return
+            self._send(200, json.dumps(result, ensure_ascii=False))
+            return
+
+        if path.startswith("/api/run/") and path.endswith("/lean_verify"):
+            from agent_monitor import lean_verify
+
+            rid = path.removeprefix("/api/run/").removesuffix("/lean_verify")
+            ws = _workspace_for_run(rid)
+            if not ws or not self._owns_run(rid, user):
+                self._send(404, json.dumps({"error": "run not found"}))
+                return
+            action = str(body.get("action") or "verify").strip().lower()
+            model = str(body.get("model") or "").strip() or None
+            lean_src = body.get("lean")
+            if isinstance(lean_src, str):
+                lean_arg: str | None = lean_src
+            else:
+                lean_arg = None
+            try:
+                if action in {"compile", "check"}:
+                    result = lean_verify.compile_or_check(
+                        workspace=ws, lean=lean_arg, mode=action
+                    )
+                elif action == "harness":
+                    result = lean_verify.start_harness(
+                        workspace=ws,
+                        run_record=_run_record_for(rid),
+                        user=user,
+                        engine=str(body.get("engine") or "codex").strip().lower(),
+                        model=model,
+                        lean=lean_arg,
+                    )
+                elif action == "stop_harness":
+                    result = lean_verify.stop_harness(ws)
+                elif action == "audit":
+                    result = lean_verify.audit_current(
+                        workspace=ws,
+                        run_record=_run_record_for(rid),
+                        user=user,
+                        model=model,
+                        lean=lean_arg,
+                    )
+                elif action == "revise":
+                    repairs = body.get("max_repairs")
+                    result = lean_verify.revise_with_feedback(
+                        workspace=ws,
+                        user=user,
+                        message=str(body.get("message") or body.get("feedback") or ""),
+                        model=model,
+                        lean=lean_arg,
+                        max_repairs=max(0, min(int(repairs) if repairs is not None else 1, 3)),
+                    )
+                else:
+                    repairs = body.get("max_repairs")
+                    result = lean_verify.generate(
+                        workspace=ws,
+                        run_record=_run_record_for(rid),
+                        user=user,
+                        model=model,
+                        max_repairs=max(0, min(int(repairs) if repairs is not None else 2, 4)),
+                    )
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+                return
+            except Exception as exc:  # noqa: BLE001
+                self._send(500, json.dumps({"error": f"Lean verification failed: {exc}"}, ensure_ascii=False))
                 return
             self._send(200, json.dumps(result, ensure_ascii=False))
             return
@@ -621,11 +854,32 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(result, ensure_ascii=False))
             return
 
+        if path in (
+            "/api/settings/codex/login/start",
+            "/api/settings/codex/login/cancel",
+            "/api/settings/codex/logout",
+        ):
+            # Every operation is scoped to user["id"] from the authenticated
+            # session — never from the request body — so a user can only
+            # ever start, poll, cancel, or disconnect their *own* Codex
+            # account login, same isolation as per-user API keys.
+            from agent_monitor import codex_login
+
+            if path.endswith("/start"):
+                result = codex_login.start_login(user["id"])
+            elif path.endswith("/cancel"):
+                result = codex_login.cancel_login(user["id"])
+            else:
+                result = codex_login.logout(user["id"])
+            self._send(200, json.dumps(result, ensure_ascii=False))
+            return
+
         self._send(404, json.dumps({"error": "not found"}))
 
     def do_DELETE(self):  # noqa: N802
-        parsed = urlparse(self.path)
-        path = parsed.path
+        path = self._resolve_path()
+        if path is None:
+            return
 
         user = self._require_user(path)
         if user is None:
@@ -809,8 +1063,11 @@ class Handler(BaseHTTPRequestHandler):
 def main(port: int | None = None):
     port = port or PORT
     ensure_data_dirs()
-    print(f"Unified Math Proving Console -> http://localhost:{port}")
-    print(f"  classic monitor           -> http://localhost:{port}/monitor")
+    root = f"http://localhost:{port}{BASE_PATH or ''}"
+    print(f"Unified Math Proving Console -> {root}/")
+    if BASE_PATH:
+        print(f"  public base path         -> {BASE_PATH}")
+    print(f"  classic monitor           -> {root}/monitor")
     print(f"  cache: {_cache_harness()}")
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
 

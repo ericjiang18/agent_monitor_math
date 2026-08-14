@@ -47,18 +47,19 @@ body.embedded .layout { min-height: 0; height: auto; }
 .view-toggle .vt-hint { font-size:10px; color:var(--muted); margin-left:8px; }
 .agent-map { position:relative; border:1px solid var(--border); border-radius:12px; background:
   radial-gradient(circle, var(--border) 1px, transparent 1px) 0 0/22px 22px, var(--card);
-  height:560px; overflow:hidden; cursor:grab; user-select:none; }
+  height:auto; min-height:0; overflow:hidden; cursor:grab; user-select:none; }
+body.embedded .agent-map { height:auto; min-height:0; }
 .agent-map:active { cursor:grabbing; }
-.agent-map svg { width:100%; height:100%; display:block; }
+.agent-map svg { width:100%; height:auto; display:block; vertical-align:top; background:transparent; overflow:visible; }
 .map-node { cursor:pointer; }
-.map-card { border-radius:10px; border:1.5px solid var(--border); background:var(--card2); padding:7px 9px;
-  font-size:11px; line-height:1.35; box-shadow:0 2px 6px rgba(0,0,0,.18); overflow:hidden; height:100%;
-  box-sizing:border-box; display:flex; flex-direction:column; gap:2px; }
-.map-card .mr { font-size:9px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; display:flex; gap:4px; align-items:center; }
+.map-card { border-radius:8px; border:1.5px solid var(--border); background:var(--card2); padding:5px 8px;
+  font-size:11px; line-height:1.25; box-shadow:0 1px 4px rgba(0,0,0,.14); overflow:hidden; height:100%;
+  box-sizing:border-box; display:flex; flex-direction:column; gap:1px; }
+.map-card .mr { font-size:9px; text-transform:uppercase; letter-spacing:.05em; font-weight:700; display:flex; gap:4px; align-items:center; }
 .map-card .mn { font-weight:600; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.map-card .mt { font-family:var(--mono); font-size:10px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.map-card .mp { font-size:10px; color:var(--muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-.map-card .mbadge { font-size:9px; padding:1px 6px; border-radius:999px; font-weight:600; }
+.map-card .mt { font-family:var(--mono); font-size:9.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.map-card .mp { font-size:10px; color:var(--muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; line-clamp:1; }
+.map-card .mbadge { font-size:8.5px; padding:0 5px; border-radius:999px; font-weight:600; }
 .map-card.mk-write { border-color:#3b82f6; background:color-mix(in srgb, #3b82f6 9%, var(--card2)); }
 .map-card.mk-critic { border-color:#14b8a6; background:color-mix(in srgb, #14b8a6 9%, var(--card2)); }
 .map-card.mk-think { border-color:#a855f7; border-style:dashed; background:color-mix(in srgb, #a855f7 8%, var(--card2)); border-radius:16px; }
@@ -67,19 +68,22 @@ body.embedded .layout { min-height: 0; height: auto; }
 .map-card.mk-final { border-color:#f97316; border-width:2px; background:color-mix(in srgb, #f97316 10%, var(--card2)); }
 .map-card.mk-mem { border-color:#94a3b8; border-style:dotted; border-width:2px; border-radius:4px 4px 14px 14px;
   background:color-mix(in srgb, #94a3b8 12%, var(--card2)); font-family:var(--mono); }
-.map-edge.mem { stroke-dasharray:4 4; stroke:#94a3b8; opacity:.7; }
-.map-edge.sol { stroke:var(--ok); opacity:.95; stroke-width:2.5; }
-.map-edge.offpath { opacity:.15; }
+.map-edge.mem { stroke-dasharray:4 5; stroke:#94a3b8; opacity:.7; stroke-width:1.7; }
+.map-edge.sol { stroke:var(--ok); opacity:1; stroke-width:2.4; }
+.map-edge.offpath { opacity:.14; }
 .map-card.offpath { opacity:.3; filter:grayscale(.6); }
 .map-card.selected { box-shadow:0 0 0 2px var(--accent); }
 .map-card.running { animation:mapPulse 1.6s ease-in-out infinite; }
 @keyframes mapPulse { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.5);} 50%{box-shadow:0 0 0 6px rgba(59,130,246,0);} }
-.map-edge { fill:none; stroke:var(--muted); stroke-width:1.5; opacity:.55; }
-.map-edge.hot { stroke:var(--accent); opacity:.9; stroke-width:2; }
-.map-controls { position:absolute; top:10px; right:10px; display:flex; gap:4px; z-index:5; }
-.map-controls button { width:26px; height:26px; border-radius:6px; border:1px solid var(--border); background:var(--card2); color:var(--fg); cursor:pointer; font-size:13px; }
-.map-legend { position:absolute; left:10px; bottom:8px; display:flex; gap:10px; font-size:9.5px; color:var(--muted); z-index:5; background:color-mix(in srgb, var(--card) 82%, transparent); padding:4px 8px; border-radius:8px; }
-.map-legend i { display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:3px; vertical-align:-1px; }
+.map-edge {
+  fill:none; stroke:#5b8def;
+  stroke-width:2; opacity:.88; stroke-linecap:round; stroke-linejoin:round;
+}
+.map-edge.hot { stroke:var(--accent); opacity:1; stroke-width:2.4; }
+.map-controls { position:absolute; top:8px; right:8px; display:flex; gap:4px; z-index:5; }
+.map-controls button { width:24px; height:24px; border-radius:6px; border:1px solid var(--border); background:var(--card2); color:var(--fg); cursor:pointer; font-size:12px; }
+.map-legend { position:absolute; left:8px; bottom:8px; display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--fg); z-index:5; background:color-mix(in srgb, var(--card) 90%, transparent); padding:5px 9px; border-radius:8px; border:1px solid var(--border); }
+.map-legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
 .pipeline-wrap { overflow-x: auto; padding-bottom: 12px; }
 .pipeline { display: flex; gap: 0; min-width: max-content; }
 .stage-col { min-width: 200px; max-width: 240px; border: 1px solid var(--border); border-radius: 10px; margin-right: 8px; background: var(--card); }
@@ -311,7 +315,7 @@ function notifyParentHeight() {
       document.documentElement.scrollHeight,
       document.body.scrollHeight,
       document.querySelector('.layout')?.scrollHeight || 0,
-      720,
+      360,
     );
     window.parent.postMessage({ type: 'proving-console-resize', height: h }, '*');
   });
@@ -565,7 +569,7 @@ function renderFinalProofSection(run) {
       <div class="proof-sub" style="margin-top:8px">Markdown proof rendered with math — every block is text-traceable to agents (see Agent trace).</div>`;
   } else if (tab === 'pdf') {
     if (pdfAvail) {
-      body = `<iframe class="proof-pdf" src="/api/run/${encodeURIComponent(run.run_id)}/final.pdf" title="Final proof PDF"></iframe>
+      body = `<iframe class="proof-pdf" src="${(window.__pcUrl||(p=>p))('/api/run/'+encodeURIComponent(run.run_id)+'/final.pdf')}" title="Final proof PDF"></iframe>
         <div class="proof-sub" style="margin-top:8px">PDF compiled on demand via pdflatex. If blank, switch to Source tab.</div>`;
     } else {
       body = `<div class="empty" style="padding:20px">This proof is ${esc(fl.format || 'plain text')} (not LaTeX) — open the Source tab to read it.</div>`;
@@ -943,11 +947,11 @@ function mapNodeHtml(a, solPath) {
   let body = '';
   if (kind === 'tool') {
     const tools = (a.tool_calls || []).join(', ');
-    body = `${tok}<div class="mp">${esc((tools ? tools + ' · ' : '') + (a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
+    body = `${tok}<div class="mp">${esc((tools ? tools + ' · ' : '') + (a.output||'').replace(/\s+/g,' ').slice(0,55))}</div>`;
   } else if (kind === 'think') {
-    body = `${tok}<div class="mp" style="font-style:italic">${esc((a.thinking||a.output||'').replace(/\s+/g,' ').slice(0,90))}</div>`;
+    body = `${tok}<div class="mp" style="font-style:italic">${esc((a.thinking||a.output||'').replace(/\s+/g,' ').slice(0,55))}</div>`;
   } else {
-    body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,80))}</div>`;
+    body = `${tok}<div class="mp">${esc((a.output||'').replace(/\s+/g,' ').slice(0,50))}</div>`;
   }
   return `<div class="map-card mk-${kind}${run}${sel}${off}" data-trace="${esc(a.trace_id)}">
     <div class="mr" style="color:${kcolor}">${esc(a.role||'agent')} ${badge}</div>
@@ -1007,44 +1011,56 @@ function layoutAgentMap(run) {
   // sits below them so agents and tools read as two separate bands.
   const laneOrder = ['orch','think','write','critic','final','tool'];
   const lanes = [...new Set(sorted.map(mapKind))].sort((x,y) => laneOrder.indexOf(x) - laneOrder.indexOf(y));
-  const NW = 195, NH = 86, DX = 235, DY = 128;
-  const LX = 128; // left margin reserved for lane labels
-  const cellCount = {};
+  // Vertical layout: role lanes as columns, time cascades top→bottom.
+  // Each next turn sits a bit lower so nothing shares the same height.
+  const NW = 176, NH = 62, STEP = 30, COL_GAP = 10, LANE_GAP = 56;
+  const TY = 32; // top margin for column labels
+  const laneW = {};
+  for (const k of lanes) laneW[k] = NW;
+  let xCursor = 16;
+  const laneX = {};
+  for (const k of lanes) {
+    laneX[k] = xCursor;
+    xCursor += laneW[k] + LANE_GAP;
+  }
+  const colBottom = {};
   const pos = {};
-  for (const a of sorted) {
-    const d = depth[a.trace_id];
-    const lane = lanes.indexOf(mapKind(a));
-    const key = d + ':' + lane;
-    const n = cellCount[key] = (cellCount[key] || 0) + 1;
+  sorted.forEach((a, i) => {
+    const kind = mapKind(a);
+    const preferred = TY + i * STEP;
+    const y = Math.max(preferred, (colBottom[kind] ?? (TY - COL_GAP)) + COL_GAP);
     pos[a.trace_id] = {
-      x: LX + d * DX + ((lane % 2) ? 26 : 0),
-      y: 30 + lane * DY + (n - 1) * (NH + 10) + (d % 2 ? 14 : 0),
+      x: laneX[kind],
+      y,
       w: NW, h: NH,
     };
-  }
-  // Lane metadata for the labelled bands (Agents vs Tools vs Memory).
+    colBottom[kind] = y + NH;
+  });
+  // Lane metadata for the labelled columns (Agents vs Tools vs Memory).
   const laneInfo = { orch:['orchestrator','#64748b','Agents'], think:['reasoning','#a855f7','Agents'],
     write:['write','#3b82f6','Agents'], critic:['critic/verify','#14b8a6','Agents'],
     final:['finalize','#f97316','Agents'], tool:['tools','#eab308','Tools'] };
   const laneCounts = {};
   sorted.forEach(a => { const k = mapKind(a); laneCounts[k] = (laneCounts[k] || 0) + 1; });
-  const laneMeta = lanes.map((k, i) => ({
+  const lastAgentY = Math.max(TY, ...Object.values(pos).map(p => p.y + p.h));
+  const colH = lastAgentY - 4;
+  const laneMeta = lanes.map(k => ({
     kind: k, label: laneInfo[k][0], color: laneInfo[k][1], group: laneInfo[k][2],
-    y: 30 + i * DY, count: laneCounts[k] || 0,
+    x: laneX[k], w: laneW[k], y: 4, h: colH,
+    count: laneCounts[k] || 0,
     cost: sorted.filter(a => mapKind(a) === k).reduce((s,a) => s + (a.cost_usd||0), 0),
   }));
-  // Memory side-nodes: one per agent that carries memory_context, plus the
-  // run-level workspace memory (improof rounds etc.) — visible together with agents.
+  // Memory column to the right of the host node — same y as host.
   const memNodes = [];
   const memEdges = [];
-  const maxLaneY = 30 + lanes.length * DY;
+  const memX = xCursor + 28;
   for (const a of sorted) {
     const ctx = a.memory_context;
     if (!ctx || typeof ctx !== 'object' || !Object.keys(ctx).length) continue;
     const p = pos[a.trace_id];
     if (!p) continue;
     const mid = a.trace_id + '::mem';
-    pos[mid] = { x: p.x + 18, y: maxLaneY + 40 + memNodes.length * 96, w: 185, h: 78 };
+    pos[mid] = { x: memX, y: p.y, w: 150, h: Math.min(56, NH) };
     memNodes.push({ id: mid, host: a, ctx });
     memEdges.push({ from: a.trace_id, to: mid, mem: true });
   }
@@ -1052,35 +1068,79 @@ function layoutAgentMap(run) {
     const rounds = (run.memory.rounds || []).length;
     const mid = '::run-memory';
     const lastWrite = [...sorted].reverse().find(a => ['write','final'].includes(mapKind(a))) || sorted[sorted.length-1];
-    pos[mid] = { x: LX, y: maxLaneY + 40 + memNodes.length * 96, w: 185, h: 78 };
+    const y = lastWrite && pos[lastWrite.trace_id] ? pos[lastWrite.trace_id].y : TY;
+    pos[mid] = { x: memX, y, w: 150, h: Math.min(56, NH) };
     memNodes.push({ id: mid, host: null, ctx: run.memory, label: `run memory · ${rounds} round(s)` });
     if (lastWrite) memEdges.push({ from: lastWrite.trace_id, to: mid, mem: true });
   }
   if (memNodes.length) {
     laneMeta.push({ kind: 'mem', label: 'memory', color: '#94a3b8', group: 'Memory',
-      y: maxLaneY + 40, count: memNodes.length, cost: 0 });
+      x: memX, w: 150, y: 4, h: colH, count: memNodes.length, cost: 0 });
   }
-  return { pos, edges, memNodes, memEdges, byId, laneMeta, laneH: DY,
-    w: LX + 40 + (Math.max(0,...Object.values(depth)) + 1) * DX,
-    h: maxLaneY + 60 + Math.max(1, memNodes.length) * 96 + 100 };
+  const lastX = Math.max(0, ...Object.values(pos).map(p => p.x + p.w));
+  const lastY = Math.max(0, ...Object.values(pos).map(p => p.y + p.h));
+  return { pos, edges, memNodes, memEdges, byId, laneMeta,
+    w: lastX + 16,
+    h: lastY + 28 };
 }
 
 function initAgentMap(run) {
   const host = document.getElementById('agent-map');
   if (!host || !run?.agents?.length) return;
-  const { pos, edges, memNodes, memEdges, laneMeta, laneH, w, h } = layoutAgentMap(run);
+  const { pos, edges, memNodes, memEdges, laneMeta, w, h } = layoutAgentMap(run);
   const svgNS = 'http://www.w3.org/2000/svg';
   const solPath = State.showSolutionPath ? solutionPathSet(run) : null;
 
-  // Lane bands + labels: agents lanes on top, tools band, then memory band.
+  // Column bands + labels across the top; time cascades downward.
+  // Bands span into the gutter so columns read clearly without covering the
+  // dotted card background of the whole map.
+  const gutter = 56;
   let laneBands = '';
   for (const lm of laneMeta || []) {
-    const bandH = lm.kind === 'mem' ? (Math.max(1, memNodes.length) * 96 + 20) : laneH - 8;
-    laneBands += `<rect x="6" y="${lm.y - 12}" width="${Math.max(w, 800) - 12}" height="${bandH}" rx="10"
-        fill="${lm.color}" opacity="0.045"/>
-      <text x="14" y="${lm.y + 6}" font-size="10" font-weight="700" fill="${lm.color}"
-        style="text-transform:uppercase;letter-spacing:.06em">${esc(lm.group === 'Agents' ? 'agent · ' + lm.label : lm.label)}</text>
-      <text x="14" y="${lm.y + 20}" font-size="9" fill="var(--muted)">×${lm.count}${lm.cost ? ' · $' + lm.cost.toFixed(2) : ''}</text>`;
+    const bandW = Math.max(lm.w || 0, 36) + Math.min(24, gutter / 2);
+    laneBands += `<rect x="${(lm.x || 0) - 4}" y="2" width="${bandW}" height="${Math.max(h, 1) - 10}" rx="8"
+        fill="${lm.color}" fill-opacity="0.05" stroke="none"/>
+      <text x="${(lm.x || 0) + 2}" y="16" font-size="11" font-weight="700" fill="${lm.color}"
+        style="text-transform:uppercase;letter-spacing:.05em">${esc(lm.group === 'Agents' ? 'agent · ' + lm.label : lm.label)}</text>
+      <text x="${(lm.x || 0) + 2}" y="28" font-size="9.5" fill="var(--muted)">×${lm.count}${lm.cost ? ' · $' + lm.cost.toFixed(2) : ''}</text>`;
+  }
+
+  function mapEdgePath(f, t) {
+    // Pick exit/entry ports on the facing sides, then draw a smooth cubic
+    // through the gutter so staggered cards don't get jagged elbows.
+    const fcx = f.x + f.w / 2, fcy = f.y + f.h / 2;
+    const tcx = t.x + t.w / 2, tcy = t.y + t.h / 2;
+    const dx = tcx - fcx, dy = tcy - fcy;
+    let sx, sy, ex, ey;
+    if (Math.abs(dx) >= Math.abs(dy) * 0.55) {
+      // mostly horizontal: leave/enter left-right sides
+      const right = dx >= 0;
+      sx = right ? f.x + f.w : f.x;
+      sy = f.y + f.h * 0.5;
+      ex = right ? t.x : t.x + t.w;
+      ey = t.y + t.h * 0.42;
+    } else if (dy >= 0) {
+      // mostly downward
+      sx = fcx; sy = f.y + f.h;
+      ex = tcx; ey = t.y;
+    } else {
+      sx = fcx; sy = f.y;
+      ex = tcx; ey = t.y + t.h;
+    }
+    const cdx = ex - sx, cdy = ey - sy;
+    const dist = Math.hypot(cdx, cdy) || 1;
+    // Control points: pull along the exit/entry normals, scaled by distance
+    // so wide gutters get generous curves and short hops stay tight.
+    const pull = Math.min(72, Math.max(28, dist * 0.42));
+    let c1x, c1y, c2x, c2y;
+    if (Math.abs(dx) >= Math.abs(dy) * 0.55) {
+      c1x = sx + (dx >= 0 ? pull : -pull); c1y = sy;
+      c2x = ex + (dx >= 0 ? -pull : pull); c2y = ey;
+    } else {
+      c1x = sx; c1y = sy + (dy >= 0 ? pull : -pull);
+      c2x = ex; c2y = ey + (dy >= 0 ? -pull : pull);
+    }
+    return `M ${sx.toFixed(1)} ${sy.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${ex.toFixed(1)} ${ey.toFixed(1)}`;
   }
 
   let edgePaths = '';
@@ -1088,17 +1148,14 @@ function initAgentMap(run) {
     const fid = e.from || e.source, tid = e.to || e.target;
     const f = pos[fid], t = pos[tid];
     if (!f || !t) continue;
-    const x1 = f.x + f.w, y1 = f.y + f.h/2, x2 = t.x, y2 = t.y + t.h/2;
-    const mx = (x1 + x2) / 2;
     const cls = solPath ? (solPath.has(fid) && solPath.has(tid) ? ' sol' : ' offpath') : '';
-    edgePaths += `<path class="map-edge${cls}" d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" marker-end="url(#map-arrow${cls ? (cls === ' sol' ? '-sol' : '') : ''})"/>`;
+    const mk = cls === ' sol' ? '-sol' : (cls === ' offpath' ? '-dim' : '');
+    edgePaths += `<path class="map-edge${cls}" d="${mapEdgePath(f, t)}" marker-end="url(#map-arrow${mk})"/>`;
   }
   for (const e of memEdges || []) {
     const f = pos[e.from], t = pos[e.to];
     if (!f || !t) continue;
-    const x1 = f.x + f.w/2, y1 = f.y + f.h, x2 = t.x + t.w/2, y2 = t.y;
-    const my = (y1 + y2) / 2;
-    edgePaths += `<path class="map-edge mem" d="M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}" marker-end="url(#map-arrow)"/>`;
+    edgePaths += `<path class="map-edge mem" d="${mapEdgePath(f, t)}" marker-end="url(#map-arrow)"/>`;
   }
   let nodeFO = '';
   for (const a of run.agents) {
@@ -1125,12 +1182,16 @@ function initAgentMap(run) {
         <div class="mp">${esc(body)}</div>
       </div></foreignObject>`;
   }
-  const svg = `<svg xmlns="${svgNS}" viewBox="0 0 ${Math.max(w, 800)} ${Math.max(h, 520)}">
+  const vbW = Math.max(w, 1);
+  const vbH = Math.max(h, 1);
+  const svg = `<svg xmlns="${svgNS}" viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMinYMin meet" style="aspect-ratio:${vbW}/${vbH}">
     <defs>
-      <marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"/></marker>
-      <marker id="map-arrow-sol" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--ok)"/></marker>
+      <marker id="map-arrow" viewBox="0 0 14 14" refX="11" refY="7" markerWidth="9" markerHeight="9" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M2.2,1.6 C2.2,1.6 11.2,6.2 11.8,7 C11.2,7.8 2.2,12.4 2.2,12.4 L4.6,7 z" fill="#5b8def"/></marker>
+      <marker id="map-arrow-sol" viewBox="0 0 14 14" refX="11" refY="7" markerWidth="9" markerHeight="9" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M2.2,1.6 C2.2,1.6 11.2,6.2 11.8,7 C11.2,7.8 2.2,12.4 2.2,12.4 L4.6,7 z" fill="var(--ok)"/></marker>
+      <marker id="map-arrow-dim" viewBox="0 0 14 14" refX="11" refY="7" markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M2.2,1.6 C2.2,1.6 11.2,6.2 11.8,7 C11.2,7.8 2.2,12.4 2.2,12.4 L4.6,7 z" fill="var(--muted)" opacity=".4"/></marker>
     </defs>
     <g id="map-vp">${laneBands}${edgePaths}${nodeFO}</g>
   </svg>`;

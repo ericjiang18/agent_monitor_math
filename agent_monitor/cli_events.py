@@ -35,9 +35,23 @@ class CLIEventParser:
         # Closed per-turn records -> one Monitor agent node each.
         self.turns: list[dict[str, Any]] = []
         self._cur: dict[str, Any] = self._new_turn()
+        # Tool telemetry for the console's live panel.
+        self.tool_events: list[dict[str, str]] = []
+        self.tool_calls = 0
 
     def _new_turn(self) -> dict[str, Any]:
-        return {"items": [], "kinds": set(), "detail": [], "thinking": []}
+        return {"items": [], "kinds": set(), "detail": [], "thinking": [], "tools": []}
+
+    def live_state(self) -> dict[str, Any]:
+        """Model + recent tool activity, mirrored into the run record."""
+        return {
+            "engine": self.engine,
+            "model": self.usage.get("model"),
+            "tools_active": [self.tool_events[-1]["name"]] if self.tool_events else [],
+            "tools_recent": self.tool_events[-10:],
+            "tool_calls": self.tool_calls,
+            "iteration": len(self.turns) + 1,
+        }
 
     # ── feeding ──────────────────────────────────────────────────────────
 
@@ -90,17 +104,17 @@ class CLIEventParser:
                 self._close_turn()
             elif it == "command_execution":
                 self._log(f"exec · {_clip(item.get('command'), 120)}")
-                self._item("exec", f"$ {item.get('command')}\n{item.get('aggregated_output') or ''}")
+                self._item("exec", f"$ {item.get('command')}\n{item.get('aggregated_output') or ''}", tool="shell")
                 self._close_turn()
             elif it == "file_change":
                 changes = item.get("changes") or []
                 paths = ", ".join(c.get("path", "?") for c in changes[:3])
                 self._log(f"edit · {paths}")
-                self._item("edit", f"edited: {paths}")
+                self._item("edit", f"edited: {paths}", tool="edit")
                 self._close_turn()
             elif it in {"mcp_tool_call", "web_search", "todo_list"}:
                 self._log(f"{it} · {_clip(item.get('text') or item.get('query') or '', 100)}")
-                self._item("tool", f"{it}: {item.get('text') or item.get('query') or ''}")
+                self._item("tool", f"{it}: {item.get('text') or item.get('query') or ''}", tool=str(it))
                 self._close_turn()
             elif it == "error":
                 self._log(f"error · {_clip(item.get('message'))}")
@@ -146,7 +160,7 @@ class CLIEventParser:
                     inp = block.get("input") or {}
                     hint = inp.get("command") or inp.get("file_path") or inp.get("pattern") or ""
                     self._log(f"tool · {name} {_clip(str(hint), 90)}")
-                    self._item("tool", f"{name} · {hint}")
+                    self._item("tool", f"{name} · {hint}", tool=str(name))
             u = msg.get("usage") or {}
             # Each assistant message is one model call -> one turn/node.
             self._close_turn(
@@ -218,7 +232,7 @@ class CLIEventParser:
                             ensure_ascii=False,
                         )[:400]
                         self._log(f"tool · {name}")
-                        self._item("tool", f"{name}({args})")
+                        self._item("tool", f"{name}({args})", tool=str(name))
                 u = msg.get("usage") or {}
                 cost = (u.get("cost") or {}).get("total") or 0
                 total_cost += float(cost)
@@ -305,7 +319,7 @@ class CLIEventParser:
                 summary = ev.get("summary") or ""
                 action = ev.get("action") or {}
                 detail = summary or json.dumps(action, ensure_ascii=False)[:600]
-                self._item("tool", f"{tool} · {detail}")
+                self._item("tool", f"{tool} · {detail}", tool=str(tool))
                 self._log(f"tool · {tool} {_clip(detail, 90)}")
                 self._close_turn()
             elif kind == "MessageEvent" and (ev.get("source") or "") == "agent":
@@ -340,9 +354,15 @@ class CLIEventParser:
 
     # ── per-turn agent nodes ─────────────────────────────────────────────
 
-    def _item(self, kind: str, text: str) -> None:
+    def _item(self, kind: str, text: str, tool: str | None = None) -> None:
         self._cur["kinds"].add(kind)
         self._cur["detail"].append(text.strip())
+        if tool:
+            name = str(tool).strip()[:60]
+            self._cur.setdefault("tools", []).append(name)
+            self.tool_calls += 1
+            self.tool_events.append({"name": name, "args": text.strip()[:160], "state": "done"})
+            del self.tool_events[:-20]
 
     def _close_turn(self, *, input_tokens: int = 0, output_tokens: int = 0,
                     cache_read: int = 0, cache_write: int = 0,
@@ -362,6 +382,7 @@ class CLIEventParser:
         self.turns.append(
             {
                 "kinds": set(cur["kinds"]),
+                "tools": list(cur.get("tools") or []),
                 "detail": "\n\n".join(cur["detail"])[:8000],
                 "thinking": "\n\n".join(cur["thinking"])[:8000],
                 "input_tokens": input_tokens,
@@ -402,6 +423,7 @@ class CLIEventParser:
                     "output": t["detail"] or f"(model call · {label})",
                     "output_source": f"{self.engine} stream-json",
                     "status": "finished",
+                    "tools": t.get("tools") or [],
                     "model": t.get("model"),
                     "input_tokens": t["input_tokens"] or None,
                     "output_tokens": t["output_tokens"] or None,

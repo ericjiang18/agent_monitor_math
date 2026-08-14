@@ -209,9 +209,9 @@ button.start:disabled { opacity: .4; }
   border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .proof-toolbar button:disabled { opacity: .4; cursor: not-allowed; }
-.proof-body { flex: 1; min-height: 0; position: relative; overflow: hidden; display: flex; flex-direction: column; background: color-mix(in srgb, var(--bg2) 30%, var(--bg)); }
-.pdf-pages { flex: 1; overflow-y: auto; padding: 24px; display: none; flex-direction: column; align-items: center; gap: 18px; }
-.md-view { flex: 1; overflow-y: auto; padding: 28px 8%; display: none; background: var(--bg); }
+.proof-body { flex: 1; min-height: 0; position: relative; overflow-y: auto; background: color-mix(in srgb, var(--bg2) 30%, var(--bg)); }
+.pdf-pages { padding: 24px; display: none; flex-direction: column; align-items: center; gap: 18px; }
+.md-view { padding: 28px 8%; display: none; background: var(--bg); }
 .md-view .md-doc { max-width: 760px; margin: 0 auto; font-size: 14.5px; line-height: 1.75; color: var(--fg); }
 .md-view h1, .md-view h2, .md-view h3 { margin: 1.2em 0 .5em; line-height: 1.3; }
 .md-view h1 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
@@ -242,7 +242,7 @@ button.start:disabled { opacity: .4; }
 }
 .sel-pop:hover { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
 .proof-empty {
-  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center;
   color: var(--dim); font-size: 13px; text-align: center; padding: 24px; line-height: 1.7; gap: 8px;
 }
 
@@ -261,6 +261,31 @@ button.start:disabled { opacity: .4; }
 .chat-status.done .cdot { background: var(--ok); animation: none; }
 .chat-status.err .cdot { background: var(--err); animation: none; }
 .chat-status .detail { font-weight: 400; color: var(--dim); font-family: var(--mono); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* live telemetry: which model is answering and which tools it is touching */
+.chat-live { display: none; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.chat-live.on { display: flex; }
+.lv { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-family: var(--mono);
+  padding: 2.5px 7px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); }
+.lv.model { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); font-weight: 700; }
+.lv.sub { border-color: color-mix(in srgb, #a855f7 45%, transparent); color: #a855f7; }
+.lv.tool { background: color-mix(in srgb, #eab308 12%, var(--panel)); border-color: color-mix(in srgb, #eab308 40%, transparent); }
+.lv.tool.running { animation: pulse 1.3s infinite; border-color: color-mix(in srgb, #eab308 75%, transparent); }
+.lv.count { color: var(--dim); }
+/* citations extracted from proof.md */
+.cite-strip { border-top: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
+.cite-strip.collapsed .cite-body { display: none; }
+.cite-body { max-height: 190px; overflow-y: auto; padding: 4px 12px 10px; }
+.cite-row { display: flex; gap: 7px; align-items: baseline; font-size: 11px; padding: 4px 0; border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent); }
+.cite-row:last-child { border-bottom: 0; }
+.cite-row .num { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+.cite-row .txt { color: var(--muted); line-height: 1.45; }
+.cite-row .txt a { color: var(--accent); }
+.cite-row .tag { font-size: 9px; font-family: var(--mono); padding: 1px 5px; border-radius: 4px; flex-shrink: 0;
+  background: color-mix(in srgb, var(--warn) 18%, var(--panel)); color: var(--warn); }
+.cite-row .tag.ok { background: color-mix(in srgb, var(--ok) 15%, var(--panel)); color: var(--ok); }
+.dag-node .cites { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.dag-node .cites span { font-size: 9px; font-family: var(--mono); padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: var(--accent); }
 .chat-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 .chat-msg { max-width: 95%; font-size: 13px; line-height: 1.5; }
 .chat-msg.user { align-self: flex-end; background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); padding: 10px 12px; border-radius: 14px 14px 4px 14px; }
@@ -294,6 +319,25 @@ button.start:disabled { opacity: .4; }
 .prompt-strip.collapsed .proc-body { display: none; }
 .prompt-strip .proc-body { max-height: 220px; color: var(--muted); font-size: 10.5px; }
 
+/* Inline GPT-style user message containing the raw problem. */
+.problem-message-row {
+  display: flex; justify-content: flex-end; padding: 12px 16px;
+  background: var(--bg2);
+}
+.problem-message {
+  width: min(82%, 720px);
+  border: 1px solid var(--border); border-radius: 18px 18px 5px 18px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent));
+  color: var(--fg); padding: 12px 14px;
+}
+.problem-message-hdr {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 8px;
+  color: var(--dim); font-size: 11px; font-weight: 700;
+}
+.problem-message-hdr .n { margin-left: auto; font-family: var(--mono); font-size: 10px; font-weight: 400; }
+.problem-message-body { white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.7; }
+.problem-message-body .katex-display { overflow-x: auto; padding: 6px 0; margin: .6em 0; }
+
 .chat-compose {
   padding: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
 }
@@ -312,16 +356,150 @@ button.start:disabled { opacity: .4; }
 .chat-compose .hint { font-size: 10px; color: var(--dim); }
 
 #view-monitor { flex: 1; display: none; min-height: 0; overflow-y: auto; }
-#view-monitor iframe { width: 100%; min-height: 720px; height: 1200px; border: 0; display: block; }
+#view-monitor iframe { width: 100%; min-height: 360px; height: 480px; border: 0; display: block; }
 
 /* Proof-graph (DAG) view */
 #view-dag { flex: 1; display: none; flex-direction: column; min-height: 0; }
+/* Lean verification view */
+#view-lean { flex: 1; display: none; flex-direction: column; min-height: 0; }
+.lean-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0;
+}
+.lean-toolbar .title { font-size: 13px; font-weight: 700; }
+.lean-toolbar .sub { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.lean-toolbar select {
+  font: inherit; font-size: 11px; font-family: var(--mono); padding: 4px 8px;
+  border-radius: 6px; border: 1px solid var(--border); background: var(--bg2); color: var(--fg);
+}
+.lean-toolbar button {
+  font: inherit; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: var(--accent); cursor: pointer;
+}
+.lean-toolbar button:disabled { opacity: .5; cursor: default; }
+.lean-badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); font-family: var(--mono);
+}
+.lean-badge.verified { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, var(--panel)); }
+.lean-badge.failed { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent);
+  background: color-mix(in srgb, var(--err) 12%, var(--panel)); }
+.lean-badge.incomplete { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.lean-badge.compiled { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.lean-badge.unfaithful { color: var(--err); border-color: color-mix(in srgb, var(--err) 60%, transparent);
+  background: color-mix(in srgb, var(--err) 18%, var(--panel)); }
+.lean-badge.running { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel)); animation: leanPulse 1.4s ease-in-out infinite; }
+@keyframes leanPulse { 0%,100%{ opacity: 1; } 50%{ opacity: .45; } }
+.lean-badge.stopped, .lean-badge.toolchain_missing, .lean-badge.none { color: var(--dim); }
+.lean-toolbar .btn-secondary {
+  border-color: var(--border); background: var(--panel); color: var(--muted);
+}
+.lean-toolbar .btn-secondary:hover { color: var(--fg); border-color: color-mix(in srgb, var(--fg) 25%, var(--border)); }
+.lean-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; }
+@media (max-width: 900px){ .lean-body { grid-template-columns: 1fr; } }
+.lean-code-pane, .lean-side {
+  min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border);
+}
+.lean-side { border-right: 0; overflow: hidden; }
+.lean-pane-hdr {
+  padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--dim);
+  border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: baseline; flex-shrink: 0;
+}
+.lean-pane-hdr .n { font-family: var(--mono); font-weight: 500; margin-left: auto; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lean-code {
+  flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 12px 14px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre; color: var(--fg);
+  background: var(--bg2); border: 0; resize: none; width: 100%; box-sizing: border-box;
+}
+.lean-empty {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; color: var(--dim); font-size: 13px; text-align: center; padding: 24px;
+}
+.lean-checker-block {
+  flex: 0 1 42%; min-height: 140px; display: flex; flex-direction: column;
+  border-bottom: 1px solid var(--border);
+}
+.lean-notes { padding: 10px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); line-height: 1.45; flex-shrink: 0; }
+.lean-log {
+  flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 12px 14px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.45; white-space: pre-wrap; color: var(--muted);
+  background: var(--bg2);
+}
+.lean-attempts { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--dim); flex-shrink: 0; }
+.lean-attempts span { margin-right: 10px; font-family: var(--mono); }
+.lean-cite-block { flex: 0 0 auto; max-height: 28%; min-height: 0; display: none; flex-direction: column; border-bottom: 1px solid var(--border); background: var(--panel); }
+.lean-cite-block.on { display: flex; }
+.lean-cite-block.collapsed .lean-cite-body { display: none; }
+.lean-cite-body { overflow-y: auto; padding: 4px 12px 10px; min-height: 0; }
+/* Citations live under the declaration they belong to, not in one list up top. */
+.cite-decl { margin: 8px 0 2px; display: flex; align-items: baseline; gap: 6px; }
+.cite-decl .decl-name {
+  font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--fg);
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+}
+.cite-decl .decl-name:hover { color: var(--accent); text-decoration: underline; }
+.cite-decl .decl-kind { font-size: 10px; color: var(--dim); font-family: var(--mono); }
+.cite-decl .decl-line { font-size: 10px; color: var(--dim); font-family: var(--mono); margin-left: auto; }
+.lean-cite-body .cite-row { padding-left: 10px; border-left: 1px solid var(--border); margin-left: 2px; }
+.lean-fid-block { flex: 0 0 auto; max-height: 32%; min-height: 0; display: none; flex-direction: column; border-bottom: 1px solid var(--border); background: var(--panel); }
+.lean-fid-block.on { display: flex; }
+.lean-fid-block.collapsed .lean-fid-body { display: none; }
+.lean-fid-body { overflow-y: auto; padding: 6px 12px 10px; min-height: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.lean-fid-body .verdict { color: var(--fg); margin-bottom: 6px; }
+.lean-fid-body ul { margin: 4px 0 0; padding-left: 18px; }
+.lean-fid-body li { margin-bottom: 4px; }
+.lean-fid-body .flag-line { background: none; border: 0; padding: 0; margin-left: 4px; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.lean-fid-body .flag-line:hover { color: var(--accent); text-decoration: underline; }
+.sev-chip { font-size: 10px; font-weight: 700; font-family: var(--mono); padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); }
+.sev-chip.major { color: var(--err); border-color: color-mix(in srgb, var(--err) 50%, transparent); background: color-mix(in srgb, var(--err) 12%, var(--panel)); }
+.sev-chip.minor { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.sev-chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); background: color-mix(in srgb, var(--ok) 12%, var(--panel)); }
+.lean-chat-block {
+  flex: 1 1 40%; min-height: 160px; display: flex; flex-direction: column; min-width: 0;
+}
+.lean-chat-msgs {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg2);
+}
+.lean-chat-msgs .chat-msg { max-width: 100%; font-size: 12px; }
+.lean-chat-compose {
+  border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0;
+  background: var(--panel);
+}
+.lean-chat-compose textarea {
+  width: 100%; min-height: 56px; max-height: 120px; resize: vertical; box-sizing: border-box;
+  font: inherit; font-size: 12px; line-height: 1.4; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg2); color: var(--fg);
+}
+.lean-chat-compose .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.lean-chat-compose .hint { font-size: 10px; color: var(--dim); }
+.lean-chat-compose button {
+  font: inherit; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: var(--accent); cursor: pointer;
+}
+.lean-chat-compose button:disabled { opacity: .5; cursor: default; }
 .dag-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
 .dag-toolbar .title { font-weight: 700; font-size: 13px; }
 .dag-toolbar .sub { font-size: 11px; color: var(--dim); font-family: var(--mono); }
 .dag-toolbar select { background: var(--panel2); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; max-width: 220px; }
 .dag-toolbar button { padding: 7px 14px; border: 0; border-radius: 8px; background: var(--grad); color: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
 .dag-toolbar button:disabled { opacity: .55; cursor: default; }
+.dag-mode {
+  display: inline-flex; align-items: center; background: var(--bg2);
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px; gap: 0;
+}
+.dag-mode button {
+  background: transparent; color: var(--dim); border: 0; border-radius: 999px;
+  padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.dag-mode button.on { background: var(--grad); color: #fff; }
 .dag-scroll { flex: 1; overflow: auto; position: relative; background: var(--bg); }
 .dag-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 90px 20px; line-height: 1.9; }
 .dag-stage { position: relative; margin: 0 auto; }
@@ -333,6 +511,36 @@ button.start:disabled { opacity: .4; }
 .dag-node .lb { font-size: 12px; font-weight: 650; line-height: 1.35; }
 .dag-node .stm { font-size: 11px; color: var(--dim); line-height: 1.5; margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .dag-node.expanded .stm { display: block; -webkit-line-clamp: unset; color: var(--fg); }
+.dag-node .cites { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.dag-node .cites span { font-size: 9.5px; font-family: var(--mono); padding: 1px 6px; border-radius: 4px;
+  border: 1px solid var(--border); color: var(--dim); background: var(--bg2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Formal · Lean: code-card look */
+.dag-stage.lean { background:
+  linear-gradient(180deg, color-mix(in srgb, #0f172a 4%, transparent), transparent 120px); }
+.dag-stage.lean .dag-node {
+  background: color-mix(in srgb, #0f172a 6%, var(--panel));
+  border-color: color-mix(in srgb, var(--border) 80%, #334155);
+  font-family: var(--mono);
+}
+.dag-stage.lean .dag-node .kd {
+  font-family: var(--mono); letter-spacing: .02em; text-transform: none; font-weight: 700;
+  background: color-mix(in srgb, var(--kc, #64748b) 85%, #0f172a);
+}
+.dag-stage.lean .dag-node .lb {
+  font-family: var(--mono); font-size: 12.5px; font-weight: 700; color: #38bdf8;
+}
+.dag-stage.lean .dag-node .stm {
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.45; white-space: pre-wrap;
+  color: color-mix(in srgb, var(--fg) 78%, #94a3b8); word-break: break-word;
+}
+.dag-stage.lean .dag-node.expanded .stm { color: var(--fg); }
+.dag-stage.lean .dag-node .cites span {
+  color: #a78bfa; border-color: color-mix(in srgb, #a78bfa 35%, var(--border));
+  background: color-mix(in srgb, #a78bfa 8%, var(--panel));
+}
+.dag-stage.lean .lean-kw { color: #c084fc; font-weight: 700; }
+.dag-stage.lean .lean-op { color: #94a3b8; }
+.dag-stage.lean .lean-id { color: #7dd3fc; }
 .dag-edge { fill: none; stroke: color-mix(in srgb, var(--fg) 30%, transparent); stroke-width: 1.4; }
 .dag-edge.contradicts { stroke: #ef4444; stroke-dasharray: 5 3; }
 .dag-edge-label { font-size: 9px; fill: color-mix(in srgb, var(--fg) 45%, transparent); font-family: var(--mono); }
@@ -403,6 +611,12 @@ button.start:disabled { opacity: .4; }
 .modal-foot button, .prov-card button { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); cursor: pointer; color: var(--fg); }
 .modal-foot button.primary { background: var(--grad); color: #fff; border: 0; }
 .verify-ok { color: var(--ok); font-size: 11px; } .verify-err { color: var(--err); font-size: 11px; }
+.codex-url-box { font-size: 12px; word-break: break-all; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; }
+.codex-url-box a { color: #6aa9ff; }
+.codex-code-box { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; }
+.codex-code-box .code { font-family: ui-monospace, monospace; font-size: 18px; font-weight: 600; letter-spacing: 1px; }
+.codex-code-box button { padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); cursor: pointer; color: var(--fg); font-size: 11px; }
+.codex-log { font-family: ui-monospace, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow-y: auto; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--dim); margin-top: 8px; }
 ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
 </style>
 </head>
@@ -465,6 +679,7 @@ button.start:disabled { opacity: .4; }
           <button data-view="conversation">Conversation</button>
           <button data-view="monitor">Monitor</button>
           <button data-view="dag">DAG</button>
+          <button data-view="lean">Lean Verification</button>
         </div>
         <div class="session-side">
           <button class="sess-btn stop" id="sess-stop">■ Stop</button>
@@ -482,20 +697,37 @@ button.start:disabled { opacity: .4; }
                 <button id="pdf-dl-btn" disabled>⬇ Download</button>
               </div>
               <div class="prompt-strip collapsed" id="prompt-strip" style="display:none">
-                <div class="proc-hdr" id="prompt-toggle">
-                  <span class="t">Prompt</span>
+                <div class="proc-hdr" id="prompt-toggle" title="The full text sent to the engine, including the operator persona/system instructions">
+                  <span class="t">Full engine prompt</span>
                   <span class="n" id="prompt-len"></span>
                   <span class="chev">▾</span>
                 </div>
                 <pre class="proc-body" id="prompt-body"></pre>
               </div>
-              <div class="proof-body">
+              <div class="proof-body" id="proof-body">
+                <div class="problem-message-row" id="problem-message-row" style="display:none">
+                  <div class="problem-message" id="problem-message">
+                    <div class="problem-message-hdr">
+                      <span>Problem</span>
+                      <span class="n" id="problem-len"></span>
+                    </div>
+                    <div class="problem-message-body" id="problem-message-body"></div>
+                  </div>
+                </div>
                 <div class="proof-empty" id="proof-empty">
                   <div style="font-size:28px;opacity:.4">∎</div>
                   <div>Proof preview will appear here.</div>
                 </div>
                 <div id="pdf-pages" class="pdf-pages"></div>
                 <div id="md-view" class="md-view"></div>
+              </div>
+              <div class="cite-strip collapsed" id="cite-strip" style="display:none">
+                <div class="proc-hdr" id="cite-toggle">
+                  <span class="t">Citations</span>
+                  <span class="n" id="cite-count"></span>
+                  <span class="chev">▾</span>
+                </div>
+                <div class="cite-body" id="cite-body"></div>
               </div>
             </div>
             <div class="chat-panel">
@@ -507,6 +739,7 @@ button.start:disabled { opacity: .4; }
                   <span class="stage" id="chat-stage"></span>
                   <span class="detail" id="chat-detail"></span>
                 </div>
+                <div class="chat-live" id="chat-live"></div>
               </div>
               <div class="chat-msgs" id="chat-msgs"></div>
               <div class="proc-log" id="proc-log">
@@ -531,13 +764,17 @@ button.start:disabled { opacity: .4; }
           <div class="convo-col" id="convo-col"></div>
         </div>
         <div id="view-monitor">
-          <iframe id="monitor-frame" src="/monitor"></iframe>
+          <iframe id="monitor-frame" src=""></iframe>
         </div>
         <div id="view-dag">
           <div class="dag-toolbar">
             <span class="title">Proof graph</span>
             <span class="sub" id="dag-meta">—</span>
             <span style="flex:1"></span>
+            <div class="dag-mode" id="dag-mode">
+              <button type="button" class="on" data-mode="informal">Informal</button>
+              <button type="button" data-mode="formal">Formal · Lean</button>
+            </div>
             <span style="font-size:11px;color:var(--dim)">Model</span>
             <select id="dag-model"></select>
             <button id="dag-gen">◆ Generate</button>
@@ -545,12 +782,70 @@ button.start:disabled { opacity: .4; }
           <div class="dag-scroll" id="dag-scroll">
             <div class="dag-empty" id="dag-empty">
               <div style="font-size:28px;opacity:.4">◆</div>
-              <div>No proof graph yet.<br/>Pick a small model and press <b>Generate</b> — it reads the proof and extracts the logical DAG.</div>
+              <div>No proof graph yet.<br/>Pick Informal or Formal · Lean, choose a model, then press <b>Generate</b>.</div>
             </div>
             <div class="dag-stage" id="dag-stage" style="display:none">
               <svg id="dag-svg"></svg>
               <div id="dag-nodes"></div>
             </div>
+          </div>
+        </div>
+        <div id="view-lean">
+          <div class="lean-toolbar">
+            <span class="title">Lean Verification</span>
+            <span class="lean-badge none" id="lean-badge">—</span>
+            <span class="sub" id="lean-meta">—</span>
+            <span style="flex:1"></span>
+            <span style="font-size:11px;color:var(--dim)">Model</span>
+            <select id="lean-model"></select>
+            <button class="btn-secondary" id="lean-compile" title="Compile the current Proof.lean (no LLM)">Compile</button>
+            <button class="btn-secondary" id="lean-check" title="Typecheck and flag remaining sorry/admit">Check</button>
+            <button class="btn-secondary" id="lean-audit" title="Ask a model whether the Lean statement really is the problem's claim">Audit</button>
+            <select id="lean-engine" title="Coding agent that will iterate on Proof.lean with a real shell"></select>
+            <button class="btn-secondary" id="lean-harness" title="Run a coding agent in lean/ — it compiles, reads the errors and retries by itself">⚙ Harness</button>
+            <button id="lean-gen" title="Translate the informal proof into Lean 4, auto-repair, then check">∎ Verify</button>
+          </div>
+          <div class="lean-body" id="lean-body" style="display:none">
+            <div class="lean-code-pane">
+              <div class="lean-pane-hdr">Proof.lean <span class="n" id="lean-path"></span></div>
+              <textarea class="lean-code" id="lean-code" spellcheck="false" placeholder="Lean 4 source will appear here after Verify…"></textarea>
+            </div>
+            <div class="lean-side">
+              <div class="lean-checker-block">
+                <div class="lean-pane-hdr">Checker <span class="n" id="lean-tool-meta" title="Lean toolchain">—</span></div>
+                <div class="lean-notes" id="lean-notes" style="display:none"></div>
+                <pre class="lean-log" id="lean-log"></pre>
+                <div class="lean-attempts" id="lean-attempts"></div>
+              </div>
+              <div class="lean-fid-block" id="lean-fid-block">
+                <div class="lean-pane-hdr" id="lean-fid-toggle" style="cursor:pointer">
+                  Fidelity <span class="sev-chip ok" id="lean-fid-sev">ok</span>
+                  <span class="n" id="lean-fid-count"></span>
+                </div>
+                <div class="lean-fid-body" id="lean-fid-body"></div>
+              </div>
+              <div class="lean-cite-block collapsed" id="lean-cite-block">
+                <div class="lean-pane-hdr" id="lean-cite-toggle" style="cursor:pointer">
+                  Citations <span class="n" id="lean-cite-count"></span>
+                </div>
+                <div class="lean-cite-body cite-body" id="lean-cite-body"></div>
+              </div>
+              <div class="lean-chat-block">
+                <div class="lean-pane-hdr">Human in the loop <span class="n">guide the formalisation</span></div>
+                <div class="lean-chat-msgs" id="lean-chat-msgs"></div>
+                <div class="lean-chat-compose">
+                  <textarea id="lean-chat-input" placeholder="e.g. Discharge the sorry on line 43 using omega, or switch Int to Nat…"></textarea>
+                  <div class="row">
+                    <span class="hint">Enter to send · Shift+Enter newline</span>
+                    <button id="lean-chat-send">Send</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="lean-empty" id="lean-empty">
+            <div style="font-size:28px;opacity:.4">∎</div>
+            <div>No Lean check yet.<br/><b>Verify</b> translates the informal proof with one model call; <b>Harness</b> puts a coding agent in the <code>lean/</code> directory so it compiles and retries by itself.<br/>Then edit, <b>Compile</b>/<b>Check</b>, <b>Audit</b> the statement, or guide fixes in Human in the loop.</div>
           </div>
         </div>
       </div>
@@ -570,7 +865,7 @@ button.start:disabled { opacity: .4; }
 
 <div class="modal-backdrop" id="agent-modal">
   <div class="modal" style="width:min(860px,100%)">
-    <div class="modal-hdr"><div><h2>Agent</h2><p style="font-size:12px;color:var(--dim)">System prompt, skills &amp; memory — applies to the Hermes engine</p></div><button id="agent-close">✕</button></div>
+    <div class="modal-hdr"><div><h2>Agent</h2><p style="font-size:12px;color:var(--dim)">System prompt, skills &amp; memory — applied to every engine</p></div><button id="agent-close">✕</button></div>
     <div class="modal-body" id="agent-body"></div>
     <div class="modal-foot"><span id="agent-status" style="margin-right:auto;font-size:11px;color:var(--dim)"></span><button id="agent-cancel">Close</button></div>
   </div>
@@ -584,11 +879,12 @@ button.start:disabled { opacity: .4; }
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script>
 const THEME_KEY='proving-console-theme';
+const pcUrl=p=>(window.__pcUrl?window.__pcUrl(p):p);
 /* Session guard: any 401 from the API sends the user to /login. */
 const _fetch=window.fetch.bind(window);
 window.fetch=async(...a)=>{
   const r=await _fetch(...a);
-  if(r.status===401&&!String(a[0]).includes('/api/auth/'))location.href='/login';
+  if(r.status===401&&!String(a[0]).includes('/api/auth/'))location.href=pcUrl('/login');
   return r;
 };
 let ENGINES=[], SETTINGS=null, engine='hermes';
@@ -618,9 +914,11 @@ function setWorkspaceView(v){
   $('view-conversation').style.display=v==='conversation'?'block':'none';
   $('view-monitor').style.display=v==='monitor'?'block':'none';
   $('view-dag').style.display=v==='dag'?'flex':'none';
+  $('view-lean').style.display=v==='lean'?'flex':'none';
   if(v==='monitor'){ syncThemeToMonitor(document.documentElement.dataset.theme||'dark'); syncRunToMonitor(runId); }
   if(v==='conversation') refreshConversation(true);
   if(v==='dag') refreshDagView();
+  if(v==='lean') refreshLeanView();
 }
 $('go-home').onclick=goLanding;
 $('new-proof-btn').onclick=()=>{ runId=null; jobId=null; stopPolling(); goLanding(); $('problem-text').focus(); };
@@ -632,20 +930,23 @@ function syncThemeToMonitor(t){ try{$('monitor-frame')?.contentWindow?.postMessa
 function syncRunToMonitor(rid){ try{$('monitor-frame')?.contentWindow?.postMessage({type:'proving-console-run',run_id:rid||''},'*');}catch(e){} }
 applyTheme(localStorage.getItem(THEME_KEY)||(matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));
 $('theme-btn').onclick=()=>applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
-window.addEventListener('message',e=>{ if(e.data?.type==='proving-console-resize'&&e.data.height){ const f=$('monitor-frame'); if(f)f.style.height=Math.max(720,Number(e.data.height))+'px'; }});
+window.addEventListener('message',e=>{ if(e.data?.type==='proving-console-resize'&&e.data.height){ const f=$('monitor-frame'); if(f)f.style.height=Math.max(360,Number(e.data.height))+'px'; }});
 $('monitor-frame').onload=()=>{ syncThemeToMonitor(document.documentElement.dataset.theme||'dark'); syncRunToMonitor(runId); };
+(function(){ const f=$('monitor-frame'); if(f&&!f.getAttribute('src'))f.src=pcUrl('/monitor'); })();
 
 /* ── settings (compact) ── */
 function currentModel(){ const s=$('model-select').value; return s==='__custom__'?$('model-custom').value.trim():s||SETTINGS?.default_model||''; }
 async function loadSettings(){ try{ SETTINGS=await(await fetch('/api/settings')).json(); const sel=$('model-select'); const m=[...new Set([...(SETTINGS.model_presets||[]),SETTINGS.default_model].filter(Boolean))]; sel.innerHTML=m.map(x=>`<option value="${x}">${x}</option>`).join('')+'<option value="__custom__">custom…</option>'; if(SETTINGS.default_model&&m.includes(SETTINGS.default_model))sel.value=SETTINGS.default_model; const ss=$('subagent-model-select'); if(ss)ss.innerHTML='<option value="">same as main</option>'+m.map(x=>`<option value="${x}">${x}</option>`).join('');
-  const ds=$('dag-model'); if(ds){ ds.innerHTML=m.map(x=>`<option value="${x}">${x}</option>`).join(''); const small=m.find(x=>/mini|flash|haiku|nano|lite/i.test(x)); if(small)ds.value=small; } }catch(e){} }
+  const ds=$('dag-model'); if(ds){ ds.innerHTML='<option value="codex">◆ Codex CLI (your account)</option>'+m.map(x=>`<option value="${x}">${x}</option>`).join(''); const small=m.find(x=>/mini|flash|haiku|nano|lite/i.test(x)); if(small)ds.value=small; }
+  const ls=$('lean-model'); if(ls){ ls.innerHTML=m.map(x=>`<option value="${x}">${x}</option>`).join(''); const strong=m.find(x=>/sol|opus|sonnet|pro|terra|luna|5\.5|5\.6/i.test(x))||m[0]; if(strong)ls.value=strong; } }catch(e){} }
 function subagentModel(){ const on=$('subagents-check')?.checked!==false; if(!on)return null; return $('subagent-model-select')?.value||null; }
 function syncSubagentPick(){ const p=$('subagent-model-pick'); if(p)p.style.display=($('subagents-check')?.checked!==false)?'':'none'; }
 function openSettings(){ $('settings-modal').classList.add('open'); loadSettings().then(renderSettingsModal); }
-function closeSettings(){ $('settings-modal').classList.remove('open'); }
+function closeSettings(){ stopCodexPoll(); $('settings-modal').classList.remove('open'); }
 function renderSettingsModal(){
   if(!SETTINGS){$('settings-body').textContent='Failed to load.';return;}
   $('settings-body').innerHTML=`<div class="general-row"><label>Model<input id="set-model" value="${SETTINGS.default_model||''}"/></label><label>Max iter<input id="set-max-iter" type="number" value="${SETTINGS.max_iterations||40}"/></label></div>`+
+    `<div class="prov-card" id="codex-card"><b>Codex Account</b></div>`+
     (SETTINGS.providers||[]).map(p=>`<div class="prov-card"><b>${p.label}</b> <span style="font-size:10px;color:var(--dim)">${p.api_key_set?'✓ set':'not set'}</span><div class="prov-grid" style="margin-top:8px"><label>${p.key_var}<input type="password" data-key="${p.key_var}" placeholder="sk-…"/></label><label>${p.base_var||'Base'}<input data-key="${p.base_var||''}" value="${p.base_url||''}"/></label></div><button data-verify="${p.id}" style="margin-top:8px">Verify</button> <span id="verify-${p.id}"></span></div>`).join('');
   $('settings-body').querySelectorAll('[data-verify]').forEach(btn=>btn.onclick=async()=>{
     const pid=btn.dataset.verify; const card=btn.closest('.prov-card');
@@ -653,6 +954,54 @@ function renderSettingsModal(){
     const r=await fetch('/api/settings/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:pid,api_key:card.querySelector(`[data-key="${spec.key_var}"]`)?.value||undefined})});
     const d=await r.json(); $('verify-'+pid).className=d.ok?'verify-ok':'verify-err'; $('verify-'+pid).textContent=d.ok?'✓ OK':'✗ '+(d.error||'fail');
   });
+  refreshCodexCard();
+}
+
+/* ── Codex Account card: ChatGPT-account (device-auth) login for the codex engine ── */
+let CODEX_POLL_TIMER=null;
+function stopCodexPoll(){ if(CODEX_POLL_TIMER){clearInterval(CODEX_POLL_TIMER);CODEX_POLL_TIMER=null;} }
+function codexCardBody(st){
+  if(!st.codex_installed){
+    return `<div style="font-size:12px;color:var(--dim)">Codex CLI not installed on the server (<code>npm install -g @openai/codex</code>).</div>`;
+  }
+  if(st.status==='running'){
+    return `<div style="font-size:12px;color:var(--dim)">1. Open this link on any device (phone or laptop is fine):</div>`+
+      (st.url?`<div class="codex-url-box"><a href="${st.url}" target="_blank" rel="noopener">${st.url}</a></div>`
+        :`<div style="font-size:12px;color:var(--dim);margin:6px 0">Starting sign-in…</div>`)+
+      (st.code?`<div style="font-size:12px;color:var(--dim);margin-top:10px">2. Sign in, then enter this code when asked:</div>`+
+        `<div class="codex-code-box"><span class="code">${st.code}</span><button id="codex-copy-btn" data-code="${st.code}">Copy</button></div>`:'')+
+      `<div class="codex-log">${(st.output||'…').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`+
+      `<button id="codex-cancel-btn" style="margin-top:8px">Cancel</button>`;
+  }
+  if(st.connected){
+    return `<div class="verify-ok">✓ Connected — your codex engine runs use this ChatGPT/OpenAI account (subscription usage) instead of API billing. Only visible to you.</div>`+
+      `<button id="codex-logout-btn" style="margin-top:8px">Disconnect</button>`;
+  }
+  return (st.error?`<div class="verify-err">✗ ${st.error}</div>`:'')+
+    `<div style="font-size:12px;color:var(--dim);margin-top:${st.error?'6px':'0'}">Not connected — your codex engine runs bill against your OPENAI_API_KEY. Connect your own ChatGPT/OpenAI account to use its included Codex usage instead. This is private to your account.</div>`+
+    `<button id="codex-connect-btn" style="margin-top:8px">Connect via ChatGPT</button>`;
+}
+function renderCodexCard(st){
+  const el=$('codex-card'); if(!el)return;
+  const badge=st.status==='running'?'connecting…':(st.connected?'✓ connected':'not connected');
+  el.innerHTML=`<b>Codex Account</b> <span style="font-size:10px;color:var(--dim)">${badge}</span><div style="font-size:11px;color:var(--dim);margin-top:2px">Private to your account — other users can't see or use this login.</div><div style="margin-top:8px">${codexCardBody(st)}</div>`;
+  const c=$('codex-connect-btn'); if(c)c.onclick=async()=>{ renderCodexCard(await(await fetch('/api/settings/codex/login/start',{method:'POST'})).json()); startCodexPoll(); };
+  const x=$('codex-cancel-btn'); if(x)x.onclick=async()=>{ stopCodexPoll(); await fetch('/api/settings/codex/login/cancel',{method:'POST'}); refreshCodexCard(); };
+  const o=$('codex-logout-btn'); if(o)o.onclick=async()=>{ if(!confirm('Disconnect your Codex account? Future codex runs will fall back to your API key until you reconnect.'))return; await fetch('/api/settings/codex/logout',{method:'POST'}); refreshCodexCard(); };
+  const cp=$('codex-copy-btn'); if(cp)cp.onclick=()=>{ navigator.clipboard?.writeText(cp.dataset.code||''); cp.textContent='Copied!'; setTimeout(()=>{cp.textContent='Copy';},1500); };
+}
+async function refreshCodexCard(){
+  try{ const st=await(await fetch('/api/settings/codex/status')).json(); renderCodexCard(st); if(st.status==='running')startCodexPoll(); }catch(e){}
+}
+function startCodexPoll(){
+  stopCodexPoll();
+  CODEX_POLL_TIMER=setInterval(async()=>{
+    try{
+      const st=await(await fetch('/api/settings/codex/login/poll')).json();
+      renderCodexCard(st);
+      if(st.status!=='running')stopCodexPoll();
+    }catch(e){ stopCodexPoll(); }
+  },1500);
 }
 async function saveSettings(){
   const updates={}; if($('set-model')?.value)updates.AGENT_MONITOR_MODEL=$('set-model').value.trim();
@@ -691,13 +1040,13 @@ function renderAgentCfg(){
   b.innerHTML=`
     <div class="prov-card">
       <b>System prompt (SOUL.md)</b>
-      <p style="font-size:11px;color:var(--dim);margin:4px 0 8px">Injected as the agent identity at the top of every Hermes run's system prompt. Leave empty to use the built-in default.</p>
+      <p style="font-size:11px;color:var(--dim);margin:4px 0 8px">Injected as the agent identity at the top of every run's system prompt. Hermes reads it natively; other engines receive it in their task prompt. Leave empty to use the built-in default.</p>
       <textarea id="ag-soul" rows="8" style="${ta}">${esc(AGENTCFG.system_prompt||'')}</textarea>
       <button id="ag-soul-save" style="margin-top:6px">Save system prompt</button>
     </div>
     <div class="prov-card">
       <b>Skills</b>
-      <p style="font-size:11px;color:var(--dim);margin:4px 0 8px">Each skill is a SKILL.md the agent can consult during runs. Untick "Include" to disable a skill without deleting it.</p>
+      <p style="font-size:11px;color:var(--dim);margin:4px 0 8px">Each skill is a SKILL.md the agent can consult during runs — enabled skills reach Codex / OpenClaude / OpenHands / DeepAgents too. Untick "Include" to disable one without deleting it.</p>
       ${skills}
       <div style="display:flex;gap:8px;margin-top:8px"><input id="ag-skill-name" placeholder="new-skill-name" style="flex:1;background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px"/><button id="ag-skill-add">Add skill</button></div>
     </div>
@@ -766,11 +1115,14 @@ async function loadRuns(){
 }
 
 function selectRun(rid,jid){
-  runId=rid; jobId=jid; lastProofMtime=0; lastChatKey=''; convoKey=''; convoOpen.clear(); dagRunKey=''; resetProofView(); loadRuns();
+  runId=rid; jobId=jid; lastProofMtime=0; lastChatKey=''; convoKey=''; convoOpen.clear(); dagRunKey=''; leanRunKey=''; leanDirty=false;
+  if(typeof leanPollTimer!=='undefined'&&leanPollTimer){ clearTimeout(leanPollTimer); leanPollTimer=null; }
+  resetProofView(); loadRuns();
   syncRunToMonitor(rid); loadChat(); $('chat-send').disabled=!rid;
   updateChatStatus(null);
   if(workspaceView==='conversation')refreshConversation(true);
   if(workspaceView==='dag')refreshDagView();
+  if(workspaceView==='lean')refreshLeanView();
   startPolling();
 }
 
@@ -810,6 +1162,7 @@ async function tick(){
       $('run-meta').textContent=`${run.run_id} · ${run.status} · $${Number(t.cost_usd||0).toFixed(2)}`;
       setPill(run.status,(run.status||'')+' · '+(run.engine||''));
       updateChatStatus(run);
+      updateProblemStrip(run);
       updatePromptStrip(run);
       if(workspaceView==='conversation')renderConversation(run);
       if(run.status==='finished'||run.status==='failed'||run.status==='stopped'){ await refreshProofPreview(true); stopPolling(); loadRuns(); loadChat(); return; }
@@ -848,9 +1201,100 @@ function updateChatStatus(run){
   else if(run.status==='stopped'){ box.className='chat-status on'; $('chat-stage').textContent='Stopped'; $('chat-detail').textContent=''; }
   else if(run.status==='failed'){ box.className='chat-status on err'; $('chat-stage').textContent='Failed'; $('chat-detail').textContent=detail; }
   else { box.className='chat-status on'; $('chat-stage').textContent=label+'…'; $('chat-detail').textContent=detail; }
+  updateLiveChips(run);
   updateSessionButtons(run.status);
   updateProcLog(run);
 }
+
+/* ── live telemetry chips: model + tools in flight ── */
+function updateLiveChips(run){
+  const box=$('chat-live'); if(!box)return;
+  const live=run?.live||{};
+  const agents=run?.agents||[]; const last=agents[agents.length-1];
+  const model=live.model||(last&&last.model!=='—'?last.model:null);
+  const running=run?.status==='running';
+  const chips=[];
+  if(model){
+    const asked=live.model_requested;
+    const tip=asked?'Requested model — this engine does not report the model it used, so its own config may override this':'Model answering this run';
+    chips.push(`<span class="lv model" title="${tip}">◆ ${escapeHtml(model)}${asked?' <span style="opacity:.6">(requested)</span>':''}</span>`);
+  }
+  if(live.subagents&&live.subagent_model)chips.push(`<span class="lv sub" title="Model used by spawned sub-agents">⑃ ${escapeHtml(live.subagent_model)}</span>`);
+  else if(live.subagents)chips.push(`<span class="lv sub" title="Sub-agents enabled, inheriting the main model">⑃ subagents</span>`);
+  const active=(live.tools_active||[]).slice(0,3);
+  if(running&&active.length){
+    for(const t of active)chips.push(`<span class="lv tool running" title="Tool running now">⚙ ${escapeHtml(t)}</span>`);
+  }else{
+    const recent=(live.tools_recent||[]).slice(-3).reverse();
+    const fallback=(last?.tools||[]).slice(0,3);
+    const names=recent.length?recent.map(r=>r.name):fallback;
+    for(const t of names)chips.push(`<span class="lv tool" title="Recent tool call">⚙ ${escapeHtml(t)}</span>`);
+  }
+  if(live.tool_calls)chips.push(`<span class="lv count" title="Tool calls so far">${live.tool_calls} tool calls</span>`);
+  if(live.iteration)chips.push(`<span class="lv count" title="Model call / iteration">iter ${live.iteration}</span>`);
+  box.innerHTML=chips.join('');
+  box.classList.toggle('on', chips.length>0);
+}
+
+/* ── citations: pull the References section out of proof.md ── */
+function extractCitations(text){
+  const src=String(text||'');
+  const lines=src.split('\n');
+  const headRe=/^\s*#{1,6}\s*(references|bibliography|sources|citations)\b/i;
+  let start=-1;
+  for(let i=0;i<lines.length;i++){ if(headRe.test(lines[i])){ start=i+1; break; } }
+  const body=[];
+  if(start>=0){
+    for(let i=start;i<lines.length;i++){
+      if(/^\s*#{1,6}\s/.test(lines[i]))break;  // next section ends the list
+      body.push(lines[i]);
+    }
+  }
+  const cited=new Set();
+  const inlineScope=start>=0?lines.slice(0,start-1).join('\n'):src;
+  for(const m of inlineScope.matchAll(/\[(\d{1,3})\]/g))cited.add(m[1]);
+  const out=[];
+  for(const raw of body){
+    const line=raw.trim().replace(/^[-*+]\s*/,'');
+    if(!line)continue;
+    const num=line.match(/^\[?(\d{1,3})\]?[.):\s]\s*(.+)$/);
+    if(num)out.push({num:num[1],text:num[2],used:cited.has(num[1])});
+    else if(out.length)out[out.length-1].text+=' '+line;  // wrapped entry
+    else out.push({num:'',text:line,used:true});
+  }
+  // Bare identifiers anywhere in the proof, so an unstructured write-up still
+  // surfaces something trackable.
+  if(!out.length){
+    const seen=new Set();
+    for(const m of src.matchAll(/(arxiv[:\s/]*\d{4}\.\d{4,5}(?:v\d+)?|doi[:\s]*10\.\d{4,9}\/[^\s)\],]+)/gi)){
+      const id=m[1].replace(/\s+/g,'');
+      if(seen.has(id.toLowerCase()))continue; seen.add(id.toLowerCase());
+      out.push({num:'',text:id,used:true});
+    }
+  }
+  return {items:out,inline:cited.size};
+}
+function linkifyCitation(s){
+  let h=escapeHtml(s);
+  h=h.replace(/arxiv[:\s]*(\d{4}\.\d{4,5}(?:v\d+)?)/gi,(m,id)=>`<a href="https://arxiv.org/abs/${id}" target="_blank" rel="noopener">arXiv:${id}</a>`);
+  h=h.replace(/doi[:\s]*(10\.\d{4,9}\/[^\s)\],&;]+)/gi,(m,id)=>`<a href="https://doi.org/${id}" target="_blank" rel="noopener">doi:${id}</a>`);
+  h=h.replace(/(?<!["=>])(https?:\/\/[^\s<)\]]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return h;
+}
+function renderCitations(text){
+  const strip=$('cite-strip'); if(!strip)return;
+  const {items,inline}=extractCitations(text);
+  if(!items.length){ strip.style.display='none'; return; }
+  strip.style.display='block';
+  const uncited=items.filter(i=>i.num&&!i.used).length;
+  $('cite-count').textContent=items.length+' refs'+(inline?' · '+inline+' cited inline':'')+(uncited?' · '+uncited+' unused':'');
+  $('cite-body').innerHTML=items.map(i=>{
+    const tag=i.num?(i.used?'<span class="tag ok">cited</span>':'<span class="tag">unused</span>'):'';
+    const flag=/uncited|self-derived/i.test(i.text)?'<span class="tag">flagged</span>':'';
+    return `<div class="cite-row"><span class="num">${i.num?'['+escapeHtml(i.num)+']':'•'}</span><span class="txt">${linkifyCitation(i.text)}</span>${flag||tag}</div>`;
+  }).join('');
+}
+$('cite-toggle').onclick=()=>$('cite-strip').classList.toggle('collapsed');
 
 function updateSessionButtons(status){
   $('sess-stop').classList.toggle('show', status==='running');
@@ -875,7 +1319,23 @@ function updateProcLog(run){
 }
 $('proc-toggle').onclick=()=>{ procCollapsed=!procCollapsed; $('proc-log').classList.toggle('collapsed',procCollapsed); };
 
-/* ── prompt strip: the exact prompt the engine was given ── */
+/* ── inline GPT-style problem message: raw user input, independently scrollable ── */
+let lastProblemText='';
+function updateProblemStrip(run){
+  const row=$('problem-message-row'); if(!row)return;
+  const text=String(run?.problem_text||'');
+  if(!text){ row.style.display='none'; lastProblemText=''; return; }
+  row.style.display='flex';
+  if(text===lastProblemText)return;
+  lastProblemText=text;
+  const body=$('problem-message-body');
+  body.textContent=text;
+  renderMathIn(body);
+  $('proof-body').scrollTop=0;
+  $('problem-len').textContent=text.length.toLocaleString()+' chars';
+}
+
+/* ── prompt strip: the full text sent to the engine (persona + instructions + problem) ── */
 let lastPromptText='';
 function updatePromptStrip(run){
   const strip=$('prompt-strip'); if(!strip)return;
@@ -896,7 +1356,7 @@ $('sess-stop').onclick=()=>{ if(runId)stopRun(runId); };
 $('sess-cont').onclick=()=>{ if(runId)continueRun(runId); };
 
 /* ── proof preview ── */
-function resetProofView(){ pdfRenderGen++; $('proof-label').textContent='—'; $('pdf-dl-btn').disabled=true; const p=$('pdf-pages'); p.style.display='none'; p.innerHTML=''; p.dataset.cur=''; const m=$('md-view'); m.style.display='none'; m.innerHTML=''; m.dataset.cur=''; $('proof-empty').style.display='flex'; lastPromptText=''; const ps=$('prompt-strip'); if(ps){ps.style.display='none';ps.classList.add('collapsed');} }
+function resetProofView(){ pdfRenderGen++; $('proof-label').textContent='—'; $('pdf-dl-btn').disabled=true; const p=$('pdf-pages'); p.style.display='none'; p.innerHTML=''; p.dataset.cur=''; const m=$('md-view'); m.style.display='none'; m.innerHTML=''; m.dataset.cur=''; $('proof-empty').style.display='flex'; lastPromptText=''; lastProblemText=''; const ps=$('prompt-strip'); if(ps){ps.style.display='none';ps.classList.add('collapsed');} const pr=$('problem-message-row'); if(pr)pr.style.display='none'; const cs=$('cite-strip'); if(cs){cs.style.display='none';cs.classList.add('collapsed');} const cl=$('chat-live'); if(cl){cl.innerHTML='';cl.classList.remove('on');} }
 function renderMathIn(el){ if(window.renderMathInElement){ try{ renderMathInElement(el,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false}); }catch(e){} } }
 async function showProofMd(url){
   $('proof-empty').style.display='none'; $('pdf-pages').style.display='none';
@@ -904,6 +1364,7 @@ async function showProofMd(url){
   try{
     let text=await(await fetch(url)).text();
     try{ const j=JSON.parse(text); if(j&&typeof j.content==='string')text=j.content; }catch(e){}
+    renderCitations(text);
     if(view.dataset.cur===text.length+':'+text.slice(0,80))return;
     view.dataset.cur=text.length+':'+text.slice(0,80);
     const html=window.marked?marked.parse(text,{mangle:false,headerIds:false}):('<pre>'+escapeHtml(text)+'</pre>');
@@ -1088,23 +1549,46 @@ async function refreshConversation(force){
 
 /* ── proof-graph (DAG) view: a small model distills the proof into a logical DAG ── */
 const DAG_KIND_COLOR={assumption:'#0ea5e9',definition:'#8b5cf6',lemma:'#a855f7',claim:'#3b82f6',case:'#eab308',step:'#64748b',contradiction:'#ef4444',conclusion:'#22c55e'};
+const LEAN_KIND_COLOR={variable:'#0ea5e9',axiom:'#0ea5e9',opaque:'#0ea5e9',def:'#8b5cf6',abbrev:'#8b5cf6',structure:'#8b5cf6',inductive:'#8b5cf6',instance:'#8b5cf6',lemma:'#a855f7',theorem:'#22c55e',have:'#64748b',obtain:'#64748b',refine:'#3b82f6',sorry:'#ef4444',case:'#eab308',False:'#ef4444'};
 let dagRunKey='';
+let dagMode='informal';
 function dagStatus(msg){ const m=$('dag-meta'); m.textContent=msg||'—'; }
+function formatLeanStm(s){
+  /* Light Lean keyword tint — keep identifiers readable as code, not prose. */
+  return escapeHtml(s||'')
+    .replace(/\b(theorem|lemma|def|abbrev|axiom|opaque|variable|have|obtain|show|suffices|refine|exact|apply|rw|simp|intro|cases|by|fun|forall|exists|where|structure|inductive|instance|example|namespace|section|end|open|import|noncomputable|private|protected|sorry)\b/g,'<span class="lean-kw">$1</span>');
+}
+function setDagMode(mode){
+  dagMode=mode==='formal'?'formal':'informal';
+  document.querySelectorAll('#dag-mode button').forEach(b=>b.classList.toggle('on', b.dataset.mode===dagMode));
+  dagRunKey='';
+  refreshDagView();
+}
+document.querySelectorAll('#dag-mode button').forEach(b=>b.onclick=()=>setDagMode(b.dataset.mode));
 async function refreshDagView(){
   if(!runId){ $('dag-empty').style.display='block'; $('dag-stage').style.display='none'; dagStatus('select a run'); return; }
   try{
-    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/proof_graph');
+    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/proof_graph?kind='+encodeURIComponent(dagMode));
     const d=r.ok?await r.json():null;
-    if(d&&d.graph){ renderDag(d); return; }
+    if(d&&d.graph&&(d.graph.nodes||[]).length){ renderDag(d); return; }
+    if(dagMode==='formal'&&d&&d.status==='none'){
+      dagRunKey='';
+      $('dag-empty').style.display='block'; $('dag-stage').style.display='none';
+      dagStatus('no Lean source yet');
+      $('dag-empty').innerHTML='<div style="font-size:28px;opacity:.4">∎</div><div>No Lean source yet.<br/>Run <b>Lean Verification</b> first — a formal DAG is built from <code>Proof.lean</code>.</div>';
+      return;
+    }
   }catch(e){}
   dagRunKey='';
-  $('dag-empty').style.display='block'; $('dag-stage').style.display='none'; dagStatus('not generated yet');
+  $('dag-empty').style.display='block'; $('dag-stage').style.display='none';
+  $('dag-empty').innerHTML='<div style="font-size:28px;opacity:.4">◆</div><div>No proof graph yet.<br/>Pick Informal or Formal · Lean, choose a model, then press <b>Generate</b>.</div>';
+  dagStatus('not generated yet');
 }
 async function generateDag(){
   if(!runId)return;
   const btn=$('dag-gen'); btn.disabled=true; const old=btn.textContent; btn.textContent='Generating…'; dagStatus('calling '+($('dag-model').value||'model')+'…');
   try{
-    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/proof_graph',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:$('dag-model').value||null})});
+    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/proof_graph',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:$('dag-model').value||null,kind:dagMode})});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'generation failed');
     dagRunKey=''; renderDag(d);
@@ -1143,26 +1627,33 @@ function dagLayers(graph){
 }
 function renderDag(d){
   const graph=d.graph||{};
-  const key=runId+':'+(d.generated_at||'')+':'+(graph.nodes||[]).length;
+  const key=runId+':'+dagMode+':'+(d.generated_at||d.model||'')+':'+(graph.nodes||[]).length;
   if(key===dagRunKey)return; dagRunKey=key;
-  dagStatus((graph.title?graph.title+' · ':'')+(graph.nodes||[]).length+' nodes · '+(d.model||'')+' · '+(d.generated_at||'').replace('T',' ').replace('Z',''));
+  const isLean=dagMode==='formal'||d.kind==='formal'||d.model==='lean-parse';
+  const kindLbl=isLean?'Formal · Lean':'Informal';
+  dagStatus(kindLbl+' · '+(graph.title?graph.title+' · ':'')+(graph.nodes||[]).length+' nodes · '+(d.model||'')+' · '+(d.generated_at||'').replace('T',' ').replace('Z',''));
   $('dag-empty').style.display='none';
-  const stage=$('dag-stage'); stage.style.display='block';
+  const stage=$('dag-stage'); stage.style.display='block'; stage.classList.toggle('lean',isLean);
   const holder=$('dag-nodes'); const svg=$('dag-svg');
   const layers=dagLayers(graph);
-  const W=230,GX=30,GY=64,PAD=30;
+  const W=isLean?260:230,GX=30,GY=64,PAD=30;
   const maxCount=Math.max(1,...layers.map(l=>l.length));
   const stageW=Math.max(maxCount*(W+GX)-GX+2*PAD, 500);
+  const leanBadge={assumption:'variable',definition:'def',lemma:'lemma',claim:'theorem',case:'case',step:'have',contradiction:'False',conclusion:'theorem'};
   /* place cards: x now, y after measuring heights */
   holder.innerHTML=graph.nodes.map(n=>{
-    const c=DAG_KIND_COLOR[n.kind]||'#64748b';
-    return `<div class="dag-node" id="dagn-${escapeHtml(n.id)}" style="--kc:${c}">
-      <span class="kd">${escapeHtml(n.kind)}</span>
+    const badge=isLean?(n.lean_kind||leanBadge[n.kind]||n.kind):n.kind;
+    const c=isLean?(LEAN_KIND_COLOR[badge]||DAG_KIND_COLOR[n.kind]||'#64748b'):(DAG_KIND_COLOR[n.kind]||'#64748b');
+    const cites=(n.citations||[]).slice(0,4).map(x=>`<span title="Lean dependency / cite">${escapeHtml(x)}</span>`).join('');
+    const stm=n.statement?(isLean?formatLeanStm(n.statement):escapeHtml(n.statement)):'';
+    return `<div class="dag-node${isLean?' lean':''}" id="dagn-${escapeHtml(n.id)}" style="--kc:${c};width:${W}px">
+      <span class="kd">${escapeHtml(badge)}</span>
       <div class="lb">${escapeHtml(n.label||n.id)}</div>
-      ${n.statement?`<div class="stm">${escapeHtml(n.statement)}</div>`:''}
+      ${stm?`<div class="stm">${stm}</div>`:''}
+      ${cites?`<div class="cites">${cites}</div>`:''}
     </div>`;
   }).join('');
-  renderMathIn(holder);
+  if(!isLean) renderMathIn(holder);
   stage.style.width=stageW+'px';
   /* measure + position layer by layer */
   const posXY={};
@@ -1215,6 +1706,287 @@ function renderDag(d){
     svg.innerHTML=pp;
   }
 }
+
+/* ── Lean verification: translate / compile / check + human-in-the-loop ── */
+const LEAN_STATUS_LABEL={
+  verified:'Verified', compiled:'Compiled', failed:'Failed',
+  incomplete:'Incomplete (sorry)', unfaithful:'Compiles — wrong statement',
+  running:'Agent working…', stopped:'Stopped',
+  toolchain_missing:'Lean not installed', none:'—',
+};
+let leanRunKey='', leanDirty=false, leanPollTimer=null, leanEngines=[];
+function leanStatus(msg){ const m=$('lean-meta'); if(m)m.textContent=msg||'—'; }
+function setLeanBadge(status){
+  const b=$('lean-badge'); if(!b)return;
+  const st=status||'none';
+  b.className='lean-badge '+st;
+  b.textContent=LEAN_STATUS_LABEL[st]||st;
+}
+function leanEditorText(){ return $('lean-code')?.value||''; }
+function setLeanBusy(busy, label){
+  ['lean-gen','lean-compile','lean-check','lean-audit','lean-harness','lean-chat-send']
+    .forEach(id=>{ const el=$(id); if(el)el.disabled=!!busy; });
+  if(busy&&label)leanStatus(label);
+}
+function renderLeanChat(msgs){
+  const box=$('lean-chat-msgs'); if(!box)return;
+  box.innerHTML=(msgs||[]).length
+    ? msgs.map(m=>{
+        const ts=m.ts?`<span class="ts">${fmtTs(m.ts)}</span>`:'';
+        return `<div class="chat-msg ${m.role}"><div class="who">${m.role==='user'?'you':m.role}${ts}</div>${escapeHtml(m.content||'')}</div>`;
+      }).join('')
+    : `<div class="chat-msg system"><div class="who">system</div>Guide the Lean formalisation — e.g. discharge a sorry, switch Nat/Int, or keep a cited axiom as sorry.</div>`;
+  box.scrollTop=box.scrollHeight;
+}
+function citeRow(c){
+  const id=c.id||c.num||'';
+  const text=c.text||'';
+  const kind=(c.kind||'').toLowerCase();
+  const tag=/self-derived|uncited/.test(kind)||/self-derived|uncited/i.test(text)
+    ?'<span class="tag">'+escapeHtml(kind||'flagged')+'</span>'
+    :(kind?`<span class="tag ok">${escapeHtml(kind)}</span>`:'');
+  return `<div class="cite-row"><span class="num">${id?'['+escapeHtml(String(id))+']':'•'}</span><span class="txt">${linkifyCitation(text)}</span>${tag}</div>`;
+}
+/* Citations belong to the declaration that relies on them, so group by decl and
+   let the header jump the editor to that line. */
+function renderLeanCitations(d){
+  const block=$('lean-cite-block'); if(!block)return;
+  let items=Array.isArray(d.citations)?d.citations.slice():[];
+  if(!items.length){
+    const fromLean=extractCitations(d.lean||'');
+    items=fromLean.items.map(i=>({id:i.num,text:i.text,kind:/self-derived|uncited/i.test(i.text)?'flagged':''}));
+  }
+  if(!items.length){ block.classList.remove('on'); return; }
+  block.classList.add('on');
+  const decls=(d.fidelity&&Array.isArray(d.fidelity.declarations))?d.fidelity.declarations:[];
+  const kindOf={}; decls.forEach(x=>{ kindOf[x.name]=x.kind; });
+  const groups=new Map(); const floating=[];
+  items.forEach(c=>{
+    if(!c.decl){ floating.push(c); return; }
+    if(!groups.has(c.decl))groups.set(c.decl,[]);
+    groups.get(c.decl).push(c);
+  });
+  const anchored=items.filter(c=>c.decl).length;
+  $('lean-cite-count').textContent=anchored?`${items.length} refs · ${groups.size} decls`:items.length+' refs';
+  const parts=[];
+  groups.forEach((rows,decl)=>{
+    const line=rows.find(r=>r.line)?.line||0;
+    const kind=kindOf[decl]||'';
+    parts.push(
+      `<div class="cite-decl">`+
+        `<button class="decl-name" data-line="${line}" title="${line?'Jump to line '+line:'Not found in the current source'}">${escapeHtml(decl)}</button>`+
+        (kind?`<span class="decl-kind">${escapeHtml(kind)}</span>`:'')+
+        (line?`<span class="decl-line">L${line}</span>`:'')+
+      `</div>`+rows.map(citeRow).join('')
+    );
+  });
+  if(floating.length){
+    parts.push(`<div class="cite-decl"><span class="decl-kind">file-level</span></div>`+floating.map(citeRow).join(''));
+  }
+  $('lean-cite-body').innerHTML=parts.join('');
+}
+function renderLeanFidelity(d){
+  const block=$('lean-fid-block'); if(!block)return;
+  const fid=d.fidelity||{};
+  const flags=Array.isArray(fid.flags)?fid.flags:[];
+  const audit=fid.audit||{};
+  const issues=Array.isArray(audit.issues)?audit.issues:[];
+  if(!flags.length&&!issues.length&&!audit.verdict){ block.classList.remove('on'); return; }
+  block.classList.add('on');
+  const sev=fid.severity||'ok';
+  const chip=$('lean-fid-sev'); chip.className='sev-chip '+sev; chip.textContent=sev;
+  const majors=flags.filter(f=>f.severity==='major').length;
+  $('lean-fid-count').textContent=[
+    majors?majors+' blocking':'',
+    issues.length?issues.length+' audit issue'+(issues.length>1?'s':''):'',
+    audit.model?audit.model:'',
+  ].filter(Boolean).join(' · ');
+  const rows=[];
+  if(audit.verdict)rows.push(`<div class="verdict">${escapeHtml(audit.verdict)}</div>`);
+  if(issues.length)rows.push('<ul>'+issues.map(i=>`<li>${escapeHtml(i)}</li>`).join('')+'</ul>');
+  if(flags.length){
+    rows.push('<ul>'+flags.map(f=>{
+      const jump=(f.lines||[]).map(l=>`<button class="flag-line" data-line="${l}">L${l}</button>`).join('');
+      return `<li><span class="sev-chip ${f.severity}">${escapeHtml(f.severity)}</span> ${escapeHtml(f.message||'')}${jump}</li>`;
+    }).join('')+'</ul>');
+  }
+  if(audit.statement_suggestion){
+    rows.push(`<div class="verdict" style="margin-top:6px">Suggested statement: <code>${escapeHtml(audit.statement_suggestion)}</code></div>`);
+  }
+  $('lean-fid-body').innerHTML=rows.join('');
+}
+/* Put the caret on a line of the Lean source and scroll it into view. */
+function leanJumpToLine(line){
+  const ta=$('lean-code'); if(!ta||!line)return;
+  const lines=ta.value.split('\n');
+  const n=Math.min(Math.max(1,line),lines.length);
+  const pos=lines.slice(0,n-1).join('\n').length+(n>1?1:0);
+  ta.focus();
+  ta.setSelectionRange(pos,pos+(lines[n-1]||'').length);
+  const lh=parseFloat(getComputedStyle(ta).lineHeight)||18;
+  ta.scrollTop=Math.max(0,(n-3)*lh);
+}
+function leanToolchainLabel(tool){
+  const v=(tool&&tool.version)||'';
+  if(!v)return tool&&tool.available?'lean':'no toolchain';
+  // "Lean (version 4.14.0, aarch64-…, Release)" → keep readable but compact in the hdr
+  return v.replace(/^Lean\s*/i,'Lean ');
+}
+function renderLean(d, {forceCode=false}={}){
+  const running=d.status==='running'||d.harness_running;
+  const key=runId+':'+(d.generated_at||'')+':'+(d.status||'')+':'+(d.action||'')+':'+(d.chat||[]).length
+    +':'+(d.citations||[]).length+':'+((d.fidelity||{}).severity||'')+':'+(running?(d.log||'').length:'');
+  if(key===leanRunKey&&!forceCode){ renderLeanChat(d.chat||[]); renderLeanFidelity(d); renderLeanCitations(d); return; }
+  leanRunKey=key;
+  setLeanBadge(d.status);
+  const bits=[];
+  if(d.title)bits.push(d.title);
+  const hn=d.harness||{};
+  if(running&&hn.label)bits.push(hn.label+(hn.elapsed_s?` · ${hn.elapsed_s}s`:''));
+  if(d.model)bits.push(d.model);
+  if(d.generated_at)bits.push(String(d.generated_at).replace('T',' ').replace('Z',''));
+  if(d.sorry_count)bits.push(d.sorry_count+' sorry');
+  if(d.uses_mathlib)bits.push('mathlib');
+  if(d.action)bits.push(d.action);
+  leanStatus(bits.join(' · ')||'—');
+  $('lean-empty').style.display='none';
+  $('lean-body').style.display='grid';
+  $('lean-path').textContent=d.lean_path||'lean/Proof.lean';
+  // Don't clobber in-progress edits unless the server sent newer source.
+  if(forceCode || !leanDirty || !leanEditorText().trim()){
+    $('lean-code').value=d.lean||'';
+    leanDirty=false;
+  }
+  const tool=d.toolchain||{};
+  const meta=$('lean-tool-meta');
+  meta.textContent=leanToolchainLabel(tool);
+  meta.title=tool.version||meta.textContent;
+  if(d.notes){ $('lean-notes').style.display='block'; $('lean-notes').textContent=d.notes; }
+  else { $('lean-notes').style.display='none'; $('lean-notes').textContent=''; }
+  let log=d.log||'';
+  if(!log&&d.status==='toolchain_missing'){
+    log='Lean toolchain not found on this server.\nInstall: curl https://elan.lean-lang.org/elan-init.sh -sSf | sh\nThen re-run Verify.';
+  }
+  if(!log&&running)log=(hn.label||'The agent')+' is starting up…';
+  if(!log&&(d.status==='verified'||d.status==='compiled'))log='Lean accepted the file with no errors.';
+  const logEl=$('lean-log');
+  const pinned=running&&logEl.scrollTop+logEl.clientHeight>=logEl.scrollHeight-40;
+  logEl.textContent=log||'(no compiler output)';
+  if(running&&pinned)logEl.scrollTop=logEl.scrollHeight;
+  const attempts=d.attempts||[];
+  $('lean-attempts').innerHTML=attempts.length
+    ? attempts.slice(-8).map(a=>`<span>r${a.round}${a.action?'/'+a.action:''}: ${a.check?.status||d.status||'?'} · ${a.check?.duration_s??'?'}s · sorry ${a.sorry_count||0}</span>`).join('')
+    : '';
+  renderLeanFidelity(d);
+  renderLeanCitations(d);
+  renderLeanChat(d.chat||[]);
+  setLeanRunning(running, hn.label||'Agent');
+}
+/* While a harness run is alive the cache file is the progress channel, so poll it. */
+function setLeanRunning(running, label){
+  const btn=$('lean-harness'); if(!btn)return;
+  btn.textContent=running?'■ Stop':'⚙ Harness';
+  btn.title=running?'Kill the running agent':'Run a coding agent in lean/ — it compiles, reads the errors and retries by itself';
+  btn.disabled=false;
+  ['lean-gen','lean-compile','lean-check','lean-audit','lean-chat-send'].forEach(id=>{
+    const el=$(id); if(el)el.disabled=!!running;
+  });
+  if(leanPollTimer){ clearTimeout(leanPollTimer); leanPollTimer=null; }
+  if(running)leanPollTimer=setTimeout(()=>{ if(workspaceView==='lean')refreshLeanView(); }, 2500);
+}
+async function refreshLeanView(){
+  if(!leanEngines.length){
+    try{
+      const t=await(await fetch('/api/lean/status')).json();
+      if(t&&Array.isArray(t.engines))fillLeanEngines(t.engines);
+    }catch(e){}
+  }
+  if(!runId){ $('lean-empty').style.display='flex'; $('lean-body').style.display='none'; setLeanBadge('none'); leanStatus('select a run'); leanDirty=false; return; }
+  try{
+    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/lean_verify');
+    const d=r.ok?await r.json():null;
+    if(d&&(d.lean||d.status==='running')){ renderLean(d); return; }
+  }catch(e){}
+  leanRunKey=''; leanDirty=false;
+  $('lean-empty').style.display='flex'; $('lean-body').style.display='none'; setLeanBadge('none'); leanStatus('not verified yet');
+  try{
+    const t=await(await fetch('/api/lean/status')).json();
+    if(t&&Array.isArray(t.engines))fillLeanEngines(t.engines);
+    if(t&&!t.available)leanStatus('Lean toolchain not installed on server');
+    else if(t&&t.version)leanStatus(t.version);
+  }catch(e){}
+}
+function fillLeanEngines(list){
+  leanEngines=list||[];
+  const sel=$('lean-engine'); if(!sel)return;
+  const keep=sel.value;
+  sel.innerHTML=leanEngines.map(e=>
+    `<option value="${e.id}"${e.available?'':' disabled'}>${escapeHtml(e.label)}${e.available?'':' (not installed)'}</option>`
+  ).join('');
+  const first=leanEngines.find(e=>e.available);
+  if(keep&&leanEngines.some(e=>e.id===keep&&e.available))sel.value=keep;
+  else if(first)sel.value=first.id;
+}
+async function leanAction(action, extra={}){
+  if(!runId)return;
+  const labels={verify:'Verifying…',compile:'Compiling…',check:'Checking…',revise:'Revising…',
+    audit:'Auditing the statement…',harness:'Starting the agent…',stop_harness:'Stopping…'};
+  setLeanBusy(true, labels[action]||(action+'…'));
+  if(action==='verify')setLeanBadge('none');
+  try{
+    const payload={action, model:$('lean-model').value||null, ...extra};
+    if(action!=='verify')payload.lean=leanEditorText();
+    if(action==='verify')payload.max_repairs=2;
+    if(action==='revise')payload.max_repairs=1;
+    if(action==='harness')payload.engine=$('lean-engine').value||'codex';
+    if(action==='stop_harness')delete payload.lean;
+    const r=await fetch('/api/run/'+encodeURIComponent(runId)+'/lean_verify',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    });
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||action+' failed');
+    if(action==='stop_harness'){ leanStatus('stopping the agent…'); return; }
+    leanRunKey=''; leanDirty=false; renderLean(d, {forceCode:true});
+  }catch(err){ leanStatus('✗ '+String(err.message||err).slice(0,180)); if(action!=='revise')setLeanBadge('failed'); }
+  finally{ setLeanBusy(false); if(action==='harness'||action==='stop_harness')refreshLeanView(); }
+}
+async function generateLean(){ return leanAction('verify'); }
+async function compileLean(){ return leanAction('compile'); }
+async function checkLean(){ return leanAction('check'); }
+async function auditLean(){ return leanAction('audit'); }
+async function harnessLean(){
+  const running=$('lean-harness').textContent.indexOf('Stop')>=0;
+  return leanAction(running?'stop_harness':'harness');
+}
+async function sendLeanChat(){
+  if(!runId)return;
+  const input=$('lean-chat-input'); const msg=(input?.value||'').trim();
+  if(!msg)return;
+  input.value='';
+  // Optimistic user bubble
+  const box=$('lean-chat-msgs');
+  if(box){ box.insertAdjacentHTML('beforeend', `<div class="chat-msg user"><div class="who">you</div>${escapeHtml(msg)}</div>`); box.scrollTop=box.scrollHeight; }
+  await leanAction('revise', {message:msg});
+}
+$('lean-gen').onclick=generateLean;
+$('lean-compile').onclick=compileLean;
+$('lean-check').onclick=checkLean;
+$('lean-audit').onclick=auditLean;
+$('lean-harness').onclick=harnessLean;
+$('lean-chat-send').onclick=sendLeanChat;
+$('lean-cite-toggle')?.addEventListener('click',()=>$('lean-cite-block').classList.toggle('collapsed'));
+$('lean-fid-toggle')?.addEventListener('click',()=>$('lean-fid-block').classList.toggle('collapsed'));
+['lean-cite-body','lean-fid-body'].forEach(id=>{
+  $(id)?.addEventListener('click',e=>{
+    const b=e.target.closest('[data-line]');
+    if(b)leanJumpToLine(parseInt(b.dataset.line,10)||0);
+  });
+});
+$('lean-code')?.addEventListener('input',()=>{ leanDirty=true; });
+$('lean-chat-input')?.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendLeanChat(); }
+});
 
 /* ── chat ── */
 let lastChatKey='';
@@ -1293,11 +2065,12 @@ $('model-select').onchange=()=>{ $('model-custom').style.display=$('model-select
 $('subagents-check').onchange=syncSubagentPick; syncSubagentPick();
 
 /* ── current user ── */
+let CURRENT_USER=null;
 async function loadUser(){
   try{
     const me=await(await fetch('/api/auth/me')).json();
-    if(!me.user){ location.href='/login'; return; }
-    const u=me.user;
+    if(!me.user){ location.href=pcUrl('/login'); return; }
+    const u=me.user; CURRENT_USER=u;
     $('sb-user').style.display='flex';
     $('user-name').textContent=u.name||u.email;
     $('user-name').title=u.email;
@@ -1306,7 +2079,7 @@ async function loadUser(){
     else av.textContent=(u.name||u.email||'?')[0].toUpperCase();
   }catch(e){}
 }
-$('logout-btn').onclick=async()=>{ await fetch('/api/auth/logout',{method:'POST'}); location.href='/login'; };
+$('logout-btn').onclick=async()=>{ await fetch('/api/auth/logout',{method:'POST'}); location.href=pcUrl('/login'); };
 
 loadUser(); loadEngines(); loadSettings(); loadRuns(); goLanding();
 setInterval(loadRuns, 5000);

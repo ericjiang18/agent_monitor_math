@@ -53,8 +53,37 @@ _PROOF_INSTRUCTION = (
     "The problem statement is in ./problem.txt.\n\nPROBLEM:\n{problem}"
 )
 
+# Shared by every engine so a run's references are auditable and the console can
+# extract them. Kept strict about not inventing sources — a fabricated citation
+# is worse than an inline proof of the same fact.
+CITATION_REQUIREMENTS = (
+    "CITATIONS (required):\n"
+    "- Justify each non-obvious step by a definition, a numbered lemma of your "
+    "own, or a citation marker like [1].\n"
+    "- End proof.md with a `## References` section listing every marker you "
+    "used, one per line, formatted as: `[1] <identifier> — <what it gives you>`. "
+    "Use resolvable identifiers where they exist (arXiv:2401.01234, "
+    "doi:10.1007/..., book + theorem number, URL); for classical results the "
+    "name is enough (e.g. `Euclid's lemma`).\n"
+    "- Tag steps you proved yourself as `self-derived` rather than citing "
+    "literature for them.\n"
+    "- Never invent a reference. If you cannot locate a real source, write "
+    "`[uncited: standard result]` and prove the fact inline instead.\n"
+    "- Every listed reference must be cited somewhere in the text, and every "
+    "marker in the text must appear in the list.\n"
+)
 
-def proof_prompt(problem_text: str, workspace: Path | None = None) -> str:
+
+def proof_prompt(
+    problem_text: str,
+    workspace: Path | None = None,
+    preamble: str = "",
+) -> str:
+    """Task prompt for CLI engines.
+
+    ``preamble`` carries the operator's persona (identity / skills / memory) for
+    engines that cannot read the agent home themselves.
+    """
     text = _PROOF_INSTRUCTION.format(problem=problem_text)
     if workspace is not None:
         # Embedded agents (e.g. openclaw) may run tools from their own home
@@ -63,6 +92,9 @@ def proof_prompt(problem_text: str, workspace: Path | None = None) -> str:
             f"Your working directory for this task is: {workspace} "
             f"(absolute path — write proof.tex THERE).\n" + text
         )
+    text = f"{text}\n\n{CITATION_REQUIREMENTS}"
+    if preamble.strip():
+        text = f"{preamble.strip()}\n\n{text}"
     return text
 
 
