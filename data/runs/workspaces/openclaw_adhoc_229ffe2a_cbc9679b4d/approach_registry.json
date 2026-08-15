@@ -1,0 +1,40 @@
+{
+  "approaches": [
+    {
+      "family": "recursive arithmetic",
+      "central_object": "successor operation and recursive definition of addition",
+      "strongest_proved_statement": "1 + 1 = S(1 + 0) = S(1) = 2",
+      "unresolved_lemmas": [],
+      "missing_lemma_class": null,
+      "counterexamples": [],
+      "dependencies": [],
+      "estimated_probability_complete": 1.0,
+      "next_action": "independent line-by-line audit",
+      "status": "completed"
+    },
+    {
+      "family": "finite cardinal arithmetic",
+      "central_object": "disjoint union of singleton sets",
+      "strongest_proved_statement": "not developed because recursive arithmetic already proves the exact claim",
+      "unresolved_lemmas": ["connect cardinal addition notation to the problem's chosen arithmetic definitions"],
+      "missing_lemma_class": "technical",
+      "counterexamples": [],
+      "dependencies": [],
+      "estimated_probability_complete": 0.95,
+      "next_action": "none unless an alternative foundation is requested",
+      "status": "dormant"
+    },
+    {
+      "family": "von Neumann set-theoretic computation",
+      "central_object": "0=empty set and S(n)=n union {n}",
+      "strongest_proved_statement": "not developed because it adds foundational machinery unnecessary for the claim",
+      "unresolved_lemmas": ["derive recursive addition as a set-theoretic function"],
+      "missing_lemma_class": "technical",
+      "counterexamples": [],
+      "dependencies": [],
+      "estimated_probability_complete": 0.99,
+      "next_action": "none unless a ZF-level proof is requested",
+      "status": "dormant"
+    }
+  ]
+}

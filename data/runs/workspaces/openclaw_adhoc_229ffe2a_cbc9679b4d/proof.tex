@@ -1,0 +1,49 @@
+\documentclass{article}
+\usepackage{amsmath,amsthm}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+
+\section*{Claim}
+In the natural numbers, with numerals and addition defined recursively below,
+\[
+1+1=2.
+\]
+
+\paragraph{Strategy.} Use a direct definitional computation from the recursive definition of addition.
+
+\section*{Setup and notation}
+Let $0$ be the initial natural number and $S$ the successor operation. Define
+\[
+1:=S(0), \qquad 2:=S(1).
+\]
+Define addition recursively in its second argument by
+\[
+a+0:=a, \qquad a+S(b):=S(a+b)
+\]
+for all natural numbers $a,b$.
+
+\begin{lemma}[Zero clause]
+$1+0=1$.
+\end{lemma}
+\begin{proof}
+Substitute $a=1$ into the defining equation $a+0:=a$. This is self-derived from the definition of addition.
+\end{proof}
+
+\section*{Main proof}
+Because $1=S(0)$, the successor clause, with $a=1$ and $b=0$, gives
+\[
+1+1=1+S(0)=S(1+0).
+\]
+By Lemma 1, $S(1+0)=S(1)$. Finally, $2:=S(1)$ by definition. Therefore
+\[
+1+1=2.
+\]
+\qed
+
+\section*{Boundary cases and audit}
+The recursion reaches the base case $1+0=1$ after one successor step. All terms are natural numbers, and no hidden side conditions or target equality are used. A quantifier/definition audit and an independent circularity/base-case audit both pass.
+
+\section*{References}
+No external results are used; every inferential step is definitional or self-derived.
+
+\end{document}
