@@ -1,0 +1,18 @@
+54-235-45-210.sslip.io {
+	@prefix_root path /proof-cb44c0b18a86684e40171e2c2ce96ddfda24
+	redir @prefix_root /proof-cb44c0b18a86684e40171e2c2ce96ddfda24/ 308
+
+	handle /proof-cb44c0b18a86684e40171e2c2ce96ddfda24/* {
+		reverse_proxy 127.0.0.1:4600
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	handle {
+		respond "Not Found" 404
+	}
+}

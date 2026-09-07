@@ -1,0 +1,81 @@
+[Unit]
+Description=Standalone public Kimi proof service
+Documentation=file:/usr/share/doc/proving-kimi-public/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+User=proving-kimi-public
+WorkingDirectory=/run/proving-kimi-public
+RuntimeDirectory=proving-kimi-public
+RuntimeDirectoryMode=0700
+UMask=0077
+
+# @@RELEASE_ROOT@@ is replaced only with a validated, lowercase SHA-256
+# content-addressed release path by install.sh.
+ExecStart=@@RELEASE_ROOT@@/venv/bin/python -P -m agent_monitor.public_kimi_server
+Environment=PYTHONPATH=@@RELEASE_ROOT@@
+Environment=PYTHONSAFEPATH=1
+Environment=PYTHONNOUSERSITE=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=HOME=/run/proving-kimi-public
+Environment=AGENT_MONITOR_DATA_DIR=/run/proving-kimi-public
+Environment=PUBLIC_KIMI_DATA_DIR=/run/proving-kimi-public
+Environment=PUBLIC_KIMI_HOST=127.0.0.1
+Environment=PUBLIC_KIMI_PORT=4610
+Environment=PUBLIC_KIMI_COOKIE_SECURE=1
+Environment=AGENT_MONITOR_PUBLIC_KIMI=1
+Environment=AGENT_MONITOR_DISABLE_AUTO_PIPELINE=1
+Environment=AGENT_MONITOR_ENV_PATH=/dev/null
+LoadCredential=kimi_api_key:/etc/proving-kimi-public/credentials/kimi_api_key
+LoadCredential=kimi_api_base:/etc/proving-kimi-public/credentials/kimi_api_base
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+# This host disables user namespaces. DynamicUser and the remaining mount,
+# process, capability, and syscall restrictions stay enabled.
+PrivateUsers=no
+PrivatePIDs=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RemoveIPC=yes
+KeyringMode=private
+DevicePolicy=closed
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @mount @reboot @swap @obsolete @debug @raw-io
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=@@RELEASE_ROOT@@
+InaccessiblePaths=-/home/repo/agent_monitor_math -/home/ubuntu/.codex -/home/ubuntu/.claude
+
+TasksMax=64
+LimitNOFILE=512
+LimitCORE=0
+MemoryMax=1G
+MemorySwapMax=0
+CPUQuota=150%
+KillMode=mixed
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

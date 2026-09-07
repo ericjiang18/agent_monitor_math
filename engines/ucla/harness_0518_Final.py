@@ -369,10 +369,22 @@ IN_PROGRESS_TIMEOUT_SECONDS = env_int("IN_PROGRESS_TIMEOUT_SECONDS", 2 * 60 * 60
 # Exponential backoff for run_response failures (exception path + non-completed
 # status). Polling itself stays at a fixed 2s — backoff only applies between
 # (failed submit) and (next submit). Cap each sleep at RETRY_MAX_SECONDS.
-# Retry is unbounded by attempt count (matches prior behaviour) so a 21h run
-# survives transient API outages; ctrl-C if you need to bail out.
+# Transport/API exceptions remain unbounded so a 21h run survives transient
+# outages. Terminal API statuses are bounded separately below.
 RETRY_BASE_SECONDS = env_int("RETRY_BASE_SECONDS",  30)
 RETRY_MAX_SECONDS  = env_int("RETRY_MAX_SECONDS",   600)
+# Terminal API responses are different from transport failures: resubmitting
+# the exact same request after incomplete/max_output_tokens can spend forever
+# without ever producing parseable output. Adapt the request and fail
+# explicitly after a small bounded number of terminal responses.
+TERMINAL_RETRY_LIMIT = max(1, env_int("TERMINAL_RETRY_LIMIT", 3))
+TERMINAL_MAX_OUTPUT_TOKENS = max(
+    1, env_int("TERMINAL_MAX_OUTPUT_TOKENS", 128_000)
+)
+# Unlike the OpenAI endpoint used by the original competition harness, the
+# configured Kimi gateway can reject a request synchronously for unsupported
+# fields. Bound retries so a permanent provider mismatch cannot sleep forever.
+KIMI_ERROR_RETRY_LIMIT = max(1, env_int("KIMI_ERROR_RETRY_LIMIT", 3))
 # Wall-clock cutoff for Stage 2 (advisor-orchestrated solving). When the
 # total elapsed time since the FIRST start of this run (persisted across
 # resumes via memory/run_start_time.txt) reaches this many hours and we
@@ -403,10 +415,10 @@ PUSH_ORIGINAL = env_bool("PUSH_ORIGINAL", False)
 # inject into the KB on a narrower set triaged from the directions.)
 LIT_ENABLED              = env_bool("LIT_ENABLED",             True)
 LIT_PARALLEL             = env_int ("LIT_PARALLEL",             5)
-LIT_SEARCH_REASONING     = normalize_effort(os.getenv("LIT_SEARCH_REASONING", "xhigh"))
-LIT_SEARCH_MAX_TOKENS    = env_int ("LIT_SEARCH_MAX_TOKENS",   128000)
-LIT_READ_REASONING       = normalize_effort(os.getenv("LIT_READ_REASONING",   "xhigh"))
-LIT_READ_MAX_TOKENS      = env_int ("LIT_READ_MAX_TOKENS",     128000)
+LIT_SEARCH_REASONING     = normalize_effort(os.getenv("LIT_SEARCH_REASONING", "medium"))
+LIT_SEARCH_MAX_TOKENS    = env_int ("LIT_SEARCH_MAX_TOKENS",    16000)
+LIT_READ_REASONING       = normalize_effort(os.getenv("LIT_READ_REASONING",   "high"))
+LIT_READ_MAX_TOKENS      = env_int ("LIT_READ_MAX_TOKENS",      32000)
 
 # Stage 1.5: Deep-Read — fetch and extract lemmas from arXiv papers cited in
 # the advisor directions. Toggled by DEEP_READ_ENABLED (default off).
@@ -415,11 +427,9 @@ DEEP_READ_MAX_PAPERS         = env_int ("DEEP_READ_MAX_PAPERS",       5)
 DEEP_READ_LEMMAS_PER_PAPER   = env_int ("DEEP_READ_LEMMAS_PER_PAPER", 3)
 DEEP_READ_PARALLEL           = env_int ("DEEP_READ_PARALLEL",         5)
 DEEP_READ_TRIAGE_REASONING   = normalize_effort(os.getenv("DEEP_READ_TRIAGE_REASONING",  "medium"))
-DEEP_READ_EXTRACT_REASONING  = normalize_effort(os.getenv("DEEP_READ_EXTRACT_REASONING", "xhigh"))
-# DEEP_READ_TRIAGE_MAX_TOKENS  = env_int ("DEEP_READ_TRIAGE_MAX_TOKENS",  16000)
-# DEEP_READ_EXTRACT_MAX_TOKENS = env_int ("DEEP_READ_EXTRACT_MAX_TOKENS", 16000)
-DEEP_READ_TRIAGE_MAX_TOKENS  = env_int ("DEEP_READ_TRIAGE_MAX_TOKENS",  128000)
-DEEP_READ_EXTRACT_MAX_TOKENS = env_int ("DEEP_READ_EXTRACT_MAX_TOKENS", 128000)
+DEEP_READ_EXTRACT_REASONING  = normalize_effort(os.getenv("DEEP_READ_EXTRACT_REASONING", "high"))
+DEEP_READ_TRIAGE_MAX_TOKENS  = env_int ("DEEP_READ_TRIAGE_MAX_TOKENS",   16000)
+DEEP_READ_EXTRACT_MAX_TOKENS = env_int ("DEEP_READ_EXTRACT_MAX_TOKENS", 32000)
 DEEP_READ_PAPER_MAX_CHARS    = env_int ("DEEP_READ_PAPER_MAX_CHARS",   250_000)
 
 
@@ -674,32 +684,115 @@ def _backoff_delay(attempt):
     return base * (1.0 + random.random() * 0.5)
 
 
+class TerminalResponseExhausted(RuntimeError):
+    """Raised after repeated terminal API responses with no usable output."""
+
+
+def _is_kimi_model(model):
+    """Whether a UCLA stage is routed to the Kimi compatibility endpoint."""
+    return str(model or "").strip().lower().startswith("kimi-")
+
+
+def _normalize_response_effort(effort, *, kimi):
+    """Translate UCLA/OpenAI effort names to values accepted by Kimi."""
+    if not effort:
+        return None
+    normalized = str(effort).strip().lower()
+    if not kimi:
+        return normalized
+    return {
+        "low": "low",
+        "medium": "high",
+        "high": "high",
+        "xhigh": "max",
+        "max": "max",
+    }.get(normalized, "max")
+
+
+def _response_request_kwargs(
+    model, prompt, reasoning_effort, verbosity, max_output_tokens, web_search
+):
+    """Build one Responses request without fields unsupported by Kimi."""
+    kimi = _is_kimi_model(model)
+    effective_reasoning = _normalize_response_effort(reasoning_effort, kimi=kimi)
+    kwargs = {
+        "model": model,
+        "input": prompt,
+        "max_output_tokens": max_output_tokens,
+    }
+    if not kimi:
+        kwargs.update(
+            {
+                "text": {"verbosity": verbosity},
+                "background": BACKGROUND,
+                "service_tier": "priority",
+            }
+        )
+    if effective_reasoning:
+        kwargs["reasoning"] = {"effort": effective_reasoning}
+    if web_search and not kimi:
+        kwargs["tools"] = [{"type": "web_search"}]
+        kwargs["tool_choice"] = "auto"
+        kwargs["include"] = ["web_search_call.action.sources"]
+    return kwargs
+
+
+def _lower_reasoning_effort(effort, *, kimi=False):
+    """Free more of the output budget after a reasoning-only truncation."""
+    if kimi:
+        ladder = {"max": "high", "high": "low", "low": None}
+        return ladder.get(effort, effort)
+    ladder = {"xhigh": "high", "high": "medium", "medium": "low", "low": None}
+    return ladder.get(effort, effort)
+
+
+def _kimi_error_retry_state(error, attempts):
+    """Return exhaustion metadata for one failed Kimi request."""
+    status_code = getattr(error, "status_code", None)
+    permanent_client_error = (
+        isinstance(status_code, int)
+        and 400 <= status_code < 500
+        and status_code not in {408, 409, 429}
+    )
+    return (
+        permanent_client_error or attempts >= KIMI_ERROR_RETRY_LIMIT,
+        status_code,
+        permanent_client_error,
+    )
+
+
 def run_response(prompt, stage_name, reasoning_effort, verbosity, max_output_tokens, web_search, model=None, harness_meta=None):
     _model = model or MODEL
+    kimi_mode = _is_kimi_model(_model)
     print(
         f"[{stage_name}] model={_model} reasoning={reasoning_effort or 'none'} "
         f"verbosity={verbosity} max_tokens={max_output_tokens} "
-        f"background={BACKGROUND} web_search={web_search}"
+        f"background={BACKGROUND if not kimi_mode else False} "
+        f"web_search={bool(web_search and not kimi_mode)}"
     )
+    if kimi_mode and web_search:
+        print(
+            f"[{stage_name}] Kimi compatibility: hosted web_search is unavailable; "
+            "continuing this proof stage without live web search"
+        )
     attempts = 0  # counts failed submit→fail cycles for exponential backoff
+    terminal_failures = 0
+    effective_reasoning = _normalize_response_effort(
+        reasoning_effort, kimi=kimi_mode
+    )
+    effective_max_tokens = max_output_tokens
     while True:
         response = None
         try:
             started_at = monotonic()
-            kwargs = {
-                "model":             _model,
-                "input":             prompt,
-                "text":              {"verbosity": verbosity},
-                "max_output_tokens": max_output_tokens,
-                "background":        BACKGROUND,
-                "service_tier":      "priority",
-            }
-            if reasoning_effort:
-                kwargs["reasoning"] = {"effort": reasoning_effort}
-            if web_search:
-                kwargs["tools"]       = [{"type": "web_search"}]
-                kwargs["tool_choice"] = "auto"
-                kwargs["include"]     = ["web_search_call.action.sources"]
+            kwargs = _response_request_kwargs(
+                _model,
+                prompt,
+                effective_reasoning,
+                verbosity,
+                effective_max_tokens,
+                web_search,
+            )
 
             trace_headers = {
                 "x-trace-id":   f"{_TRACE_ROOT}::{stage_name}",
@@ -715,7 +808,17 @@ def run_response(prompt, stage_name, reasoning_effort, verbosity, max_output_tok
             queued_since      = None
             in_progress_since = None
             cancelled         = False
+            last_poll_report = 0.0
+            last_poll_status = None
             while response.status in {"queued", "in_progress"}:
+                now = monotonic()
+                if response.status != last_poll_status or now - last_poll_report >= 30:
+                    print(
+                        f"[{stage_name}] response {response.id} status={response.status} "
+                        f"elapsed={now - started_at:.1f}s"
+                    )
+                    last_poll_status = response.status
+                    last_poll_report = now
                 if response.status == "queued":
                     in_progress_since = None  # not running yet
                     if queued_since is None:
@@ -771,15 +874,55 @@ def run_response(prompt, stage_name, reasoning_effort, verbosity, max_output_tok
                 _log_harness_output(stage_name, prompt, response, info)
                 return response.output_text or "", info
 
+            elapsed = monotonic() - started_at
+            info = _compute_usage(response, elapsed, stage_name)
+            incomplete = getattr(response, "incomplete_details", None)
+            incomplete_reason = getattr(incomplete, "reason", None)
+            info["terminal_status"] = response.status
+            info["incomplete_reason"] = incomplete_reason
+            # Non-completed Responses are still billable. Preserve their
+            # usage and trace before adapting/retrying so the monitor does not
+            # silently under-report a costly failure loop.
+            _log_usage(info)
+            _log_harness_output(stage_name, prompt, response, info)
             print(f"[{stage_name}] non-completed status: {response.status} | {response}")
             with _log_lock:
                 with open(LOG_FILE, "a", encoding="utf-8") as f:
                     f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} | {stage_name} | {response}\n\n")
-            attempts += 1
-            delay = _backoff_delay(attempts)
-            print(f"[{stage_name}] backoff {delay:.1f}s before resubmit (attempt {attempts})")
+            terminal_failures += 1
+            if terminal_failures >= TERMINAL_RETRY_LIMIT:
+                raise TerminalResponseExhausted(
+                    f"{stage_name} returned {response.status!r} "
+                    f"{terminal_failures} times (last reason: "
+                    f"{incomplete_reason or 'unknown'}); refusing an "
+                    "unbounded identical retry loop"
+                )
+
+            if response.status == "incomplete" and incomplete_reason == "max_output_tokens":
+                old_effort = effective_reasoning
+                old_max = effective_max_tokens
+                effective_reasoning = _lower_reasoning_effort(
+                    effective_reasoning, kimi=kimi_mode
+                )
+                effective_max_tokens = min(
+                    max(effective_max_tokens * 2, effective_max_tokens + 8_192),
+                    TERMINAL_MAX_OUTPUT_TOKENS,
+                )
+                print(
+                    f"[{stage_name}] adaptive retry after output truncation: "
+                    f"reasoning {old_effort or 'none'}->{effective_reasoning or 'none'}, "
+                    f"max_tokens {old_max}->{effective_max_tokens}"
+                )
+
+            delay = _backoff_delay(terminal_failures)
+            print(
+                f"[{stage_name}] backoff {delay:.1f}s before terminal retry "
+                f"({terminal_failures}/{TERMINAL_RETRY_LIMIT - 1})"
+            )
             sleep(delay)
 
+        except TerminalResponseExhausted:
+            raise
         except Exception as e:
             print(f"[{stage_name}] error: {e}")
             with _log_lock:
@@ -787,6 +930,19 @@ def run_response(prompt, stage_name, reasoning_effort, verbosity, max_output_tok
                     rid = getattr(response, "id", None)
                     f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} | {stage_name} | response_id={rid} | {e}\n")
             attempts += 1
+            exhausted, status_code, permanent_client_error = (
+                _kimi_error_retry_state(e, attempts)
+            )
+            if kimi_mode and exhausted:
+                detail = (
+                    f"permanent HTTP {status_code}"
+                    if permanent_client_error
+                    else f"{attempts} consecutive request errors"
+                )
+                raise TerminalResponseExhausted(
+                    f"{stage_name} Kimi request failed after {detail}; "
+                    "refusing an unbounded retry loop"
+                ) from e
             delay = _backoff_delay(attempts)
             print(f"[{stage_name}] backoff {delay:.1f}s before resubmit (attempt {attempts})")
             sleep(delay)
@@ -1926,16 +2082,15 @@ def _update_kb_verification(statement, verified, solution_text, solution_ref="",
 # primary source, but it is not exhaustive.
 
 ADVISOR_DIRECTIONS_PROMPT_TEMPLATE = """\
-You are a mathematical research advisor with access to web search. A separate \
-literature-research stage (Stage 0) has already searched the literature, downloaded the \
-relevant papers, and produced detailed per-paper extractions (overall summary, labelled \
-theorems/lemmas with proof sketches, proof techniques with applicability notes, and other \
-useful info). Treat those extractions as your primary source — they were produced by agents \
-that read the full PDFs, and are more reliable for what each paper actually contains than a \
-fresh web search would be. Use web search to fill gaps: chase a citation Stage 0 did not \
-pursue, look up a specific lemma in more depth via the URL Stage 0 already provided, or \
-verify a fact you are unsure about. Your job is to synthesise this material into a \
-strategic briefing for a team of solver agents tackling the problem below.
+You are a mathematical research advisor with access to web search. A separate
+literature-research stage (Stage 0) attempted to search for and read relevant papers.
+
+{literature_guidance}
+
+Use web search to fill gaps, chase exact citations, and independently verify any fact
+that the available full-text extractions do not support. Your job is to synthesize the
+usable evidence into a strategic briefing for a team of solver agents.
+
 
 # Problem
 {problem}
@@ -1943,10 +2098,8 @@ strategic briefing for a team of solver agents tackling the problem below.
 # Past Attempts on This Problem (from previous runs)
 {past_notes_section}
 
-# Literature Research (Stage 0 deep-read extractions)
-The block below contains the full extraction from each paper Stage 0 picked. Treat the \
-statements, sketches, and techniques here as your primary source — they were extracted from \
-the actual paper text, not from titles or abstracts.
+# Literature Research (Stage 0 results)
+{literature_section_note}
 
 {literature_section}
 
@@ -2010,14 +2163,38 @@ def run_advisor_directions(literature_records):
         with open(DIRECTIONS_FILE, encoding="utf-8") as f:
             return json.load(f)
 
+    usable_count = sum(1 for record in literature_records if not record.get("error"))
+    failed_count = max(0, len(literature_records) - usable_count)
     literature_section = format_literature_for_directions(literature_records) or (
-        "(Stage 0 literature research produced no usable extractions — proceed "
-        "from your own knowledge only.)"
+        "(Stage 0 literature research produced no records.)"
     )
+    if usable_count:
+        literature_guidance = (
+            f"Stage 0 successfully read {usable_count} full paper(s)"
+            + (f" and failed to extract {failed_count} candidate(s)." if failed_count else ".")
+            + " Treat only the successful full-text extractions below as primary-source "
+            "evidence. Failed entries are URL leads, not paper-level evidence."
+        )
+        literature_section_note = (
+            "Successful entries below were extracted from actual paper text. "
+            "Failed entries must not be described as read or used for theorem entailment."
+        )
+    else:
+        literature_guidance = (
+            f"Stage 0 successfully read 0 papers; {failed_count} candidate(s) failed. "
+            "Do not claim that Stage 0 produced detailed paper extractions, and do not "
+            "treat failed entries as evidence. Use them only as unverified URL leads."
+        )
+        literature_section_note = (
+            "No Stage 0 paper was successfully read. The entries below record failed "
+            "candidate URLs only; independently retrieve and verify a source before use."
+        )
 
     prompt = ADVISOR_DIRECTIONS_PROMPT_TEMPLATE.format(
         problem=problem,
         past_notes_section=_format_past_notes_for_prompt(_load_solver_history()),
+        literature_guidance=literature_guidance,
+        literature_section_note=literature_section_note,
         literature_section=literature_section,
     )
     print(f"\n{'='*80}\n[Stage 1] Advisor Directions\n{'='*80}")
@@ -4496,17 +4673,17 @@ else:
 
 # Identify best verified entry as a baseline. When Track A finalize ran,
 # benchmark.json's solution field is overridden with the polished text.
+best_entry = None
+best_idx = None
+for k, e in memory.all_final_solutions().items():
+    if e.get("if_final_true") == "true":
+        if best_entry is None or not e.get("is_relaxation", True):
+            best_entry = e
+            best_idx = k
+
 if SKIP_BENCHMARK:
     print("[benchmark] skipped (SKIP_BENCHMARK=1)")
 else:
-    best_entry = None
-    best_idx   = None
-    for k, e in memory.all_final_solutions().items():
-        if e.get("if_final_true") == "true":
-            if best_entry is None or not e.get("is_relaxation", True):
-                best_entry = e
-                best_idx   = k
-
     if BENCHMARK_FILE.exists():
         print(f"[RESUME] Benchmark already written: {BENCHMARK_FILE.name}")
     else:
@@ -4560,7 +4737,11 @@ if _finalize_track == "A":
 elif _finalize_track == "B":
     msg = "Track B finalize complete (progress report; no verified full-problem proof). See solution.tex."
 elif memory.has_any_verified_solution():
-    msg = "Verified solution found. See benchmark.json."
+    msg = (
+        "Verified solution found. See solution.tex."
+        if SKIP_BENCHMARK
+        else "Verified solution found. See benchmark.json."
+    )
 else:
     msg = "No solution passed verification in this run."
 

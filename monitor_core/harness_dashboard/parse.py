@@ -22,7 +22,7 @@ def parse_improof_agent(agent_name: str, *, folder_name: str | None = None, roun
     folder = folder_name or ""
     rnd = round_id
     if rnd is None and folder:
-        m = re.match(r"^[A-Za-z]+-c(\d+)-", folder)
+        m = re.match(r"^[A-Za-z0-9_]+-[cr](\d+)-", folder)
         if m:
             rnd = int(m.group(1))
 
@@ -35,6 +35,20 @@ def parse_improof_agent(agent_name: str, *, folder_name: str | None = None, roun
         "Compute": ("compute", "compute"),
     }
     role, pipeline_stage = role_map.get(name, ("unknown", "other"))
+    if role == "unknown":
+        normalized = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+        configured_roles = (
+            ("council_member", "council_member", "council"),
+            ("workflow", "workflow", "wf"),
+            ("author", "author", "author"),
+            ("critic", "critic", "critic"),
+            ("compute", "compute", "compute"),
+            ("council", "council", "council"),
+        )
+        for marker, inferred_role, inferred_stage in configured_roles:
+            if marker in normalized.split("_") or normalized.endswith(marker):
+                role, pipeline_stage = inferred_role, inferred_stage
+                break
     stage = folder or f"{name}_r{rnd if rnd is not None else 0}"
     return {
         "stage_name": stage,

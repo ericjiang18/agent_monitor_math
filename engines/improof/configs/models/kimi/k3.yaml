@@ -1,0 +1,12 @@
+model: kimi-k3
+api: custom
+api_key_env: KIMI_API_KEY
+base_url: https://2qg3r7w8aefiukbds.flashflame.ai/v1
+base_url_env: KIMI_API_BASE
+max_tokens: 32768
+reasoning_effort: max
+reasoning_effort_env: KIMI_REASONING_EFFORT
+batch_processing: false
+use_openai_responses_api: false
+stream_openai_chat_completions: false
+concurrent_requests: 4

@@ -38,6 +38,9 @@ class CLIEventParser:
         # Tool telemetry for the console's live panel.
         self.tool_events: list[dict[str, str]] = []
         self.tool_calls = 0
+        # Structured CLIs can report a useful terminal subtype even when the
+        # process itself only exposes a generic non-zero exit code.
+        self.terminal_error: str | None = None
 
     def _new_turn(self) -> dict[str, Any]:
         return {"items": [], "kinds": set(), "detail": [], "thinking": [], "tools": []}
@@ -74,7 +77,7 @@ class CLIEventParser:
                 return
             if self.engine == "codex":
                 self._codex_event(ev)
-            elif self.engine == "openclaude":
+            elif self.engine in {"claude", "openclaude"}:
                 self._openclaude_event(ev)
             elif self.engine == "openclaw":
                 self._openclaw_event(ev)
@@ -117,8 +120,14 @@ class CLIEventParser:
                 self._item("tool", f"{it}: {item.get('text') or item.get('query') or ''}", tool=str(it))
                 self._close_turn()
             elif it == "error":
-                self._log(f"error · {_clip(item.get('message'))}")
-                self._item("error", str(item.get("message") or ""))
+                message = str(item.get("message") or "")
+                self._log(f"error · {_clip(message)}")
+                self._item("error", message)
+                # Trusted wrappers mark their final, already-sanitized error.
+                # Ordinary model/CLI item text must not silently become a
+                # top-level status diagnostic.
+                if item.get("terminal") is True and message.strip():
+                    self.terminal_error = message.strip()[-1200:]
                 self._close_turn()
         elif t == "turn.completed":
             u = ev.get("usage") or {}
@@ -178,10 +187,19 @@ class CLIEventParser:
             self.usage["output_tokens"] = int(u.get("output_tokens") or 0)
             if ev.get("total_cost_usd") is not None:
                 self.usage["cost_usd"] = float(ev["total_cost_usd"])
-            self._log(
-                f"✓ result · {ev.get('num_turns', '?')} turns · "
-                f"${ev.get('total_cost_usd', 0):.4f} · {_clip(ev.get('result'), 120)}"
-            )
+            result_text = str(ev.get("result") or "").strip()
+            subtype = str(ev.get("subtype") or "").strip()
+            if ev.get("is_error"):
+                self.terminal_error = result_text or subtype or "OpenClaude reported an error"
+                self._log(
+                    f"✗ result · {ev.get('num_turns', '?')} turns · "
+                    f"{_clip(self.terminal_error, 160)}"
+                )
+            else:
+                self._log(
+                    f"✓ result · {ev.get('num_turns', '?')} turns · "
+                    f"${ev.get('total_cost_usd', 0):.4f} · {_clip(result_text, 120)}"
+                )
 
     # ── openclaw (agent --local --json + session JSONL) ──────────────────
 
@@ -351,6 +369,13 @@ class CLIEventParser:
 
     def output(self) -> str:
         return "\n".join(self.lines)
+
+    def final_message(self) -> str:
+        """Return the latest normalized assistant message, if one was parsed."""
+        for turn in reversed(self.turns):
+            if "message" in turn.get("kinds", set()) and str(turn.get("detail") or "").strip():
+                return str(turn["detail"]).strip()
+        return ""
 
     # ── per-turn agent nodes ─────────────────────────────────────────────
 

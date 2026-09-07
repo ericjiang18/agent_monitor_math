@@ -2,10 +2,11 @@
 
 __version__ = "0.1.0"
 
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data"
+DATA_DIR = Path(os.environ.get("AGENT_MONITOR_DATA_DIR") or ROOT / "data").expanduser().resolve()
 CACHE_DIR = DATA_DIR / "cache"
 RUNS_DIR = DATA_DIR / "runs"
 LOGS_DIR = DATA_DIR / "logs"

@@ -4,7 +4,7 @@ The files live in HERMES_HOME (``data/hermes/``) and apply to **every** engine:
 
 - ``SOUL.md``                 — agent identity, injected as slot #1 of the
                                 system prompt (``load_soul_identity=True``).
-- ``skills/<name>/SKILL.md``  — skill packs, indexed into the system prompt.
+- ``skills/<name>/SKILL.md``  — skill packs, indexed by path in portable prompts.
                                 A skill directory renamed to ``<name>.disabled``
                                 is excluded from the index.
 - ``memories/MEMORY.md``      — the agent's persistent notes.
@@ -12,14 +12,17 @@ The files live in HERMES_HOME (``data/hermes/``) and apply to **every** engine:
   Memory injection is gated by ``memory.memory_enabled`` in
   ``HERMES_HOME/config.yaml``.
 
-Hermes reads these natively. Engines that cannot (Codex, OpenClaude, OpenHands,
-DeepAgents, …) receive the same content through :func:`persona_preamble`, which
-is prepended to their task prompt.
+Hermes reads these natively. Portable prompts copy each enabled skill package
+into the run workspace and give tool-capable engines a relative path, so they
+load only relevant instructions without multiplying every skill body across
+every agent turn.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
+from pathlib import Path
 from typing import Any
 
 from agent_monitor import HERMES_HOME
@@ -28,11 +31,13 @@ _NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,63}")
 _MEMORY_FILES = ("MEMORY.md", "USER.md")
 _DISABLED_SUFFIX = ".disabled"
 _SEED_MARKER = ".seeded"
+_SEED_V2_MARKER = ".seeded-v4-research-proof-audit-reconciliation"
+_LEGACY_RESEARCH_AUDIT_PACKAGE_DIGESTS = {
+    # Deployed v3 built-in, excluding interpreter cache files.  An edited
+    # package intentionally will not match and will never be overlaid.
+    "b873b3a4fb50c147f6af0d45240763f806540dff68e440ad90cf407811e77453",
+}
 
-# Budget for skill bodies rendered into a portable prompt. Beyond this the
-# remaining skills degrade to name + description only, so a large skill library
-# can never crowd out the actual problem statement.
-_PREAMBLE_SKILL_BUDGET = 9000
 # Generous ceiling on the identity block — normal SOUL.md files are far smaller;
 # this only stops a runaway file from dominating the prompt.
 _PREAMBLE_IDENTITY_LIMIT = 20000
@@ -50,28 +55,82 @@ def _memories_dir():
     return d
 
 
-def ensure_seeded() -> None:
-    """Populate a fresh agent home with starter skills and memory scaffolds.
+def _skill_package_digest(path: Path) -> str | None:
+    """Fingerprint user-visible package files while ignoring Python caches."""
+    try:
+        digest = hashlib.sha256()
+        files = sorted(
+            item
+            for item in path.rglob("*")
+            if item.is_file()
+            and not item.is_symlink()
+            and "__pycache__" not in item.parts
+        )
+        for item in files:
+            relative = item.relative_to(path).as_posix().encode("utf-8")
+            content = item.read_bytes()
+            digest.update(len(relative).to_bytes(4, "big"))
+            digest.update(relative)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+        return digest.hexdigest()
+    except (OSError, ValueError):
+        return None
 
-    Runs once — the marker file means skills the user deleted on purpose are
-    never resurrected.
-    """
+
+def ensure_seeded() -> None:
+    """Seed fresh profiles and migrate new built-ins without overwriting users."""
     marker = _skills_dir() / _SEED_MARKER
-    if marker.exists():
+    version_marker = _skills_dir() / _SEED_V2_MARKER
+    fresh = not marker.exists()
+    if not fresh and version_marker.exists():
         return
-    from agent_monitor.skill_seeds import MEMORY_SCAFFOLDS, STARTER_SKILLS
+    from agent_monitor.skill_seeds import (
+        MEMORY_SCAFFOLDS,
+        STARTER_SKILL_PACKAGES,
+        STARTER_SKILL_REFERENCES,
+        STARTER_SKILLS,
+    )
 
     try:
-        for name, content in STARTER_SKILLS.items():
+        names = STARTER_SKILLS if fresh else {
+            name: STARTER_SKILLS[name] for name in STARTER_SKILL_PACKAGES
+        }
+        for name, content in names.items():
             d = _skills_dir() / name
-            if not d.exists() and not (_skills_dir() / f"{name}{_DISABLED_SUFFIX}").exists():
+            if d.exists() or (_skills_dir() / f"{name}{_DISABLED_SUFFIX}").exists():
+                package = STARTER_SKILL_PACKAGES.get(name)
+                if (
+                    name == "research-proof-audit"
+                    and d.is_dir()
+                    and package is not None
+                    and _skill_package_digest(d)
+                    in _LEGACY_RESEARCH_AUDIT_PACKAGE_DIGESTS
+                ):
+                    shutil.copytree(package, d, dirs_exist_ok=True)
+                continue
+            package = STARTER_SKILL_PACKAGES.get(name)
+            if package is not None:
+                shutil.copytree(package, d)
+            else:
                 d.mkdir(parents=True, exist_ok=True)
                 (d / "SKILL.md").write_text(content, encoding="utf-8")
-        for fname, content in MEMORY_SCAFFOLDS.items():
-            path = _memories_dir() / fname
-            if not path.exists():
-                path.write_text(content, encoding="utf-8")
-        marker.write_text("starter skills seeded\n", encoding="utf-8")
+        if fresh:
+            for name, references in STARTER_SKILL_REFERENCES.items():
+                skill_dir = _skills_dir() / name
+                if not skill_dir.is_dir():
+                    continue
+                for filename, content in references.items():
+                    target = skill_dir / "references" / filename
+                    if not target.exists():
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text(content, encoding="utf-8")
+            for fname, content in MEMORY_SCAFFOLDS.items():
+                path = _memories_dir() / fname
+                if not path.exists():
+                    path.write_text(content, encoding="utf-8")
+            marker.write_text("starter skills seeded\n", encoding="utf-8")
+        version_marker.write_text("research proof audit skills seeded\n", encoding="utf-8")
     except OSError:
         pass  # A read-only home just means no seeds; not fatal.
 
@@ -164,14 +223,30 @@ def list_skills() -> list[dict[str, Any]]:
                 content = skill_md.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 content = ""
-        desc = next(
-            (ln.strip().lstrip("#").strip() for ln in content.splitlines() if ln.strip()),
-            "",
-        )
+        desc = _skill_description(content)
         out.append(
             {"name": name, "enabled": enabled, "description": desc[:160], "content": content}
         )
     return out
+
+
+def _skill_description(content: str) -> str:
+    """Return frontmatter description, otherwise the first Markdown heading."""
+    text = content or ""
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end >= 0:
+            for line in text[3:end].splitlines():
+                key, sep, value = line.partition(":")
+                if sep and key.strip().lower() == "description":
+                    value = value.strip().strip("'\"")
+                    if value:
+                        return value[:160]
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()[:160]
+    return ""
 
 
 def _skill_dir(name: str, *, must_exist: bool = False):
@@ -239,8 +314,60 @@ def save_memory(name: str, content: str) -> None:
 
 # ── portable persona (engines that can't read HERMES_HOME) ───────────────
 
-def persona_preamble(*, include_memory: bool | None = None) -> str:
-    """Render identity + enabled skills + memory as a prompt preamble.
+def _materialize_skills(workspace: Path, skills: list[dict[str, Any]]) -> dict[str, str]:
+    """Copy enabled skill packages into a run-visible directory.
+
+    Some harnesses expose only the workspace as their virtual filesystem. A
+    host-absolute HERMES_HOME reference is therefore unusable even though the
+    skill exists. Copy packages (including references/assets) and advertise a
+    relative path only after the copy succeeds.
+    """
+    visible: dict[str, str] = {}
+    root = workspace / "_agent" / "skills"
+    for skill in skills:
+        name = _check_name(str(skill.get("name") or ""))
+        source = _skill_dir(name, must_exist=True)
+        target = root / name
+        try:
+            for item in source.rglob("*"):
+                if item.is_symlink():
+                    continue
+                relative = item.relative_to(source)
+                destination = target / relative
+                if item.is_dir():
+                    destination.mkdir(parents=True, exist_ok=True)
+                elif item.is_file():
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(item, destination)
+            skill_md = target / "SKILL.md"
+            if skill_md.is_file():
+                visible[name] = f"_agent/skills/{name}/SKILL.md"
+        except OSError:
+            continue
+    return visible
+
+
+def materialize_enabled_skills(workspace: Path) -> dict[str, str]:
+    """Expose enabled profile skill packages inside one run workspace.
+
+    Hermes can normally discover profile skills through ``HERMES_HOME``.  Its
+    Codex app-server compatibility route, however, is intentionally confined
+    to the run workspace.  Keeping this small public entry point lets native
+    and portable harnesses share the same stable ``_agent/skills`` paths
+    without injecting duplicate identity or memory text into the prompt.
+    """
+    ensure_seeded()
+    skills = [
+        skill for skill in list_skills()
+        if skill["enabled"] and (skill.get("content") or "").strip()
+    ]
+    return _materialize_skills(workspace, skills)
+
+
+def persona_preamble(
+    *, include_memory: bool | None = None, workspace: Path | None = None
+) -> str:
+    """Render identity + lazy skill references + memory as a prompt preamble.
 
     Hermes loads all of this natively, so this is for the CLI engines (Codex,
     OpenClaude, OpenHands, OpenClaw, DeepAgents, …) which only ever see a task
@@ -257,24 +384,22 @@ def persona_preamble(*, include_memory: bool | None = None) -> str:
 
     skills = [s for s in list_skills() if s["enabled"] and (s.get("content") or "").strip()]
     if skills:
-        index = "\n".join(f"- {s['name']}: {s['description']}" for s in skills)
-        parts = [f"=== SKILLS ({len(skills)}) ===\nAvailable skills:\n{index}"]
-        budget = _PREAMBLE_SKILL_BUDGET
-        omitted: list[str] = []
-        for s in skills:
-            body = s["content"].strip()
-            if len(body) <= budget:
-                parts.append(f"--- skill: {s['name']} ---\n{body}")
-                budget -= len(body)
-            else:
-                omitted.append(s["name"])
-        if omitted:
-            parts.append(
-                "(Skills listed but not expanded here — ask for them if needed: "
-                + ", ".join(omitted)
-                + ")"
+        visible = _materialize_skills(workspace, skills) if workspace is not None else {}
+        skill_root = _skills_dir()
+        indexed = [s for s in skills if workspace is None or s["name"] in visible]
+        index = "\n".join(
+            f"- {s['name']}: {s['description']} "
+            f"(source: {visible.get(s['name']) or (skill_root / s['name'] / 'SKILL.md')})"
+            for s in indexed
+        )
+        if indexed:
+            blocks.append(
+                f"=== SKILLS ({len(indexed)}) ===\n"
+                "Enabled skills are listed below. If a skill is relevant and you "
+                "have a file-reading tool, read its source before using it; do not "
+                "load unrelated skills.\n"
+                + index
             )
-        blocks.append("\n\n".join(parts))
 
     want_memory = memory_enabled() if include_memory is None else include_memory
     if want_memory:

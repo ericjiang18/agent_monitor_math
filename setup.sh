@@ -2,11 +2,12 @@
 # One-shot setup for Agent Monitor. Run from the repo root:  ./setup.sh
 set -euo pipefail
 cd "$(dirname "$0")"
+export PATH="${HOME}/.local/node24/bin:${HOME}/.npm-global/bin:${HOME}/.local/bin:${PATH}"
 
 say() { printf '\n\033[1;36m▸ %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m! %s\033[0m\n' "$*"; }
 
-# ── 1. Main virtualenv (console + Hermes + UCLA + Monitor) ──────────────────
+# ── 1. Main virtualenv (console + Math Harness + Hermes + Monitor) ──────────
 PY=${PYTHON:-python3}
 if ! command -v "$PY" >/dev/null; then
   echo "python3 not found. Install Python 3.11+ first." >&2; exit 1
@@ -76,6 +77,29 @@ else
   say "OpenClaw CLI already installed"
 fi
 
+# ── 2d. Official DeepSeek Harness + Danus sources ────────────────────────────
+if [ ! -d engines/deepseek-harness/.git ]; then
+  say "Cloning official DeepSeek Harness"
+  git clone --depth 1 https://github.com/deepseek-ai/deepseek-harness.git engines/deepseek-harness \
+    || warn "DeepSeek Harness clone failed"
+else
+  say "DeepSeek Harness source already present"
+fi
+if ! command -v dsh >/dev/null && command -v npm >/dev/null; then
+  say "Installing official DeepSeek Harness CLI to ~/.npm-global"
+  PATH="$HOME/.local/node24/bin:$PATH" npm install -g --prefix "$HOME/.npm-global" @deepseek-ai/dsh \
+    || warn "dsh install failed — npx will retry on the first API run"
+fi
+
+if [ ! -d engines/danus/.git ]; then
+  say "Cloning Danus Codex branch (source only)"
+  git clone --depth 1 --branch codex --single-branch https://github.com/frenzymath/Danus.git engines/danus \
+    || warn "Danus clone failed"
+else
+  say "Danus source already present"
+fi
+warn "Danus is not auto-initialized: its workers bypass approvals and sandboxing. Use an isolated host and explicitly configure DANUS_CMD."
+
 # ── 3. .env ──────────────────────────────────────────────────────────────────
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -83,10 +107,12 @@ if [ ! -f .env ]; then
 else
   say ".env already exists — leaving it untouched"
 fi
+chmod 600 .env
 
 # ── 4. Optional CLI engines ──────────────────────────────────────────────────
-say "Optional CLI engines (skip if you only need Hermes / IMProof / UCLA):"
+say "Optional CLI engines (skip if you only need Math Harness / Hermes / IMProof):"
 command -v codex      >/dev/null && echo "  codex:      installed" || echo "  codex:      npm install -g @openai/codex"
+command -v claude     >/dev/null && echo "  claude:     installed ($(claude --version 2>/dev/null || echo version unknown))" || echo "  claude:     install the official CLI: https://code.claude.com/docs/en/installation"
 command -v openclaude >/dev/null && echo "  openclaude: installed" || echo "  openclaude: npm install -g @gitlawb/openclaude@latest"
 command -v openhands  >/dev/null && echo "  openhands:  installed" || echo "  openhands:  uv tool install openhands"
 

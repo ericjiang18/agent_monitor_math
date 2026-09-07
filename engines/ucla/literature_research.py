@@ -46,6 +46,7 @@ from deep_read import (
     _extract_json_array,
     _extract_json_object,
     _fetch_paper_text,
+    _require_pdf_parser,
     _sanitize_id,
 )
 
@@ -282,6 +283,10 @@ def run_literature_research(
         print(f"[lit_research] [RESUME] {output_file.name} exists "
               f"({len(existing)} paper(s)) — skipping Stage 0")
         return existing
+
+    # Missing parser used to turn successful downloads into fetch_failed.
+    # Fail before starting the paid search call.
+    _require_pdf_parser()
 
     # ── A. Search (cached at search_picks_file) ──────────────────────────
     picks = _load_cached_picks(search_picks_file)

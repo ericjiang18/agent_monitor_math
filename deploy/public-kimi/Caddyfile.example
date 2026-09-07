@@ -1,0 +1,108 @@
+# Dedicated public hostname. Set PUBLIC_KIMI_HOST in Caddy's service
+# environment before adapting this file. The existing private console hostname
+# and secret base path are intentionally absent.
+{$PUBLIC_KIMI_HOST} {
+	request_body {
+		max_size 32KiB
+	}
+
+	header {
+		-Server
+		Cache-Control "no-store"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+
+	@page {
+		method GET
+		path /
+	}
+	@static {
+		method GET
+		path /static/public_kimi.css /static/public_kimi.js
+	}
+	@config {
+		method GET
+		path /api/config
+	}
+	@start {
+		method POST
+		path /api/runs
+	}
+	@run {
+		method GET
+		path_regexp run ^/api/runs/[A-Za-z0-9_-]{20,128}$
+	}
+	@stop {
+		method POST
+		path_regexp stop ^/api/runs/[A-Za-z0-9_-]{20,128}/stop$
+	}
+	@health {
+		method GET
+		path /healthz
+	}
+
+	handle @page {
+		reverse_proxy 127.0.0.1:4610 {
+			header_up -Authorization
+			header_up -X-API-Key
+			header_up X-Public-Client-IP {remote_host}
+		}
+	}
+	handle @static {
+		reverse_proxy 127.0.0.1:4610 {
+			header_up -Authorization
+			header_up -X-API-Key
+			header_up X-Public-Client-IP {remote_host}
+		}
+	}
+	handle @config {
+		reverse_proxy 127.0.0.1:4610 {
+			header_up -Authorization
+			header_up -X-API-Key
+			header_up X-Public-Client-IP {remote_host}
+		}
+	}
+	handle @start {
+		reverse_proxy 127.0.0.1:4610 {
+			buffer_requests
+			header_up -Authorization
+			header_up -X-API-Key
+			header_up X-Public-Client-IP {remote_host}
+		}
+	}
+	handle @run {
+		reverse_proxy 127.0.0.1:4610 {
+			header_up -Authorization
+			header_up -X-API-Key
+			header_up X-Public-Client-IP {remote_host}
+		}
+	}
+	handle @stop {
+		reverse_proxy 127.0.0.1:4610 {
+			buffer_requests
+			header_up -Authorization
+			header_up -X-API-Key
+			header_up X-Public-Client-IP {remote_host}
+		}
+	}
+	handle @health {
+		reverse_proxy 127.0.0.1:4610 {
+			header_up -Authorization
+			header_up -X-API-Key
+			header_up X-Public-Client-IP {remote_host}
+		}
+	}
+
+	# No full-console proxy fallback: settings, auth, library, file editing,
+	# Lean/DAG generation, run listing, and continuation APIs remain unreachable.
+	handle {
+		respond "Not Found" 404
+	}
+}

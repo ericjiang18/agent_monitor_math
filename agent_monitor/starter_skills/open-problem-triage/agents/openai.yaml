@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open Problem Triage"
+  short_description: "Classify and scope research-level math targets"
+  default_prompt: "Use $open-problem-triage to classify this claim before attempting a proof."

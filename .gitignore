@@ -4,8 +4,11 @@ data/cache/*
 data/logs/*
 data/hermes/*
 data/users.db*
+data/calls.jsonl
 data/codex_home/
+data/claude_home/
 data/library/*
+logs/
 !data/runs/.gitkeep
 !data/cache/.gitkeep
 !data/logs/.gitkeep
@@ -45,3 +48,17 @@ engines/**/.cache/
 **/.cache/
 **/web_dist/
 **/tui_dist/
+
+# Local backup and generated evaluation artifacts
+*.orig
+*.rej
+*.before-*
+evals/results/
+engines/monitor/harness_outputs.jsonl
+engines/ucla/papers/
+engines/ucla/solver_history_problem_with_library.jsonl
+
+# Clean upstream checkouts; exact revisions are recorded in
+# engines/EXTERNAL_CHECKOUTS.md. Their local runtimes are not source artifacts.
+engines/danus/
+engines/deepseek-harness/

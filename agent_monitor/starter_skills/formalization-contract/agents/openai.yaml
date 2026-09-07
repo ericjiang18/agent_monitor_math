@@ -1,0 +1,4 @@
+interface:
+  display_name: "Formalization Contract"
+  short_description: "Preserve claims across informal proof and Lean"
+  default_prompt: "Use $formalization-contract to map this theorem faithfully into Lean."

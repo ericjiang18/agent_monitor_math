@@ -1,0 +1,27 @@
+[Unit]
+Description=Agent Monitor Math Proving Console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/agent_monitor_math
+Environment=PYTHONPATH=/home/ubuntu/agent_monitor_math
+Environment=AGENT_MONITOR_DATA_DIR=/home/repo/agent_monitor_math/data
+Environment=AGENT_MONITOR_ENV_PATH=/home/repo/agent_monitor_math/.env
+Environment=AGENT_MONITOR_PORT=4600
+Environment=AGENT_MONITOR_HOST=127.0.0.1
+Environment=AGENT_MONITOR_BASE_PATH=/proof-cb44c0b18a86684e40171e2c2ce96ddfda24
+Environment=AGENT_MONITOR_MATHLIB_PROJECT=/home/ubuntu/.cache/agent-monitor/mathlib-v4.14.0
+Environment=AGENT_MONITOR_PUBLIC=0
+Environment=PATH=/home/ubuntu/.local/node24/bin:/home/ubuntu/.npm-global/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/repo/agent_monitor_math/.venv/bin/python -m agent_monitor.console_server
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
