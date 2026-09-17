@@ -10,9 +10,11 @@ YAML instead of requiring one Python subclass per worker role.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import shutil
+import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -126,10 +128,36 @@ class ConfigurableCLIAgent(CLIAgent):
         done: CLIDoneRecord,
     ) -> None:
         usage_cfg = self.component_config.get("usage") or {}
-        if not isinstance(usage_cfg, dict) or usage_cfg.get("type") != "codex_jsonl":
+        if not isinstance(usage_cfg, dict):
+            return
+        usage_type = str(usage_cfg.get("type") or "")
+        if usage_type not in {"codex_jsonl", "claude_projected_jsonl"}:
             return
         usage = parse_codex_jsonl(stdout_text)
         if usage.n_turns == 0:
+            return
+        if usage_type == "claude_projected_jsonl":
+            # Claude Code account runs are covered by the linked subscription,
+            # not billed through an API key. Preserve exact token/model
+            # telemetry without inventing an API-equivalent dollar charge.
+            self.tracker.add_tokens(usage.input_tokens + usage.output_tokens)
+            await self.events.emit(
+                "model.call",
+                {
+                    "model": str(
+                        self.component_config.get("model")
+                        or usage_cfg.get("model")
+                        or "claude-code"
+                    ),
+                    "in_tokens": usage.input_tokens,
+                    "cached_in_tokens": usage.cached_input_tokens,
+                    "out_tokens": usage.output_tokens,
+                    "reasoning_out_tokens": usage.reasoning_output_tokens,
+                    "cost_usd": 0.0,
+                    "n_turns": usage.n_turns,
+                    "via": "claude_code_subscription",
+                },
+            )
             return
         cfg_ref = str(usage_cfg.get("cost_config") or "models/openai/gpt-54-mini")
         try:
@@ -178,6 +206,7 @@ class ConfigurableCLIAgent(CLIAgent):
         codex_sandbox = str(self.component_config.get("codex_sandbox") or "").strip()
         if codex_sandbox and codex_sandbox.lower() != "none":
             cmd = _with_codex_sandbox_flag(cmd, codex_sandbox, resolve_backend(self.SANDBOX))
+        cmd = _with_codex_read_only_landlock(cmd)
         return cmd
 
     def _workspace_path(self, raw: str) -> Path:
@@ -388,6 +417,38 @@ def _insert_codex_exec_options(cmd: list[str], options: list[str]) -> list[str]:
 
 def _is_codex_exec_cmd(cmd: list[str]) -> bool:
     return bool(cmd and Path(cmd[0]).name == "codex" and "exec" in cmd)
+
+
+def _with_codex_read_only_landlock(cmd: list[str]) -> list[str]:
+    """Use the restricted Linux backend when bubblewrap cannot create loopback."""
+    if not _is_codex_exec_cmd(cmd) or not sys.platform.startswith("linux"):
+        return cmd
+    configured = os.environ.get("AGENT_MONITOR_CODEX_LEGACY_LANDLOCK")
+    enabled = configured is None or configured.strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    if not enabled:
+        return cmd
+    read_only = any(
+        (
+            part in {"--sandbox", "-s"}
+            and i + 1 < len(cmd)
+            and cmd[i + 1] == "read-only"
+        )
+        or part == "--sandbox=read-only"
+        for i, part in enumerate(cmd)
+    )
+    already_enabled = any(
+        part == "--enable"
+        and i + 1 < len(cmd)
+        and cmd[i + 1] == "use_legacy_landlock"
+        for i, part in enumerate(cmd)
+    )
+    if not read_only or already_enabled:
+        return cmd
+    return _insert_codex_exec_options(
+        cmd, ["--enable", "use_legacy_landlock"]
+    )
 
 
 def _codex_prompt_arg_index(cmd: list[str]) -> int | None:

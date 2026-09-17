@@ -13,6 +13,76 @@ from agent_monitor.paths import ensure_data_dirs, ensure_import_paths
 from agent_monitor.schema import normalize_run
 
 
+# Codex's workspace-write sandbox needs network access enabled on this host to
+# avoid the unavailable loopback namespace path. Keep that access behind the
+# app-server's supported domain proxy instead of granting general egress.
+_CODEX_MATH_NETWORK_DOMAINS = [
+    "**.ams.org",
+    "**.arxiv.org",
+    "**.cambridge.org",
+    "**.combinatorica.hu",
+    "**.crossref.org",
+    "**.dartmouth.edu",
+    "**.doi.org",
+    "**.erdosproblems.com",
+    "**.oeis.org",
+    "**.tandfonline.com",
+]
+
+
+def _codex_network_domains() -> list[str]:
+    """Enable Codex's scoped proxy only when the deployment opts in.
+
+    Some kernels cannot create the proxy's loopback namespace; on those hosts
+    enabling it makes even ordinary workspace file tools fail before launch.
+    """
+    enabled = os.environ.get("AGENT_MONITOR_HERMES_SCOPED_NETWORK", "").strip().lower()
+    return list(_CODEX_MATH_NETWORK_DOMAINS) if enabled in {"1", "true", "yes", "on"} else []
+
+
+def close_agent(agent: Any, *, messages: list[dict[str, Any]] | None = None) -> None:
+    """Close every resource owned by a one-shot embedded Hermes agent.
+
+    Hermes' public ``AIAgent.close()`` currently does not retire the lazily
+    created Codex app-server session. Monitor jobs are one-shot, so leaving
+    that session open leaks the app-server and its MCP/code-mode children
+    after the run has already reached a terminal state.
+
+    Keep this helper idempotent and explicit rather than relying on garbage
+    collection: service workers retain enough references for GC to be both
+    late and nondeterministic.
+    """
+    if agent is None:
+        return
+    try:
+        shutdown_memory = getattr(agent, "shutdown_memory_provider", None)
+        if callable(shutdown_memory):
+            shutdown_memory(messages or [])
+    except Exception:  # noqa: BLE001 - best-effort teardown must continue
+        pass
+    try:
+        session = getattr(agent, "_codex_session", None)
+        if session is not None:
+            from agent_monitor.process_control import terminate_descendants
+
+            try:
+                process = getattr(getattr(session, "_client", None), "_proc", None)
+                if process is not None and isinstance(process.pid, int):
+                    terminate_descendants(process.pid)
+            except Exception:  # noqa: BLE001 - still close the transport
+                pass
+            session.close()
+        agent._codex_session = None
+    except Exception:  # noqa: BLE001 - continue to the agent-level cleanup
+        pass
+    try:
+        close = getattr(agent, "close", None)
+        if callable(close):
+            close()
+    except Exception:  # noqa: BLE001 - cleanup cannot mask the run result
+        pass
+
+
 def _configure_hermes_home() -> Path:
     ensure_data_dirs()
     os.environ["HERMES_HOME"] = str(HERMES_HOME)
@@ -91,9 +161,13 @@ def create_agent(
     model: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
+    codex_home: str | Path | None = None,
+    use_codex_subscription: bool = False,
     max_iterations: int = 60,
     enable_subagents: bool = True,
     subagent_model: str | None = None,
+    reasoning_effort: str | None = None,
+    service_tier: str | None = None,
 ) -> Any:
     """Construct a quiet embedded AIAgent for informal proving."""
     _configure_hermes_home()
@@ -119,7 +193,7 @@ def create_agent(
     if not base_url and os.environ.get("OPENAI_API_KEY"):
         base_url = "https://api.openai.com/v1"
 
-    toolsets = ["terminal", "file", "code_execution", "skills"]
+    toolsets = ["terminal", "file", "code_execution", "skills", "vision"]
     if enable_subagents:
         toolsets.append("delegation")
     kwargs: dict[str, Any] = {
@@ -133,9 +207,19 @@ def create_agent(
         "max_iterations": max_iterations,
         "platform": "embedded",
     }
-    if api_key:
+    if reasoning_effort:
+        kwargs["reasoning_config"] = {"effort": reasoning_effort}
+    if service_tier:
+        kwargs["service_tier"] = service_tier
+    if use_codex_subscription:
+        # Keep OAuth ownership in Codex CLI. Hermes' app-server runtime reads
+        # the user's CODEX_HOME directly, so no refresh token is copied into
+        # Hermes' own auth store (which would create token-rotation races).
+        kwargs["provider"] = "openai-codex"
+        kwargs["api_mode"] = "codex_app_server"
+    if api_key and not use_codex_subscription:
         kwargs["api_key"] = api_key
-    if base_url:
+    if base_url and not use_codex_subscription:
         kwargs["base_url"] = base_url
     # Persistent memory (memories/MEMORY.md + USER.md) is opt-in via the
     # console's Agent panel — it toggles memory.memory_enabled in config.yaml.
@@ -163,6 +247,13 @@ def create_agent(
             agent._monitor_subagent_model = subagent_model
         except Exception as exc:  # noqa: BLE001
             print(f"[agent-monitor] subagent model hook failed: {exc}")
+    if use_codex_subscription and codex_home:
+        agent._monitor_codex_home = str(Path(codex_home))
+        # Monitor jobs are unattended but already confined to a unique
+        # workspace-write root. Accept file-change requests inside that root;
+        # command elevation and permissions changes remain fail-closed.
+        agent._monitor_auto_approve_apply_patch = True
+        agent._monitor_codex_network_domains = _codex_network_domains()
     return agent
 
 

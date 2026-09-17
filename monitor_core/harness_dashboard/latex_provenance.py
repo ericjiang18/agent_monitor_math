@@ -375,6 +375,28 @@ def _ordered_contributors(agents: list[dict], source: str) -> list[dict]:
     return sorted(contributors, key=lambda a: a.get("call_seq") or 0)
 
 
+def _dedupe_identical_contributors(agents: list[dict]) -> list[dict]:
+    """Keep the latest contributor for each byte-identical contribution.
+
+    Older saved runs may have the complete workspace proof copied onto every
+    message node. Exact-text deduplication is lossless for incremental
+    attribution (the latest identical version is the meaningful one) and
+    prevents an expensive block-by-node SequenceMatcher fan-out.
+    """
+    latest_by_text: dict[str, int] = {}
+    texts: list[str] = []
+    for index, agent in enumerate(agents):
+        contribution = _agent_contribution_text(agent)
+        texts.append(contribution)
+        if contribution.strip():
+            latest_by_text[contribution] = index
+    return [
+        agent
+        for index, (agent, contribution) in enumerate(zip(agents, texts))
+        if not contribution.strip() or latest_by_text[contribution] == index
+    ]
+
+
 def _split_final_blocks(final_tex: str) -> list[dict[str, Any]]:
     lines = final_tex.splitlines()
     blocks: list[dict[str, Any]] = []
@@ -644,7 +666,7 @@ def build_final_latex_bundle(run_data: dict) -> dict[str, Any] | None:
         adir = adir
     _enrich_contributor_texts_from_artifacts(agents, adir)
     source = run_data.get("source") or ""
-    ordered = _ordered_contributors(agents, source)
+    ordered = _dedupe_identical_contributors(_ordered_contributors(agents, source))
     if len(ordered) >= 2:
         prov = compute_incremental_provenance(tex, ordered)
     else:

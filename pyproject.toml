@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-monitor"
 version = "0.1.0"
-description = "Unified informal math proving console: UCLA / IMProof / Hermes engines + pipeline monitor"
+description = "Unified math proving console: Math Agent Harness, IMProof, Hermes, shared DAG, and Lean monitor"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = { text = "MIT" }
@@ -33,6 +33,9 @@ dependencies = [
   "ptyprocess==0.7.0; sys_platform != 'win32'",
   "fire==0.7.1",
   "certifi==2026.5.20",
+  # UCLA literature research extracts downloaded primary-source PDFs.
+  # Keep this in the main environment because UCLA runs with sys.executable.
+  "PyMuPDF>=1.24,<2",
 ]
 
 [project.optional-dependencies]
@@ -46,4 +49,9 @@ where = ["."]
 include = ["agent_monitor*", "monitor_core*"]
 
 [tool.setuptools.package-data]
+agent_monitor = ["web/**/*", "starter_skills/**/*"]
 monitor_core = ["harness_dashboard/web/**/*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

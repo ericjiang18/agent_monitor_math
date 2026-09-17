@@ -21,9 +21,12 @@ job, downstream of solver feedback. Deep-read is pure extraction.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import re
+import shutil
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -75,8 +78,8 @@ def _download(url: str, dest: Path, timeout: int = 60) -> bool:
 
     Backoff schedule is 5 s / 15 s / 45 s between successive failures.
     Returns True on the first successful response, False after all attempts
-    exhausted. All exceptions (timeout, 4xx/5xx, DNS, SSL, …) are caught and
-    counted as one failed attempt.
+    exhausted. Transient failures are retried. Permanent HTTP client errors
+    skip the backoff loop and go directly to the one curl compatibility check.
     """
     last_err = None
     n_attempts = len(_DOWNLOAD_BACKOFFS) + 1
@@ -94,6 +97,16 @@ def _download(url: str, dest: Path, timeout: int = 60) -> bool:
         except Exception as e:
             last_err = e
             print(f"[deep_read] download attempt {attempt}/{n_attempts} failed for {url}: {e}")
+            if (
+                isinstance(e, urllib.error.HTTPError)
+                and 400 <= int(e.code) < 500
+                and int(e.code) not in {408, 425, 429}
+            ):
+                print(
+                    f"[deep_read] HTTP {e.code} is non-retryable for {url}; "
+                    "skipping backoff"
+                )
+                break
             if "CERTIFICATE_VERIFY_FAILED" in str(e) or "SSL" in str(e):
                 print(f"[deep_read] SSL error for {url}; trying curl fallback")
                 if _curl_download(url, dest, timeout=timeout):
@@ -155,6 +168,18 @@ def _extract_pdf_url_from_html(html_path: Path, base_url: str) -> str | None:
         return urljoin(base_url, m.group(1).strip())
 
     return None
+
+
+def _require_pdf_parser() -> None:
+    """Fail before paid literature calls when no PDF text backend is installed."""
+    if importlib.util.find_spec("pymupdf") is not None:
+        return
+    if shutil.which("pdftotext"):
+        return
+    raise RuntimeError(
+        "UCLA literature research requires a PDF parser. "
+        "Run ./setup.sh to install PyMuPDF (or install the pdftotext binary)."
+    )
 
 
 def _pdf_to_text(pdf_path: Path) -> str | None:
@@ -468,6 +493,8 @@ def run_deep_read(
             return json.loads(output_file.read_text(encoding="utf-8"))
         except Exception:
             pass  # fall through and re-run
+
+    _require_pdf_parser()
 
     # ── A. Triage ────────────────────────────────────────────────────────────
     briefing_text = json.dumps(

@@ -38,6 +38,21 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CODE_RE = re.compile(r"^[A-Z0-9]{3,6}-[A-Z0-9]{3,6}$")
 _MAX_OUTPUT_CHARS = 4000
 
+# A newly completed device login has valid OAuth tokens before Codex has made
+# its first model-list request and written models_cache.json. Keep the first
+# run usable during that short bootstrap window; the account's real cache takes
+# precedence as soon as Codex creates it.
+DEFAULT_CODEX_MODELS = (
+    "gpt-6-astra",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex-spark",
+)
+
 _lock = threading.Lock()
 _states: dict[int, dict[str, Any]] = {}
 
@@ -72,8 +87,39 @@ def account_login_ready(home: Path) -> bool:
     return bool(tokens.get("access_token") or tokens.get("id_token"))
 
 
+def available_models(user_id: int) -> list[str]:
+    """Return visible model IDs from this user's Codex cache without reading tokens."""
+    home = account_home(user_id)
+    fallback = list(DEFAULT_CODEX_MODELS) if account_login_ready(home) else []
+    cache = home / "models_cache.json"
+    if not cache.exists():
+        return fallback
+    try:
+        payload = json.loads(cache.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return fallback
+    entries = payload.get("models") if isinstance(payload, dict) else []
+    ranked: list[tuple[int, str]] = []
+    for item in entries or []:
+        if not isinstance(item, dict):
+            continue
+        slug = str(item.get("slug") or "").strip()
+        if not slug or (slug != "gpt-6-astra" and str(item.get("visibility") or "").lower() in {"hide", "hidden"}):
+            continue
+        priority = item.get("priority")
+        rank = int(priority) if isinstance(priority, (int, float)) else 10_000
+        ranked.append((rank, slug))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    models = list(dict.fromkeys(slug for _, slug in ranked))
+    if models and "gpt-6-astra" not in models and any(m.startswith("gpt-5.6-") for m in models):
+        models.insert(0, "gpt-6-astra")
+    return models or fallback
+
+
 def codex_binary() -> str | None:
-    return shutil.which("codex")
+    from agent_monitor.engines_registry import which_tool
+
+    return which_tool("codex")
 
 
 def _augment(user_id: int, snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -149,7 +195,9 @@ def start_login(user_id: int) -> dict[str, Any]:
             return _augment(user_id, dict(st))
         home = account_home(user_id)
         home.mkdir(parents=True, exist_ok=True)
-        env = os.environ.copy()
+        from agent_monitor.subprocess_env import child_process_env
+
+        env = child_process_env()
         env["CODEX_HOME"] = str(home)
         env.setdefault("NO_COLOR", "1")
         try:

@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -211,11 +212,47 @@ def cmd_run(args: argparse.Namespace) -> None:
             max_iterations=args.max_iterations,
         )
         print(json.dumps({"run_id": run.get("run_id"), "engine": "hermes", "status": "ok"}, indent=2))
-    elif engine == "ucla":
-        from agent_monitor.runners import ucla as ucla_runner
+    elif engine == "math_harness":
+        from agent_monitor import jobs
 
-        result = ucla_runner.run_problem(problem_path, problem_id=args.problem_id)
-        print(json.dumps(result, indent=2)[:4000])
+        # The standalone CLI has no signed-in account identity, so it uses only
+        # API credentials deliberately supplied to its process environment.
+        # The web console remains the surface for per-user Codex/Claude login.
+        prior_disable = os.environ.get("AGENT_MONITOR_DISABLE_AUTO_PIPELINE")
+        os.environ["AGENT_MONITOR_DISABLE_AUTO_PIPELINE"] = "1"
+        try:
+            job = jobs.start_job(
+                engine="math_harness",
+                problem_id=args.problem_id or problem_path.stem,
+                problem_text=text,
+                model=args.model or None,
+                max_iterations=args.max_iterations,
+                user=None,
+                use_subagents=False,
+                auth_route="api_key",
+            )
+        finally:
+            if prior_disable is None:
+                os.environ.pop("AGENT_MONITOR_DISABLE_AUTO_PIPELINE", None)
+            else:
+                os.environ["AGENT_MONITOR_DISABLE_AUTO_PIPELINE"] = prior_disable
+        job_id = str(job.get("job_id") or "")
+        run_id = str(job.get("run_id") or "")
+        try:
+            while True:
+                current = jobs.get_job(job_id)
+                if not current:
+                    raise RuntimeError("Math Harness job disappeared before completion")
+                if current.get("status") in {"finished", "failed", "stopped"}:
+                    break
+                time.sleep(0.25)
+        except KeyboardInterrupt:
+            if run_id:
+                jobs.stop_run(run_id)
+            raise
+        print(json.dumps(current, indent=2)[:4000])
+        if current.get("status") != "finished":
+            sys.exit(1)
     elif engine == "improof":
         from agent_monitor.runners import improof as improof_runner
 
@@ -232,7 +269,7 @@ def main(argv: list[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(
         prog="agent-monitor",
-        description="Unified informal math proving console (UCLA / IMProof / Hermes)",
+        description="Unified informal math proving console (Math Harness / IMProof / Hermes)",
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -257,7 +294,7 @@ def main(argv: list[str] | None = None) -> None:
     probs.add_argument("--limit", type=int, default=50)
 
     run_p = sub.add_parser("run", help="Run a problem with selected engine")
-    run_p.add_argument("engine", choices=["hermes", "ucla", "improof"])
+    run_p.add_argument("engine", choices=["hermes", "math_harness", "improof"])
     run_p.add_argument("problem", help="Problem id or path to statement file")
     run_p.add_argument("--problem-id", type=str, default="")
     run_p.add_argument("--model", type=str, default="")

@@ -1,16 +1,21 @@
 <!DOCTYPE html>
+<!-- Authentication, registration, and password-reset UI for the Proving Console. -->
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Sign in · Proving Console</title>
+<title>Sign up · Ansätze</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
 <style>
 :root, [data-theme="dark"] {
-  --bg: #0a0d12; --bg2: #0e1218; --panel: #11161e; --panel2: #161c26;
-  --border: #232c3a; --border2: #2e3a4d; --fg: #ecf1f8; --muted: #8b9cb3; --dim: #5b6b82;
-  --accent: #4f8cff; --accent-2: #22d3ee; --grad: linear-gradient(120deg, #4f8cff, #22d3ee);
+  --bg: #070a10; --bg2: #0c1118; --panel: #111821ee; --panel2: #161e28;
+  --border: #243044; --border2: #33465e; --fg: #eef3fb; --muted: #93a4bb; --dim: #62748c;
+  --accent: #5b93ff; --accent-2: #2de0f0; --grad: linear-gradient(120deg, #5b93ff, #2de0f0 55%, #7c5cff);
   --ok: #34d399; --err: #f87171;
-  --shadow: 0 8px 28px rgba(0,0,0,.35); --r: 14px;
+  --shadow: 0 18px 50px rgba(0,0,0,.38); --r: 16px;
+  --ease: cubic-bezier(.22,1,.36,1);
 }
 [data-theme="light"] {
   --bg: #f7f8fb; --bg2: #fff; --panel: #fff; --panel2: #f3f5f9;
@@ -19,20 +24,33 @@
   --shadow: 0 8px 28px rgba(15,23,42,.08);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+html { min-height: 100%; }
+body { min-height: 100vh; min-height: 100dvh; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
-  background: radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 65%), var(--bg);
+  font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 65%), var(--bg);
   color: var(--fg); display: flex; align-items: center; justify-content: center; padding: 24px;
 }
-.card {
-  width: min(400px, 100%); background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--r); box-shadow: var(--shadow); padding: 30px 28px 26px;
+body::before {
+  content: ""; position: fixed; inset: -20%;
+  background:
+    radial-gradient(40% 34% at 20% 10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(36% 30% at 82% 8%, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 68%);
+  animation: aurora 18s var(--ease) infinite alternate;
+  pointer-events: none; z-index: 0;
 }
+@keyframes aurora { from { transform: translate3d(-2%,-1%,0) scale(1);} to { transform: translate3d(2%,2%,0) scale(1.05);} }
+.card {
+  width: min(400px, 100%); background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--border);
+  border-radius: var(--r); box-shadow: var(--shadow); padding: 30px 28px 26px;
+  position: relative; z-index: 1; backdrop-filter: blur(18px);
+  animation: rise .55s var(--ease) both;
+}
+@keyframes rise { from { opacity:0; transform: translateY(18px) scale(.98);} to { opacity:1; transform:none;} }
 .brand { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 6px; }
 .brand .logo {
   width: 34px; height: 34px; border-radius: 10px; background: var(--grad);
-  display: grid; place-items: center; font-size: 16px; color: #fff; font-weight: 800;
+  display: grid; place-items: center; font-size: 16px; color:var(--on-accent); font-weight: 800;
 }
 .brand .nm { font-size: 17px; font-weight: 700; }
 .brand .nm i { font-style: normal; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -40,82 +58,336 @@ body {
 .tabs { display: flex; padding: 3px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--border); margin-bottom: 18px; }
 .tabs button {
   flex: 1; border: 0; background: transparent; color: var(--dim); padding: 8px 0;
-  border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;
+  border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .22s var(--ease);
 }
-.tabs button.active { background: var(--panel); color: var(--fg); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.tabs button.active { background: var(--panel); color: var(--fg); box-shadow: 0 1px 8px rgba(0,0,0,.1); }
 form { display: flex; flex-direction: column; gap: 12px; }
 label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--dim); font-weight: 600; }
 input {
   padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px;
   background: var(--panel2); color: var(--fg); font-size: 14px; outline: none;
 }
-input:focus { border-color: var(--accent); }
+input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
 button.primary {
-  margin-top: 4px; background: var(--grad); color: #fff; border: 0; border-radius: 10px;
+  margin-top: 4px; background: var(--grad); color:var(--on-accent); border: 0; border-radius: 10px;
   padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: transform .22s var(--ease), box-shadow .22s var(--ease);
 }
+button.primary:hover { transform: translateY(-1px); box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 30%, transparent); }
 button.primary:disabled { opacity: .5; }
+button.secondary {
+  width: 100%; min-height: 44px; border: 1px solid var(--border2); border-radius: 10px;
+  background: var(--panel2); color: var(--fg); padding: 11px 12px; font-size: 13px;
+  font-weight: 700; cursor: pointer; transition: border-color .2s ease, transform .2s var(--ease), background-color .2s ease;
+}
+button.secondary:hover { border-color: var(--accent); transform: translateY(-1px); }
+button.secondary:disabled { cursor: wait; opacity: .55; transform: none; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .err {
   display: none; color: var(--err); background: color-mix(in srgb, var(--err) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--err) 25%, transparent); border-radius: 10px;
   padding: 9px 12px; font-size: 12px;
 }
+.msg {
+  display: none; color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent); border-radius: 10px;
+  padding: 9px 12px; font-size: 12px;
+}
 .divider { display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 11px; margin: 16px 0 12px; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+#guest-area { display: none; }
+.guest-note { margin-top: 8px; color: var(--fg); font-size: 10.5px; line-height: 1.5; text-align: center; }
 #google-box { display: none; justify-content: center; }
 .note { margin-top: 18px; text-align: center; color: var(--dim); font-size: 11px; line-height: 1.6; }
+.forgot-link { margin-top: 10px; text-align: center; }
+.forgot-link a { color: var(--muted); font-size: 12px; text-decoration: none; transition: color .2s ease; }
+.forgot-link a:hover { color: var(--fg); text-decoration: underline; }
+.home-link {
+  display: inline-flex; align-items: center; min-height: 44px; margin: -6px 0 8px;
+  color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: none;
+  transition: color .2s ease, transform .2s var(--ease);
+}
+.home-link:hover { color: var(--fg); transform: translateX(-2px); }
+.home-link:focus-visible { color: var(--fg); outline: 2px solid var(--accent); outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  body::before, .card { animation: none; }
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+/* Ansatz brand palette; preserve live layout and behavior. */
+:root, [data-theme="dark"] {
+  --bg: #141c19; --bg2: #18221d; --panel: #1c2822ee; --panel2: #233128;
+  --border: #3b4a40; --border2: #526457; --fg: #eeeee4; --muted: #b8c3b7; --dim: #97a794;
+  --accent: #88b89b; --accent-2: #b4cbb9; --grad: #286448;
+  --ok: #34d399; --err: #f87171;
+  --shadow: 0 18px 50px rgba(0,0,0,.38); --r: 16px;
+  --ease: cubic-bezier(.22,1,.36,1);
+}
+[data-theme="light"] {
+  --bg: #f7f4ec; --bg2: #fff; --panel: #fff; --panel2: #f0ede4;
+  --border: #d8d6ca; --border2: #939e90; --fg: #202e27; --muted: #526056; --dim: #626e64;
+  --accent: #286448; --accent-2: #245c43; --grad: #286448;
+  --shadow: 0 8px 28px rgba(15,23,42,.08);
+}
+
+body { background: var(--bg); }
+body::before, body::after { display: none; }
+.brand .nm, .sb-brand .nm { font-family: Georgia, serif; font-size: 24px; font-weight: 400; letter-spacing: -.04em; }
+.brand .logo, .sb-brand .logo { border: 1px solid var(--accent); border-radius: 50%; background: transparent; color: var(--accent); font-family: Georgia, serif; font-size: 24px; font-style: italic; font-weight: 400; animation: none; box-shadow: none; }
+.card { border-radius: 8px; backdrop-filter: none; }
+@media (prefers-reduced-motion: reduce) { .card { animation: none; } }
+
+</style>
+<style id="clear-palette-style">
+/* Neutral surfaces and clear blue accents, shared with the public website. */
+:root, [data-theme="dark"] {
+  color-scheme:dark;
+  --bg:#111318; --bg2:#171a21; --panel:#1c2028; --panel2:#252a34;
+  --border:#343b48; --border2:#4b5668; --fg:#f6f8fc; --muted:#b9c2d0; --dim:#a0acbc;
+  --accent:#82b1ff; --accent-2:#a7c8ff; --grad:#82b1ff; --on-accent:#111318;
+  --ok:#4ade80; --warn:#fbbf24; --err:#ff8585;
+  --shadow:0 12px 32px rgb(0 0 0 / .22); --scroll:#56657a;
+}
+[data-theme="light"] {
+  color-scheme:light;
+  --bg:#ffffff; --bg2:#f8faff; --panel:#ffffff; --panel2:#f4f6fa;
+  --border:#dfe5ee; --border2:#b8c4d4; --fg:#17212f; --muted:#4c5c70; --dim:#637186;
+  --accent:#2563eb; --accent-2:#1d4ed8; --grad:#2563eb; --on-accent:#ffffff;
+  --ok:#15803d; --warn:#a15c00; --err:#c93838;
+  --shadow:0 8px 28px rgb(23 33 47 / .07); --scroll:#b8c4d4;
+}
+@media(prefers-color-scheme:light) {
+  :root:not([data-theme]) {
+    color-scheme:light;
+    --bg:#ffffff; --bg2:#f8faff; --panel:#ffffff; --panel2:#f4f6fa;
+    --border:#dfe5ee; --border2:#b8c4d4; --fg:#17212f; --muted:#4c5c70; --dim:#637186;
+    --accent:#2563eb; --accent-2:#1d4ed8; --grad:#2563eb; --on-accent:#ffffff;
+    --ok:#15803d; --warn:#a15c00; --err:#c93838;
+    --shadow:0 8px 28px rgb(23 33 47 / .07); --scroll:#b8c4d4;
+  }
+}
+body { background:var(--bg); }
+.card,.choice-menu,.run-profile-popover,.modal { background:var(--panel); backdrop-filter:none; }
+.prompt-shell { background:var(--panel); }
+.choice-dock { background:var(--panel2); }
+#view-landing > .landing-geometry,[data-theme="dark"] #view-landing > .landing-geometry { color:var(--accent); }
+.modal-backdrop { background:rgb(15 23 42 / .28); backdrop-filter:blur(4px); }
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="brand"><div class="logo">∎</div><div class="nm">Proving<i>Console</i></div></div>
-  <div class="sub">Sign in to use your own API keys and keep your runs private</div>
-  <div class="tabs">
-    <button id="tab-login" class="active">Sign in</button>
-    <button id="tab-register">Create account</button>
+  <a class="home-link" href="/" aria-label="Back to the Ansätze homepage">← Ansätze home</a>
+  <div class="brand"><div class="nm">Ansätze</div></div>
+  <div class="sub" id="sub-title">Sign up to use your own API keys and keep your runs private</div>
+  <div class="tabs" id="tabs">
+    <button id="tab-register" class="active" aria-pressed="true">Sign up</button>
+    <button id="tab-login" aria-pressed="false">Sign in</button>
   </div>
   <form id="form">
-    <label id="name-row" style="display:none">Name (optional)<input id="name" type="text" autocomplete="nickname" placeholder="Your name"/></label>
-    <label>Email<input id="email" type="email" autocomplete="email" required placeholder="you@example.com"/></label>
-    <label>Password<input id="password" type="password" autocomplete="current-password" required placeholder="At least 8 characters"/></label>
-    <div class="err" id="err"></div>
-    <button class="primary" id="submit" type="submit">Sign in</button>
+    <label id="name-row">Name (optional)<input id="name" type="text" autocomplete="nickname" placeholder="Your name"/></label>
+    <label id="email-row">Email<input id="email" type="email" autocomplete="email" required placeholder="you@example.com"/></label>
+    <label id="password-row">Password<input id="password" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters"/></label>
+    <label id="new-password-row" style="display:none">New Password<input id="new-password" type="password" autocomplete="new-password" placeholder="At least 8 characters"/></label>
+    <label id="confirm-password-row" style="display:none">Confirm New Password<input id="confirm-password" type="password" autocomplete="new-password" placeholder="Re-enter your new password"/></label>
+    <div class="err" id="err" role="alert" aria-live="assertive" tabindex="-1"></div>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+    <button class="primary" id="submit" type="submit" disabled>Sign up</button>
   </form>
-  <div class="divider" id="google-divider" style="display:none">or</div>
+  <div class="forgot-link" id="forgot-link" style="display:none"><a href="#" id="link-forgot">Forgot password?</a></div>
+  <div class="divider" id="auth-divider" style="display:none">or continue with</div>
+  <div id="guest-area" style="display:none">
+    <button class="secondary" id="guest-button" type="button" aria-describedby="guest-note">Continue as guest</button>
+    <p class="guest-note" id="guest-note">Try Kimi K3 with a draft, critique, and refine workflow. Guests get up to 10 total run starts, then need to sign in. Deleting runs does not reset the allowance. Claude Code and Codex require sign-in. Hosted Kimi access is used when available; otherwise, add your Kimi key in Settings. Guest history expires with the 24-hour session and does not transfer to an account.</p>
+  </div>
   <div id="google-box"></div>
   <div class="note">Your API keys are stored only in this service&#39;s user database<br/>and are used solely for the proving runs you start.</div>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
-let mode='login';
+let mode='register';
+window.hasGoogle = false;
+window.guestAccess = false;
+window.registrationOpen = false;
+let currentUser = null;
+let authPending = false;
+
+function setAuthPending(pending, guestLabel){
+  authPending=Boolean(pending);
+  $('submit').disabled=authPending;
+  $('guest-button').disabled=authPending;
+  $('tab-login').disabled=authPending;
+  $('tab-register').disabled=authPending;
+  $('link-forgot').style.pointerEvents=authPending?'none':'';
+  $('link-forgot').setAttribute('aria-disabled',authPending?'true':'false');
+  $('google-box').style.pointerEvents=authPending?'none':'';
+  $('google-box').setAttribute('aria-busy',authPending?'true':'false');
+  if(guestLabel)$('guest-button').textContent=guestLabel;
+  else if(!authPending)$('guest-button').textContent=currentUser?.guest?'Return to console':'Continue as guest';
+}
+
 function setMode(m){
+  if(authPending)return;
+  if(m==='register'&&!window.registrationOpen)m='login';
   mode=m;
+  document.title=({register:'Sign up',login:'Sign in',forgot:'Reset password',reset:'Reset password'}[m]||'Account')+' · Ansätze';
+  $('tab-login').setAttribute('aria-pressed',String(m==='login'));
+  $('tab-register').setAttribute('aria-pressed',String(m==='register'));
   $('tab-login').classList.toggle('active',m==='login');
   $('tab-register').classList.toggle('active',m==='register');
-  $('name-row').style.display=m==='register'?'flex':'none';
-  $('password').autocomplete=m==='register'?'new-password':'current-password';
-  $('submit').textContent=m==='register'?'Create account':'Sign in';
-  $('err').style.display='none';
+  $('tabs').style.display = (m==='login'||m==='register')?'flex':'none';
+  $('name-row').style.display = m==='register'?'flex':'none';
+  $('email-row').style.display = (m==='login'||m==='register'||m==='forgot')?'flex':'none';
+  $('password-row').style.display = (m==='login'||m==='register')?'flex':'none';
+  $('new-password-row').style.display = m==='reset'?'flex':'none';
+  $('confirm-password-row').style.display = m==='reset'?'flex':'none';
+
+  $('email').required = (m==='login'||m==='register'||m==='forgot');
+  $('password').required = (m==='login'||m==='register');
+  $('new-password').required = (m==='reset');
+  $('confirm-password').required = (m==='reset');
+  $('password').autocomplete = m==='register'?'new-password':'current-password';
+  if(m==='register') $('password').minLength=8;
+  else $('password').removeAttribute('minlength');
+  $('password').placeholder=m==='register'?'At least 8 characters':'Your password';
+
+  if(m==='register') $('submit').textContent='Sign up';
+  else if(m==='login') $('submit').textContent='Sign in';
+  else if(m==='forgot') $('submit').textContent='Send reset email';
+  else if(m==='reset') $('submit').textContent='Reset password';
+
+  if(m==='forgot') $('sub-title').textContent='Enter your email to receive a password reset link';
+  else if(m==='reset') $('sub-title').textContent='Enter a new password for your account';
+  else if(m==='register') $('sub-title').textContent='Sign up to use your own API keys and keep your runs private';
+  else $('sub-title').textContent='Sign in to use your own API keys and keep your runs private';
+
+  $('forgot-link').style.display = m==='register'?'none':'block';
+  if(m==='forgot'||m==='reset'){
+    $('link-forgot').textContent='← Back to sign in';
+  } else {
+    $('link-forgot').textContent='Forgot password?';
+  }
+
+  const guestVisible=(m==='login'||m==='register')&&window.guestAccess;
+  $('guest-area').style.display=guestVisible?'block':'none';
+  $('auth-divider').style.display=(((m==='login'||m==='register')&&window.hasGoogle)||guestVisible)?'flex':'none';
+  $('google-box').style.display = ((m==='login'||m==='register')&&window.hasGoogle)?'flex':'none';
+  $('err').style.display = 'none';
+  $('msg').style.display = 'none';
+  $('submit').style.display = 'block';
+  setAuthPending(false);
+  $('guest-button').removeAttribute('aria-busy');
 }
+
 $('tab-login').onclick=()=>setMode('login');
 $('tab-register').onclick=()=>setMode('register');
+$('link-forgot').onclick=(e)=>{
+  e.preventDefault();
+  if(mode==='forgot'||mode==='reset') setMode('login');
+  else setMode('forgot');
+};
 
-function fail(msg){ $('err').style.display='block'; $('err').textContent=msg; $('submit').disabled=false; }
+function fail(msg){
+  $('err').style.display='block'; $('err').textContent=msg; $('err').focus();
+  setAuthPending(false);
+  $('guest-button').removeAttribute('aria-busy');
+}
+
+async function startGuest({switchAccount=false}={}){
+  if(authPending)return;
+  if(currentUser?.guest){
+    location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
+    return;
+  }
+  const button=$('guest-button');
+  setAuthPending(true,'Starting guest session…');
+  button.setAttribute('aria-busy','true');
+  $('err').style.display='none'; $('msg').style.display='none';
+  try{
+    const headers={'Content-Type':'application/json'};
+    if(switchAccount)headers['X-Guest-Intent']='homepage';
+    const r=await fetch('/api/auth/guest',{method:'POST',headers,body:JSON.stringify(switchAccount?{switch_account:true}:{})});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||'Guest access is unavailable');
+    location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
+  }catch(err){ fail(String(err.message||err)); }
+}
+
+$('guest-button').onclick=startGuest;
 
 $('form').onsubmit=async e=>{
-  e.preventDefault(); $('submit').disabled=true; $('err').style.display='none';
-  const body={email:$('email').value.trim(),password:$('password').value};
-  if(mode==='register')body.name=$('name').value.trim()||undefined;
+  e.preventDefault();
+  if(authPending)return;
+  setAuthPending(true); $('err').style.display='none'; $('msg').style.display='none';
   try{
-    const r=await fetch('/api/auth/'+mode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const d=await r.json();
-    if(!r.ok)throw new Error(d.error||'Request failed');
-    location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
+    if(mode==='login'||mode==='register'){
+      const body={email:$('email').value.trim(),password:$('password').value};
+      if(mode==='register')body.name=$('name').value.trim()||undefined;
+      const r=await fetch('/api/auth/'+mode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Request failed');
+      location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
+    } else if(mode==='forgot'){
+      const email=$('email').value.trim();
+      if(!email) throw new Error('Please enter your email address');
+      const r=await fetch('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Request failed');
+      $('msg').style.display='block';
+      $('msg').textContent=d.message||'If that email exists, a reset link has been sent.';
+      setAuthPending(false);
+    } else if(mode==='reset'){
+      const urlParams=new URLSearchParams(location.search);
+      const token=(urlParams.get('token')||'').trim();
+      if(!token)throw new Error('Missing password reset token');
+      const new_password=$('new-password').value;
+      const confirm_password=$('confirm-password').value;
+      if(!new_password)throw new Error('Please enter a new password');
+      if(new_password.length < 8)throw new Error('Password must be at least 8 characters');
+      if(new_password !== confirm_password)throw new Error('Passwords do not match');
+
+      const r=await fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,new_password})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.error||'Password reset failed');
+      $('msg').style.display='block';
+      $('msg').textContent='Password reset successfully! Redirecting to sign in...';
+      $('new-password').value='';
+      $('confirm-password').value='';
+      $('submit').disabled=true;
+      setTimeout(()=>{
+        setAuthPending(false);
+        setMode('login');
+        $('msg').style.display='block';
+        $('msg').textContent='Password reset successfully! Please sign in with your new password.';
+        if(window.history&&window.history.replaceState){
+          window.history.replaceState({},document.title,window.__pcUrl?window.__pcUrl('/login'):_with_base('/login'));
+        }
+      }, 1500);
+    }
   }catch(err){ fail(String(err.message)); }
 };
 
+function _with_base(p){
+  const B = window.__PC_BASE__ || '';
+  return B ? (B + p) : p;
+}
+
+function takeGuestIntent(){
+  const marker='agent_monitor_guest_intent=';
+  const requested=document.cookie.split(';').some(part=>part.trim()===marker+'1');
+  if(requested){
+    const secure=location.protocol==='https:'?'; Secure':'';
+    document.cookie=marker+'; Path=/; Max-Age=0; SameSite=Lax'+secure;
+  }
+  const clean=new URL(location.href);
+  clean.searchParams.delete('guest');
+  if(clean.hash==='#guest')clean.hash='';
+  history.replaceState(null,'',clean.pathname+clean.search+clean.hash);
+  return requested;
+}
+
 async function handleGoogle(resp){
+  if(authPending)return;
+  setAuthPending(true);
   try{
     const r=await fetch('/api/auth/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:resp.credential})});
     const d=await r.json();
@@ -124,22 +396,105 @@ async function handleGoogle(resp){
   }catch(err){ fail(String(err.message)); }
 }
 
+async function initResetMode(token){
+  setMode('reset');
+  if(!token){
+    fail('Missing password reset token. Please check your email link or request a new reset email.');
+    $('new-password-row').style.display='none';
+    $('confirm-password-row').style.display='none';
+    $('submit').style.display='none';
+    return;
+  }
+  try{
+    const r=await fetch('/api/auth/verify-reset-token?token='+encodeURIComponent(token));
+    const d=await r.json();
+    if(!r.ok||!d.valid){
+      fail(d.error||'This password reset link is invalid or has expired.');
+      $('new-password-row').style.display='none';
+      $('confirm-password-row').style.display='none';
+      $('submit').style.display='none';
+      return;
+    }
+    if(d.email){
+      $('sub-title').textContent='Enter a new password for '+d.email;
+    }
+  }catch(err){
+    fail('Unable to verify this password reset link. Please request a new one and try again.');
+    $('new-password-row').style.display='none';
+    $('confirm-password-row').style.display='none';
+    $('submit').style.display='none';
+  }
+}
+
+function hasPendingCatalogueProblem(){
+  const key='ansatze.solveProblem.v1';
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw)return false;
+    const discard=()=>{localStorage.removeItem(key);return false;};
+    if(raw.length>40000)return discard();
+    const item=JSON.parse(raw);
+    const age=Date.now()-item?.created_at;
+    if(item?.version!==1||!Number.isFinite(item.created_at)||age<0||age>=30*60*1000
+      ||typeof item.problem_id!=='string'||!/^[a-z0-9][a-z0-9._-]{0,159}$/.test(item.problem_id)
+      ||typeof item.title!=='string'||!item.title.trim()||typeof item.statement!=='string')return discard();
+    const source=new URL(item.source_url);
+    if(source.protocol!=='https:'||source.username||source.password)return discard();
+    return true;
+  }catch(e){try{localStorage.removeItem(key);}catch(ignore){}return false;}
+}
+
+setAuthPending(true);
 (async()=>{
   try{
-    const me=await(await fetch('/api/auth/me')).json();
-    if(me.user){ location.href=(window.__pcUrl?window.__pcUrl('/'):'/'); return; }
+    const urlParams=new URLSearchParams(location.search);
+    const token=(urlParams.get('token')||'').trim();
+    const isReset=location.pathname.includes('/reset-password')||Boolean(token);
+    const urlGuestRequested=urlParams.get('guest')==='1'||location.hash==='#guest';
+    const cookieGuestRequested=takeGuestIntent();
+    const guestRequested=urlGuestRequested||cookieGuestRequested;
+    const solveRequested=location.hash==='#solve'&&hasPendingCatalogueProblem();
+
+    const meResponse=await fetch('/api/auth/me');
+    const me=await meResponse.json().catch(()=>({}));
+    if(!meResponse.ok)throw new Error(me.error||'Unable to load account options');
+    currentUser=me.user||null;
+    window.guestAccess=me.guest_access===true;
+    window.registrationOpen=me.registration_open===true;
+    $('tab-register').style.display=window.registrationOpen?'':'none';
+    if(me.user && (!me.user.guest || solveRequested) && !isReset && (solveRequested || !cookieGuestRequested)){
+      location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
+      return;
+    }
+    $('guest-button').textContent=me.user?.guest?'Return to console':'Continue as guest';
+    setAuthPending(false);
+    setMode(mode);
+
     if(me.google_client_id){
+      window.hasGoogle = true;
       const s=document.createElement('script');
       s.src='https://accounts.google.com/gsi/client'; s.async=true;
       s.onload=()=>{
         google.accounts.id.initialize({client_id:me.google_client_id,callback:handleGoogle});
-        $('google-divider').style.display='flex';
-        $('google-box').style.display='flex';
+        if(mode==='login'||mode==='register'){
+          $('auth-divider').style.display='flex';
+          $('google-box').style.display='flex';
+        }
         google.accounts.id.renderButton($('google-box'),{theme:'outline',size:'large',width:340,text:'signin_with'});
       };
       document.head.appendChild(s);
     }
-  }catch(e){}
+
+    if(isReset){
+      await initResetMode(token);
+    } else if(solveRequested){
+      if(window.guestAccess) await startGuest();
+      else fail('Sign in to open this problem in your proving workspace.');
+    } else if(guestRequested){
+      if(window.guestAccess) await startGuest({switchAccount:cookieGuestRequested&&Boolean(currentUser&&!currentUser.guest)});
+      else fail('Guest access is disabled for this console. Please sign in or create an account.');
+    }
+  }catch(e){ fail(e?.message||'Unable to reach the console. Please reload and try again.'); }
 })();
 </script>
 </body>

@@ -17,6 +17,7 @@ def run_problem(
     problem_path: str | Path,
     *,
     problem_id: str | None = None,
+    model: str | None = None,
     extra_args: list[str] | None = None,
     output_dir: str | Path | None = None,
     extra_env: dict[str, str] | None = None,
@@ -47,9 +48,30 @@ def run_problem(
     cmd = [sys.executable, "-u", str(script), str(problem_path), *(extra_args or [])]
     # Many UCLA harnesses are module-driven; try a conservative invocation and
     # capture output for the operator to inspect.
-    env = os.environ.copy()
-    if extra_env:
-        env.update({k: v for k, v in extra_env.items() if v})
+    from agent_monitor.subprocess_env import child_process_env
+
+    env = child_process_env(extra=extra_env)
+    if model:
+        # The UCLA script reads MODEL directly at import time. Without this
+        # assignment the console's model selection is silently ignored and
+        # the harness falls back to its hard-coded default.
+        env["MODEL"] = model
+        if str(model).strip().lower().startswith("kimi-"):
+            # Every UCLA stage talks to the same OpenAI-compatible base URL.
+            # Leaving the auxiliary defaults on gpt-5-mini would therefore
+            # send unsupported model ids to the Kimi endpoint late in a run.
+            for stage_model in (
+                "BENCHMARK_MODEL",
+                "SUMMARIZE_MODEL",
+                "TYPESET_MODEL",
+            ):
+                env[stage_model] = model
+            # Stage 0 requires OpenAI's hosted web_search tool. Kimi does not
+            # expose that tool, so skip the discovery stage instead of asking
+            # an ungrounded model to invent paper URLs. Other proof stages keep
+            # running; their optional web-search flag is removed by the central
+            # Kimi request adapter in the harness.
+            env["LIT_ENABLED"] = "0"
     # The harness resolves its problem via PROBLEM_FILE (it does not read argv)
     # and writes artifacts (solution.tex etc.) under OUTPUT_ROOT_DIR.
     env["PROBLEM_FILE"] = str(problem_path.resolve())

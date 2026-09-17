@@ -28,6 +28,12 @@ header select, header button { background: var(--card2); border: 1px solid var(-
 header button:hover { border-color: var(--accent); }
 header .theme-btn { width: 34px; padding: 6px 0; text-align: center; }
 header .hdr-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.monitor-mode { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--card2); }
+.monitor-mode button { border: 0; border-radius: 6px; padding: 5px 9px; background: transparent;
+  color: var(--muted); cursor: pointer; font-size: 10.5px; font-weight: 700; }
+.monitor-mode button.on { color:var(--on-accent); background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+.monitor-mode button:hover:not(.on) { color: var(--fg); background: var(--card); }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); min-height: calc(100vh - 53px); height: auto; }
 body.embedded .layout { min-height: 0; height: auto; }
 .main { overflow: auto; padding: 16px 20px; min-width: 0; }
@@ -43,7 +49,7 @@ body.embedded .layout { min-height: 0; height: auto; }
 .stat .val { font-size: 20px; font-weight: 600; margin-top: 2px; font-family: var(--mono); }
 .view-toggle { display:flex; gap:6px; margin:6px 0 10px; align-items:center; }
 .view-toggle .vt-btn { font-size:11px; padding:5px 14px; border-radius:999px; border:1px solid var(--border); background:var(--card); color:var(--muted); cursor:pointer; }
-.view-toggle .vt-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.view-toggle .vt-btn.active { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
 .view-toggle .vt-hint { font-size:10px; color:var(--muted); margin-left:8px; }
 .agent-map { position:relative; border:1px solid var(--border); border-radius:12px; background:
   radial-gradient(circle, var(--border) 1px, transparent 1px) 0 0/22px 22px, var(--card);
@@ -221,6 +227,37 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
 .prov-lines { font-family: var(--mono); color: var(--cyan); white-space: nowrap; }
 .proof-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: 11px; }
 .proof-meta span { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); color: var(--muted); }
+.lean-monitor { background:
+  radial-gradient(620px 220px at 8% 0%, color-mix(in srgb, #8b5cf6 12%, transparent), transparent 70%),
+  var(--card); border: 1px solid color-mix(in srgb, #8b5cf6 38%, var(--border));
+  border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+.lean-monitor-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.lean-monitor-head .lambda { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px;
+  color: #fff; background: linear-gradient(135deg, #8b5cf6, #3b82f6); font: 700 18px var(--mono); }
+.lean-monitor-head .copy { flex: 1; min-width: 0; }
+.lean-monitor-head h2 { font-size: 15px; margin-bottom: 3px; }
+.lean-monitor-head p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.lean-monitor-actions button { border: 1px solid color-mix(in srgb, #8b5cf6 50%, var(--border));
+  border-radius: 8px; padding: 7px 11px; background: color-mix(in srgb, #8b5cf6 11%, var(--card2));
+  color: #c4b5fd; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+.lean-monitor-actions button:hover { border-color: #a78bfa; color: var(--fg); }
+.lean-monitor-grid { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(260px,.75fr); gap: 12px; }
+@media (max-width: 900px) { .lean-monitor-grid { grid-template-columns: 1fr; } }
+.lean-monitor-block { background: var(--card2); border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; }
+.lean-monitor-block h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
+.lean-attempt { border-left: 3px solid var(--border); padding: 7px 9px; margin: 6px 0;
+  border-radius: 0 7px 7px 0; background: color-mix(in srgb, var(--card) 64%, transparent); font-size: 11px; }
+.lean-attempt.ok { border-left-color: var(--ok); }
+.lean-attempt.warn { border-left-color: var(--warn); }
+.lean-attempt.err { border-left-color: var(--err); }
+.lean-attempt .head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.lean-attempt .meta { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.lean-attempt details { margin-top: 6px; }
+.lean-attempt summary { color: var(--muted); cursor: pointer; font-size: 10px; }
+.lean-attempt pre { margin-top: 5px; max-height: 180px; overflow: auto; white-space: pre-wrap;
+  color: var(--muted); font: 10px/1.45 var(--mono); }
+.lean-monitor-empty { padding: 42px 18px; text-align: center; border: 1px dashed var(--border);
+  border-radius: 10px; color: var(--muted); }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 5px; }
 .md-render { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 22px 28px; font-size: 13.5px; line-height: 1.7; max-height: 640px; overflow-y: auto; }
@@ -230,41 +267,273 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
 .md-render pre { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
 .md-render blockquote { border-left: 3px solid var(--accent); margin: .7em 0; padding: 2px 12px; color: var(--muted); }
 .md-render .katex-display { overflow-x: auto; padding: 4px 0; }
+
+/* The monitor owns its viewport; content never sets its embedding frame height. */
+html, body { width: 100%; height: 100%; min-height: 0; overflow: hidden; overscroll-behavior: none; }
+body, body.embedded { min-height: 0; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+header { min-width: 0; flex-wrap: wrap; gap: 10px 16px; }
+.monitor-brand { flex: 1 1 200px; min-width: 0; }
+header h1, header .sub { overflow-wrap: anywhere; }
+header .hdr-actions { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.layout, body.embedded .layout { flex: 1 1 0; min-height: 0; height: auto; overflow: hidden; grid-template-rows: minmax(0, 1fr); }
+.main, .sidebar { min-height: 0; min-width: 0; overscroll-behavior: contain; }
+.main { overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
+.sidebar { overflow: hidden; }
+.sidebar-hdr, .tabs { flex: 0 0 auto; min-width: 0; }
+.back-to-trace { display: none; margin-bottom: 10px; padding: 7px 10px; color: var(--accent); background: var(--card2); border: 1px solid var(--border); border-radius: 7px; font: inherit; font-size: 11px; cursor: pointer; }
+.tabs { overflow-x: auto; }
+.detail-body { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.detail-body > *, .main > * { max-width: 100%; }
+.detail-body, .main { overflow-wrap: anywhere; }
+.main table, .detail-body table { display: block; max-width: 100%; overflow-x: auto; }
+.main th, .detail-body th { white-space: nowrap; overflow-wrap: normal; }
+.table-wrap, .compare-wrap { overflow-x: auto; }
+.main .table-wrap table, .main .compare-wrap table { display: table; min-width: 780px; max-width: none; }
+.table-wrap td { min-width: 60px; }
+.sidebar-hdr { overflow-wrap: anywhere; }
+#d-title, #d-meta { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+#d-title, #d-meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.agent-map, body.embedded .agent-map { height: clamp(300px, 54dvh, 600px); min-height: 0; touch-action: pan-y; }
+.agent-map.exploring { touch-action: none; }
+@media (any-pointer: coarse) { .map-controls .map-interact { display: block !important; } }
+.agent-map svg { width: 100%; height: 100%; aspect-ratio: auto; overflow: hidden; }
+.map-scrollport { position: absolute; inset: 48px 0 50px; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: auto; scrollbar-gutter: stable; touch-action: pan-y; cursor: grab; }
+.agent-map.exploring .map-scrollport { touch-action: none; }
+.map-scrollport:active { cursor: grabbing; }
+.map-scrollport:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.map-controls { flex-wrap: wrap; justify-content: flex-end; }
+.map-controls .map-fit-control { width: auto; padding: 0 9px; font-size: 11px; }
+.map-controls .map-fit-control[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--card2); }
+
+.agent-map:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.map-controls { max-width: calc(100% - 16px); }
+.map-controls button { flex-shrink: 0; min-width: 30px; min-height: 30px; }
+.map-controls .map-interact { display: none; width: auto; padding: 0 9px; font-size: 11px; }
+.map-controls .map-interact[aria-pressed="true"] { background: var(--accent); color: var(--card); }
+.map-legend { max-width: calc(100% - 16px); pointer-events: none; }
+.proof-pdf { width: 100%; height: 540px; max-height: 70dvh; border: 0; }
+@media (max-width: 980px) {
+  .layout, body.embedded .layout { display: block; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .main { overflow: visible; scrollbar-gutter: auto; }
+  .sidebar { max-height: none; overflow: visible; }
+  .back-to-trace { display: inline-flex; }
+  .detail-body { flex: none; overflow: visible; scrollbar-gutter: auto; }
+  .detail-body .pre { max-height: none; overflow-y: visible; }
+  .map-controls .map-interact { display: block; }
+  .agent-map, body.embedded .agent-map { height: clamp(300px, 50dvh, 440px); }
+}
+@media (max-width: 540px) {
+  header { padding: 12px 14px; gap: 10px; }
+  header .hdr-actions { width: 100%; margin-left: 0; gap: 6px; }
+  header .sub { flex: 1; }
+  header #run-hdr-label { flex: 0 0 100%; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .main { padding: 14px 12px; }
+  .map-legend { gap: 4px 8px; font-size: 10px; }
+  .view-toggle { flex-wrap: wrap; }
+  .view-toggle .vt-hint { width: 100%; margin-left: 0; }
+  .tabs .tab { flex: 0 0 auto; }
+}
+</style>
+<style id="monitor-theme-style">
+/* Shared Ansatz palette. Keep geometry in the monitor-layout-style block. */
+@font-face {
+  font-family: 'Ansatz Newsreader'; font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url('/assets/newsreader-latin-wght-normal.CCVVNp6i.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Ansatz Space Grotesk'; font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url('/assets/space-grotesk-latin-wght-normal.BhU9QXUp.woff2') format('woff2');
+}
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f4ec; --card: #fffdf8; --card2: #f0ede4; --border: #d8d6ca;
+  --fg: #202e27; --muted: #526056; --accent: #286448; --accent2: #496646;
+  --ok: #286448; --warn: #89611e; --err: #ad4939; --cyan: #39665e;
+  --scroll: #b7c0ad; --on-accent: #fffdf8; --shadow: 0 2px 8px #24382a06;
+  --write: #286448; --critic: #39756b; --think: #716447; --tool: #89611e;
+  --orch: #596e5b; --final: #a25439; --memory: #657662;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --body-font: 'Ansatz Space Grotesk', 'Avenir Next', Arial, sans-serif;
+  --heading-font: 'Ansatz Newsreader', Georgia, serif;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #141c19; --card: #1c2822; --card2: #26332b; --border: #3b4a40;
+  --fg: #eeeee4; --muted: #b8c3b7; --accent: #a1c6ac; --accent2: #bdcfa7;
+  --ok: #a1c6ac; --warn: #dfbc74; --err: #e89986; --cyan: #a0c9bd;
+  --scroll: #526457; --on-accent: #18281e; --shadow: 0 2px 8px #00000012;
+  --write: #a1c6ac; --critic: #9ac9bc; --think: #cabe9e; --tool: #dfbc74;
+  --orch: #b2c2a5; --final: #dfa087; --memory: #aabca1;
+}
+body { font-family: var(--body-font); font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+button, select { font-family: inherit; }
+a { color: var(--accent); text-underline-offset: 3px; }
+button, select, .tab { transition: background .15s, border-color .15s, color .15s; }
+button:focus-visible, select:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 3px;
+}
+header { background: var(--bg); }
+header h1 { font-family: var(--heading-font); font-size: 25px; font-weight: 500; line-height: 1.1; letter-spacing: -.025em; }
+.monitor-eyebrow { color: var(--accent); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .15em; }
+header .sub { font-size: 11px; color: var(--muted); }
+#run-hdr-label { font-family: var(--mono); font-size: 10px; }
+header button, header select { border-radius: 8px; background: var(--card); font-size: 11px; font-weight: 500; }
+header button:hover { background: var(--card2); border-color: var(--accent); }
+.monitor-mode { border-radius: 10px; background: var(--card2); }
+.monitor-mode button { font-size: 11px; font-weight: 600; }
+.monitor-mode button.on, .view-toggle .vt-btn.active {
+  color: var(--on-accent); background: var(--accent); border-color: var(--accent);
+}
+#status { font-family: var(--mono); font-size: 10px; }
+.sidebar { background: var(--card); }
+.stat { border-radius: 11px; background: var(--card); box-shadow: var(--shadow); }
+.stat .lbl { font-size: 10px; letter-spacing: .075em; }
+.stat .val { font-family: var(--body-font); font-size: 24px; font-weight: 500; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+.view-toggle .vt-btn, .filter-bar button, .proof-tabs button { border-radius: 7px; font-size: 11px; font-weight: 500; }
+.view-toggle .vt-btn:hover, .filter-bar button:hover, .proof-tabs button:hover { border-color: var(--accent); color: var(--accent); }
+.view-toggle .vt-btn.active:hover { color: var(--on-accent); }
+.view-toggle .vt-hint { font-size: 10px; }
+.agent-map { border-radius: 13px; background: radial-gradient(circle, color-mix(in srgb, var(--border) 70%, transparent) .8px, transparent .8px) 0 0 / 22px 22px, var(--card); }
+.map-card { border-radius: 8px; background: var(--card); box-shadow: var(--shadow); }
+.map-card.mk-write { border-color: var(--write); background: color-mix(in srgb, var(--write) 6%, var(--card)); }
+.map-card.mk-critic { border-color: var(--critic); background: color-mix(in srgb, var(--critic) 6%, var(--card)); }
+.map-card.mk-think { border-color: var(--think); background: color-mix(in srgb, var(--think) 6%, var(--card)); }
+.map-card.mk-tool { border-color: var(--tool); background: color-mix(in srgb, var(--tool) 6%, var(--card)); }
+.map-card.mk-orch { border-color: var(--orch); background: color-mix(in srgb, var(--orch) 6%, var(--card)); }
+.map-card.mk-final { border-color: var(--final); background: color-mix(in srgb, var(--final) 6%, var(--card)); }
+.map-card.mk-mem { border-color: var(--memory); background: color-mix(in srgb, var(--memory) 6%, var(--card)); }
+.map-card .mr { font-family: var(--body-font); }
+.map-card .mbadge { color: var(--on-accent) !important; }
+.map-edge { stroke: var(--accent); opacity: .6; }
+.map-edge.mem { stroke: var(--memory); }
+.map-card.selected { box-shadow: 0 0 0 2px var(--accent), 0 3px 12px color-mix(in srgb, var(--accent) 14%, transparent); }
+@keyframes mapPulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); } 50% { box-shadow: 0 0 0 5px transparent; } }
+.map-controls button { background: var(--card); border-radius: 7px; }
+.map-controls button:hover { border-color: var(--accent); color: var(--accent); }
+.map-legend { background: color-mix(in srgb, var(--card) 96%, transparent); color: var(--muted); box-shadow: var(--shadow); font-size: 10px; }
+.stage-col, .flow-wrap, .proof-wrap, .insights, .lean-monitor { border-radius: 12px; box-shadow: var(--shadow); }
+.stage-hdr { background: color-mix(in srgb, var(--card2) 50%, var(--card)); }
+.agent-node { background: var(--card); }
+.agent-node:hover { background: color-mix(in srgb, var(--accent) 3%, var(--card)); }
+.agent-node.active { background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.agent-node .role { color: var(--accent2); }
+.agent-node .cost-bar > i { background: var(--accent); }
+.agent-node.cost-high-mark { outline-color: var(--memory); }
+.agent-node.cost-high-mark .cost-bar > i { background: var(--memory); }
+.agent-node.is-waste { background: color-mix(in srgb, var(--err) 9%, var(--card)); border-color: color-mix(in srgb, var(--err) 55%, var(--border)); }
+.agent-node.is-waste .cost-bar > i { background: var(--err); }
+.agent-node.is-waste .waste-tag, .pipe-role.waste { color: var(--err); }
+.agent-node.in-cycle { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--err) 40%, transparent); }
+.stage-col.stage-heat-critical .stage-hdr { background: color-mix(in srgb, var(--err) 8%, var(--card)); }
+.stage-col.stage-heat-high .stage-hdr { background: color-mix(in srgb, var(--warn) 8%, var(--card)); }
+.visual-legend .sw-high-cost { border-color: var(--memory); }
+.visual-legend .sw-waste, tr.is-waste td { background: color-mix(in srgb, var(--err) 8%, var(--card)) !important; border-color: color-mix(in srgb, var(--err) 40%, var(--border)); }
+tr.cost-high-mark td { border-left-color: color-mix(in srgb, var(--memory) 55%, var(--border)); }
+.insights h2, .flow-wrap h2, .proof-wrap h2, .lean-monitor-head h2, .compare-wrap h2, .table-wrap h2, .sidebar-hdr h2 {
+  font-family: var(--heading-font); font-size: 21px; font-weight: 500; letter-spacing: -.015em; line-height: 1.2; color: var(--fg);
+}
+.insight-block, .lean-monitor-block { background: var(--card2); border-radius: 9px; }
+.insight-block h3, .lean-monitor-block h3, .field .fl, .sec { font-size: 10px; font-weight: 500; letter-spacing: .065em; }
+.flow-sub, .proof-sub, .lean-monitor-head p, .stage-note { font-size: 11px; line-height: 1.65; }
+.pill { border-radius: 5px; font-weight: 500; }
+th { font-size: 10px; letter-spacing: .035em; font-weight: 500; }
+.sidebar-hdr h2 { font-size: 21px; }
+.sidebar-hdr .meta { font-size: 10px; line-height: 1.55; }
+.tabs { background: var(--card); }
+.tab { font-family: inherit; font-size: 11px; border: 0; border-bottom: 2px solid transparent; background: transparent; }
+.tab:hover, .tab.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.field { border: 1px solid var(--border); background: var(--card2); border-radius: 8px; }
+.field .fv { font-size: 11px; }
+.pre { background: var(--card2); border: 1px solid var(--border); border-radius: 9px; line-height: 1.65; }
+.pipe-links .type-dispatch { color: var(--think); }
+.pipe-links .type-verify { color: var(--critic); }
+.pipe-links .type-refine, .pipe-links .type-reverify { color: var(--ok); }
+.pipe-links .type-proof { color: var(--write); }
+.lean-monitor { background: var(--card); border-color: var(--border); }
+.lean-monitor-head .lambda { color: var(--on-accent); background: var(--accent); border-radius: 10px; font-family: var(--heading-font); font-weight: 500; }
+.lean-monitor-actions button { border-color: var(--border); background: var(--card2); color: var(--accent); font-family: var(--body-font); font-weight: 500; }
+.lean-monitor-actions button:hover { border-color: var(--accent); }
+.lean-monitor-empty { background: color-mix(in srgb, var(--accent) 3%, var(--card)); }
+.empty { font-size: 12px; line-height: 1.65; }
+.empty-mark { color: var(--accent); opacity: .85; }
+.empty h2 { font-family: var(--heading-font); font-size: 27px; font-weight: 500; letter-spacing: -.02em; color: var(--fg); }
+.empty p { font-size: 12px; line-height: 1.65; }
+.detail-body .empty h2 { font-size: 22px; }
+.md-render { font-size: 13px; line-height: 1.8; }
+.md-render h1, .md-render h2, .md-render h3 { font-family: var(--heading-font); font-weight: 500; }
+
+.trace-guide { margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
+.trace-guide summary { padding: 9px 12px; cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 500; }
+.trace-guide summary:hover { color: var(--accent); }
+.trace-guide summary::marker { color: var(--accent); }
+.trace-guide summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.trace-guide[open] summary { color: var(--accent); border-bottom: 1px solid var(--border); }
+.trace-guide-body { padding: 12px; }
+.trace-guide-body .stage-note { margin-bottom: 0 !important; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<style id="clear-palette-style">
+:root, [data-theme="light"] {
+  --bg:#ffffff; --card:#ffffff; --card2:#f4f6fa; --border:#dfe5ee;
+  --fg:#17212f; --muted:#4c5c70; --accent:#2563eb; --accent2:#6d4bc3;
+  --ok:#15803d; --warn:#a15c00; --err:#c93838; --cyan:#087f8c;
+  --scroll:#b8c4d4; --on-accent:#ffffff; --shadow:0 2px 8px rgb(23 33 47 / .04);
+  --write:#2563eb; --critic:#087f8c; --think:#7c3aed; --tool:#a15c00;
+  --orch:#526174; --final:#b45309; --memory:#17845b;
+}
+[data-theme="dark"] {
+  --bg:#111318; --card:#1c2028; --card2:#252a34; --border:#343b48;
+  --fg:#f6f8fc; --muted:#b9c2d0; --accent:#82b1ff; --accent2:#c4adff;
+  --ok:#4ade80; --warn:#fbbf24; --err:#ff8585; --cyan:#67d4df;
+  --scroll:#56657a; --on-accent:#111318; --shadow:0 2px 8px rgb(0 0 0 / .15);
+  --write:#82b1ff; --critic:#67d4df; --think:#c4adff; --tool:#fbbf24;
+  --orch:#bdc8d8; --final:#ffac7c; --memory:#6cdbb1;
+}
+</style>
 </head>
 <body>
 <header>
-  <h1>Harness Pipeline Monitor</h1>
-  <span class="sub">stage · agent · token trace</span>
+  <div class="monitor-brand">
+    <div class="monitor-eyebrow">Ansätze / Workspace</div>
+    <h1>Harness Pipeline Monitor</h1>
+    <div class="sub">Follow the agents, inspect the proof.</div>
+  </div>
   <span class="sub" id="run-hdr-label"></span>
+  <div class="monitor-mode" id="monitor-mode" aria-label="Monitor mode">
+    <button type="button" class="on" data-monitor-mode="agent">Agent</button>
+    <button type="button" data-monitor-mode="lean">Formal · Lean</button>
+  </div>
   <button id="btn-rebuild" title="Rebuild from calls.jsonl">↻ Rebuild</button>
   <div class="hdr-actions">
     <button class="theme-btn" id="theme-btn" title="Toggle light / dark mode">☾</button>
-    <span id="status">loading…</span>
+    <span id="status" role="status" aria-live="polite">Loading…</span>
   </div>
 </header>
 <div class="layout">
   <div class="main" id="main">
-    <div class="empty">Select a run from the left Runs panel</div>
+    <div class="empty monitor-empty"><svg class="empty-mark" width="80" height="54" viewBox="0 0 80 54" fill="none" aria-hidden="true"><path d="M17 27H63" stroke="currentColor" stroke-width="1.2"/><circle cx="13" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><circle cx="40" cy="27" r="8" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-width="1.2"/><circle cx="67" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><path d="m37 27 2 2 4-4" stroke="currentColor" stroke-width="1.2"/></svg><h2>A clear view of every step.</h2><p>Select a run from the Runs panel to explore its agents, proof, and token usage.</p></div>
   </div>
   <div class="sidebar" id="sidebar">
     <div class="sidebar-hdr">
-      <h2 id="d-title">Agent Detail</h2>
-      <div class="meta" id="d-meta">Click an agent node or table row</div>
+      <button type="button" class="back-to-trace" id="back-to-trace">↑ Back to trace</button>
+      <h2 id="d-title">Agent details</h2>
+      <div class="meta" id="d-meta">Select a node to inspect its work.</div>
     </div>
     <div class="tabs">
-      <div class="tab active" data-tab="overview">Overview</div>
-      <div class="tab" data-tab="prompt">Prompt</div>
-      <div class="tab" data-tab="thinking">Thinking</div>
-      <div class="tab" data-tab="output">Output</div>
-      <div class="tab" data-tab="memory">Memory</div>
+      <button type="button" class="tab active" data-tab="overview">Overview</button>
+      <button type="button" class="tab" data-tab="prompt">Prompt</button>
+      <button type="button" class="tab" data-tab="thinking">Thinking</button>
+      <button type="button" class="tab" data-tab="output">Output</button>
+      <button type="button" class="tab" data-tab="memory">Memory</button>
     </div>
     <div class="detail-body" id="detail-body">
-      <div class="empty">No agent selected</div>
+      <div class="empty monitor-empty"><svg class="empty-mark" width="80" height="54" viewBox="0 0 80 54" fill="none" aria-hidden="true"><path d="M17 27H63" stroke="currentColor" stroke-width="1.2"/><circle cx="13" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><circle cx="40" cy="27" r="8" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-width="1.2"/><circle cx="67" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><path d="m37 27 2 2 4-4" stroke="currentColor" stroke-width="1.2"/></svg><h2>The details are here.</h2><p>Select an agent in the graph or table to read its prompt, reasoning, and output.</p></div>
     </div>
   </div>
 </div>
@@ -272,20 +541,34 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
 const $ = id => document.getElementById(id);
 const THEME_KEY = 'proving-console-theme';
 function applyTheme(t) {
+  t = t === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = t;
-  localStorage.setItem(THEME_KEY, t);
+  try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
   const btn = $('theme-btn');
   if (btn) {
     btn.textContent = t === 'light' ? '☀' : '☾';
     btn.title = t === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+    btn.setAttribute('aria-label', btn.title);
   }
 }
 function initTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
+  let saved;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (_) {}
+  // The embedded monitor inherits the workspace palette on its first paint.
+  try {
+    if (window.parent !== window) {
+      const parentTheme = window.parent.document.documentElement.dataset.theme;
+      if (parentTheme === 'light' || parentTheme === 'dark') saved = parentTheme;
+    }
+  } catch (_) {}
   const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
   applyTheme(saved || (prefersLight ? 'light' : 'dark'));
 }
+window.addEventListener('storage', e => {
+  if (e.key === THEME_KEY && (e.newValue === 'light' || e.newValue === 'dark')) applyTheme(e.newValue);
+});
 window.addEventListener('message', e => {
+  if (e.source !== window.parent || e.origin !== window.location.origin) return;
   if (e.data?.type === 'proving-console-theme' && (e.data.theme === 'light' || e.data.theme === 'dark')) {
     applyTheme(e.data.theme);
   }
@@ -298,36 +581,73 @@ window.addEventListener('message', e => {
 $('theme-btn')?.addEventListener('click', () => {
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   applyTheme(next);
+  if (window.parent !== window) window.parent.postMessage({ type: 'proving-console-theme', theme: next }, window.location.origin);
 });
 initTheme();
 
 const fmtN = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n||0);
-const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const SAFE_MARKDOWN_TAGS = new Set([
+  'A','BLOCKQUOTE','BR','CODE','DEL','EM','H1','H2','H3','H4','H5','H6','HR',
+  'LI','OL','P','PRE','STRONG','TABLE','TBODY','TD','TFOOT','TH','THEAD','TR','UL'
+]);
+function safeMarkdownHref(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw, window.location.href);
+    return ['http:', 'https:', 'mailto:'].includes(parsed.protocol) ? parsed.href : null;
+  } catch (e) { return null; }
+}
+function sanitizeRenderedHtml(value) {
+  const template = document.createElement('template');
+  template.innerHTML = String(value || '');
+  function scrub(el) {
+    [...el.children].forEach(scrub);
+    if (!SAFE_MARKDOWN_TAGS.has(el.tagName)) {
+      el.replaceWith(document.createTextNode(el.textContent || ''));
+      return;
+    }
+    const href = el.tagName === 'A' ? safeMarkdownHref(el.getAttribute('href')) : null;
+    const title = el.tagName === 'A' ? (el.getAttribute('title') || '') : '';
+    const codeClass = el.tagName === 'CODE' ? (el.getAttribute('class') || '') : '';
+    [...el.attributes].forEach(attr => el.removeAttribute(attr.name));
+    if (href) {
+      el.setAttribute('href', href);
+      el.setAttribute('rel', 'noopener noreferrer');
+    }
+    if (title) el.setAttribute('title', title);
+    if (/^language-[A-Za-z0-9_-]+$/.test(codeClass)) el.setAttribute('class', codeClass);
+  }
+  [...template.content.children].forEach(scrub);
+  return template.innerHTML;
+}
+function safeMarkdown(text) {
+  let html;
+  try {
+    html = window.marked ? marked.parse(String(text || ''), {mangle:false, headerIds:false}) : null;
+  } catch (e) { html = null; }
+  return sanitizeRenderedHtml(html || `<pre>${esc(text)}</pre>`);
+}
 
-const State = { runs: [], run: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map', showSolutionPath: false };
+const State = { runs: [], run: null, formalRun: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map', monitorMode: localStorage.getItem('hd-monitor-mode') || 'agent', showSolutionPath: false };
 const isEmbedded = window.parent !== window;
 if (isEmbedded) document.body.classList.add('embedded');
-
-function notifyParentHeight() {
-  if (!isEmbedded) return;
-  requestAnimationFrame(() => {
-    const h = Math.max(
-      document.documentElement.scrollHeight,
-      document.body.scrollHeight,
-      document.querySelector('.layout')?.scrollHeight || 0,
-      360,
-    );
-    window.parent.postMessage({ type: 'proving-console-resize', height: h }, '*');
+function syncMonitorMode() {
+  document.body.classList.toggle('formal-monitor', State.monitorMode === 'lean');
+  document.querySelectorAll('#monitor-mode [data-monitor-mode]').forEach(btn => {
+    btn.classList.toggle('on', btn.dataset.monitorMode === State.monitorMode);
   });
 }
-let _resizeObs = null;
-function watchContentHeight() {
-  if (!isEmbedded || typeof ResizeObserver === 'undefined') return;
-  if (_resizeObs) _resizeObs.disconnect();
-  const target = document.querySelector('.layout') || document.body;
-  _resizeObs = new ResizeObserver(() => notifyParentHeight());
-  _resizeObs.observe(target);
-}
+document.querySelectorAll('#monitor-mode [data-monitor-mode]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    State.monitorMode = btn.dataset.monitorMode === 'lean' ? 'lean' : 'agent';
+    localStorage.setItem('hd-monitor-mode', State.monitorMode);
+    syncMonitorMode();
+    if (State.currentRunId) await loadRun(State.currentRunId);
+  });
+});
+syncMonitorMode();
+
 
 async function api(path) {
   const r = await fetch(path);
@@ -335,9 +655,19 @@ async function api(path) {
   return r.json();
 }
 
+function stageColor(id) {
+  const colors = {
+    '1': 'var(--orch)', '2': 'var(--think)', '3': 'var(--think)', '4': 'var(--write)',
+    '5': 'var(--write)', '6': 'var(--critic)', '7': 'var(--ok)', '8': 'var(--tool)', '9': 'var(--final)',
+    wf: 'var(--orch)', author: 'var(--write)', critic: 'var(--critic)', council: 'var(--think)',
+    compute: 'var(--tool)', finalize: 'var(--final)', other: 'var(--orch)',
+  };
+  return colors[String(id)] || 'var(--accent)';
+}
+
 function roleColor(role) {
-  const m = { orchestrator_advisor:'#8b5cf6', solver:'#3b82f6', writeup:'#0ea5e9', verifier:'#14b8a6', refiner:'#22c55e', directions_advisor:'#a855f7' };
-  return m[role] || '#64748b';
+  const m = { orchestrator_advisor:'var(--orch)', orchestrator:'var(--orch)', workflow:'var(--orch)', solver:'var(--write)', author:'var(--write)', writer:'var(--write)', prover:'var(--write)', writeup:'var(--write)', verifier:'var(--critic)', critic:'var(--critic)', checker:'var(--critic)', refiner:'var(--ok)', directions_advisor:'var(--think)', tool:'var(--tool)', tools:'var(--tool)' };
+  return m[role] || 'var(--orch)';
 }
 
 function outcomeClass(outcome) {
@@ -369,7 +699,10 @@ function agentDimmed(mon) {
 }
 
 function renderVisualLegend() {
-  return `<div class="visual-legend">
+  return `<details class="trace-guide">
+    <summary>How to read this trace</summary>
+    <div class="trace-guide-body">
+  <div class="visual-legend">
     <span class="sw-high-cost">Dashed border · high cost (see below)</span>
     <span class="sw-waste">Red fill · wasted / ineffective tokens</span>
     <span>Left border · green ✓ / yellow loop / red fail (outcome)</span>
@@ -380,6 +713,8 @@ function renderVisualLegend() {
     <br><b>Hash match</b>: not word-level — outputs are lowercased, whitespace collapsed, then SHA-256 compared; identical normalized text = duplicate (≥40 chars).
     <br><span style="color:var(--muted)">Same stage called many times (e.g. proof_sketch×13) is not red if each output differs.</span>
   </div>
+    </div>
+  </details>
   <div class="filter-bar">
     <button id="btn-filter-high" class="${State.filterHigh?'active':''}">High cost only</button>
     <button id="btn-filter-waste" class="${State.filterWaste?'active':''}">Wasted / ineffective only</button>
@@ -394,8 +729,8 @@ function renderInsights(run) {
   const pipeline = run.pipeline || [];
   const order = Object.fromEntries(pipeline.map((s, i) => [String(s.id), i]));
   stages.sort((x, y) => (order[x[0]] ?? 99) - (order[y[0]] ?? 99));
-  const colors = { '1':'#6366f1','2':'#8b5cf6','3':'#a855f7','4':'#3b82f6','5':'#0ea5e9','6':'#14b8a6','7':'#22c55e','8':'#eab308','9':'#f97316',
-    'wf':'#8b5cf6','author':'#3b82f6','critic':'#14b8a6','council':'#6366f1','compute':'#0ea5e9','finalize':'#f97316','other':'#64748b' };
+  const colors = { '1':'var(--orch)','2':'var(--think)','3':'var(--think)','4':'var(--write)','5':'var(--write)','6':'var(--critic)','7':'var(--ok)','8':'var(--tool)','9':'var(--final)',
+    'wf':'var(--think)','author':'var(--write)','critic':'var(--critic)','council':'var(--orch)','compute':'var(--write)','finalize':'var(--final)','other':'var(--orch)' };
   let stageBars = stages.map(([id, s]) => `<div class="stage-bar-row">
     <div class="lbl" title="${esc(s.label)}">${esc(id)} ${esc((s.label||'').slice(0,14))}</div>
     <div class="bar"><i style="width:${Math.max(s.pct_cost,2)}%;background:${colors[id]||colors.other}"></i></div>
@@ -504,7 +839,7 @@ function renderAgentFlowSection(run) {
       const waste = r.waste_count ? ' waste' : '';
       return `<div class="pipe-role${waste}"><span class="nm" title="${esc(r.label)}">${esc(r.label)}</span><span>×${r.count}</span></div>`;
     }).join('');
-    stripHtml += `<div class="pipe-stage" style="border-top-color:${esc(st.color)}">
+    stripHtml += `<div class="pipe-stage" style="border-top-color:${stageColor(st.id)}">
       <div class="pipe-stage-hdr">${esc(st.label)}</div>
       <div class="pipe-stage-sub">${esc(st.title)}</div>
       <div class="pipe-stage-tot">${st.agent_count} agents · $${(st.cost_usd||0).toFixed(0)}</div>
@@ -634,7 +969,7 @@ function ensureProofSourceLoaded(run) {
   const mdEl = $('proof-md-render');
   if (mdEl) {
     loadFinalTexSource(run.run_id).then(text => {
-      mdEl.innerHTML = window.marked ? marked.parse(text, {mangle:false, headerIds:false}) : `<pre>${esc(text)}</pre>`;
+      mdEl.innerHTML = safeMarkdown(text);
       if (window.renderMathInElement) {
         try { renderMathInElement(mdEl, {delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}], throwOnError:false}); } catch(e) {}
       }
@@ -752,7 +1087,237 @@ function renderCompare(runs) {
   return html;
 }
 
+function leanMonitorClass(status) {
+  if (status === 'verified' || status === 'compiled') return 'ok';
+  if (status === 'failed' || status === 'unfaithful') return 'err';
+  if (status === 'running' || status === 'incomplete' || status === 'toolchain_missing') return 'warn';
+  return 'info';
+}
+
+function buildFormalLeanRun(run) {
+  const lean = run.lean_verification || {};
+  const usage = lean.harness_usage || {};
+  const formalMemory = {
+    formal_verification: {
+      status: lean.status || 'none',
+      source: lean.lean_path || 'lean/Proof.lean',
+      environment: lean.uses_mathlib ? 'Mathlib' : 'Lean core',
+      toolchain: lean.toolchain?.version || 'not recorded',
+      fidelity: lean.fidelity?.severity || 'not audited',
+    },
+  };
+  const agents = [];
+  const stages = [
+    {id:'formalize',label:'Formalize',title:'Harness conversation',color:'var(--write)'},
+    {id:'reason',label:'Reason',title:'Model reasoning',color:'var(--think)'},
+    {id:'act',label:'Tools',title:'Commands and edits',color:'var(--tool)'},
+    {id:'verify',label:'Verify',title:'Lean kernel checker',color:'var(--critic)'},
+    {id:'audit',label:'Audit',title:'Statement fidelity',color:'var(--critic)'},
+    {id:'human',label:'Human',title:'Human in the loop',color:'var(--write)'},
+    {id:'finalize',label:'Result',title:'Formal result',color:'var(--final)'},
+  ];
+  const add = raw => {
+    const seq = agents.length + 1;
+    const status = String(raw.status || 'completed');
+    const failed = status === 'failed' || status === 'unfaithful' || raw.exit_code > 0;
+    agents.push({
+      trace_id: raw.trace_id || `lean-${seq}`,
+      call_seq: seq,
+      stage_name: raw.stage_name || `event-${seq}`,
+      pipeline_stage: raw.pipeline_stage || 'formalize',
+      role: raw.role || 'assistant',
+      agent_id: raw.agent_id || 'lean-harness',
+      round_id: raw.round_id ?? seq,
+      status,
+      prompt: raw.prompt || '',
+      prompt_source: raw.prompt_source || (raw.prompt ? 'harness command' : ''),
+      thinking: raw.thinking || '',
+      thinking_source: raw.thinking ? 'harness reasoning' : '',
+      output: raw.output || '',
+      output_source: raw.output ? 'Lean harness transcript' : '',
+      tool_calls: raw.tool_calls || [],
+      input_tokens: Number(raw.input_tokens || 0),
+      cache_read_tokens: Number(raw.cache_read_tokens || 0),
+      cache_write_tokens: Number(raw.cache_write_tokens || 0),
+      total_input_tokens: Number(raw.total_input_tokens || 0),
+      output_tokens: Number(raw.output_tokens || 0),
+      reasoning_tokens: Number(raw.reasoning_tokens || 0),
+      latency_s: Number(raw.latency_s || 0),
+      cost_usd: 0,
+      model: raw.model || lean.model || lean.harness?.label || lean.harness?.engine || run.model || 'Lean harness',
+      response_id: raw.response_id || '',
+      received_from: [],
+      sent_to: [],
+      memory_context: raw.memory_context || formalMemory,
+      memory_source: 'formal verification context',
+      monitor: {
+        outcome: failed ? 'fail' : status === 'running' ? 'warn' : 'ok',
+        outcome_label: failed ? 'failed' : status === 'running' ? 'running' : (raw.outcome_label || 'recorded'),
+        flags: raw.flags || [],
+        cost_tier: 'untracked',
+        cost_share_pct: 0,
+      },
+    });
+  };
+  for (const event of (lean.conversation || [])) {
+    const role = String(event.role || 'assistant');
+    const pipeline = role === 'tool' || role === 'system' ? 'act' : role === 'reasoning' ? 'reason' : 'formalize';
+    const isFirstModelMessage = role === 'assistant' && !agents.some(agent => agent.role === 'assistant');
+    add({
+      trace_id: `lean-conversation-${event.id || agents.length}`,
+      stage_name: event.title || event.kind || 'Harness event',
+      pipeline_stage: pipeline,
+      role,
+      status: event.status,
+      exit_code: event.exit_code,
+      prompt: event.command || (isFirstModelMessage ? lean.harness_prompt || run.problem_preview || '' : ''),
+      prompt_source: event.command ? 'harness command' : isFirstModelMessage ? 'lean/TASK.md' : '',
+      thinking: role === 'reasoning' ? event.content : '',
+      output: role === 'reasoning' ? '' : event.content,
+      tool_calls: role === 'tool' ? [event.title || event.kind || 'tool'] : [],
+      response_id: event.id || '',
+    });
+  }
+  const lastModel = [...agents].reverse().find(a => a.role === 'assistant' || a.role === 'reasoning');
+  if (lastModel) {
+    const totalInput = Number(usage.input_tokens || 0);
+    const cacheRead = Number(usage.cached_input_tokens || 0);
+    const cacheWrite = Number(usage.cache_write_input_tokens || 0);
+    lastModel.input_tokens = Math.max(0, totalInput - cacheRead - cacheWrite);
+    lastModel.cache_read_tokens = cacheRead;
+    lastModel.cache_write_tokens = cacheWrite;
+    lastModel.total_input_tokens = totalInput;
+    lastModel.output_tokens = Number(usage.output_tokens || 0);
+    lastModel.reasoning_tokens = Number(usage.reasoning_output_tokens || 0);
+  }
+  for (const attempt of (lean.attempts || [])) {
+    add({
+      trace_id: `lean-check-${attempt.index ?? agents.length}`,
+      stage_name: `Attempt ${Number(attempt.round || 0)+1} · ${attempt.action || 'check'}`,
+      pipeline_stage: 'verify', role: 'verifier', status: attempt.status,
+      exit_code: attempt.exit_code, latency_s: attempt.duration_s,
+      prompt: `lean ${lean.lean_path || 'lean/Proof.lean'}`, prompt_source: 'kernel checker invocation',
+      output: attempt.log || (attempt.ok ? 'Lean accepted this checker round.' : 'Lean rejected this checker round.'),
+      tool_calls: ['lean'], outcome_label: attempt.ok ? 'verified' : 'rejected',
+      flags: attempt.sorry_count ? [`${attempt.sorry_count} sorry/admit`] : [],
+    });
+  }
+  const fidelity = lean.fidelity || {};
+  const fidelityIssues = [...(fidelity.issues || []), ...(fidelity.flags || []).map(x => x.message)].filter(Boolean);
+  if (lean.has_result) {
+    add({
+      trace_id:'lean-fidelity', stage_name:'Statement fidelity audit', pipeline_stage:'audit', role:'evaluator',
+      status:fidelity.severity === 'major' ? 'unfaithful' : fidelity.severity === 'minor' ? 'incomplete' : 'completed',
+      prompt:'Compare the formal main declaration against the original mathematical statement and report weakening, vacuity, added assumptions, or forbidden constructs.',
+      prompt_source:'statement fidelity audit',
+      output:fidelity.verdict || 'No statement-fidelity issues recorded.', flags:fidelityIssues,
+      outcome_label:fidelity.severity || 'ok',
+    });
+  }
+  for (const [index, msg] of (lean.chat || []).entries()) {
+    add({
+      trace_id:`lean-human-${index}`, stage_name:msg.role === 'user' ? 'Human intervention' : 'Lean assistant response',
+      pipeline_stage:'human', role:msg.role === 'user' ? 'human' : 'assistant', output:msg.content || '',
+      outcome_label:'intervention',
+    });
+  }
+  if (lean.has_result) {
+    add({
+      trace_id:'lean-result', stage_name:lean.title || 'Formal result', pipeline_stage:'finalize', role:'finalize',
+      status:lean.status || 'completed', output:lean.notes || `${lean.lean_path || 'Proof.lean'} · ${lean.status || 'recorded'}`,
+      outcome_label:lean.status || 'recorded', flags:lean.sorry_count ? [`${lean.sorry_count} sorry/admit`] : [],
+    });
+  }
+  const edges = agents.slice(1).map((agent,index) => ({from:agents[index].trace_id,to:agent.trace_id}));
+  const byId = Object.fromEntries(agents.map(agent => [agent.trace_id, agent]));
+  for (const edge of edges) {
+    byId[edge.from]?.sent_to.push(edge.to);
+    byId[edge.to]?.received_from.push(edge.from);
+  }
+  const present = [...new Set(agents.map(a => a.pipeline_stage))];
+  return {
+    ...run,
+    run_id:run.run_id,
+    source:'formal_lean',
+    status:lean.status || run.status,
+    pipeline:stages,
+    stages_present:present,
+    agents,
+    edges,
+    totals:{
+      agents:agents.length,
+      input_tokens:Number(usage.input_tokens || 0),
+      output_tokens:Number(usage.output_tokens || 0),
+      latency_s:Number(lean.duration_s || 0),
+      cost_usd:0,
+    },
+  };
+}
+
+function renderFormalPipeline(run) {
+  const byStage = {};
+  for (const agent of (run.agents || [])) (byStage[agent.pipeline_stage] ||= []).push(agent);
+  let html = '<div class="pipeline-wrap"><div class="pipeline">';
+  for (const stage of (run.pipeline || [])) {
+    const list = byStage[stage.id] || [];
+    html += `<div class="stage-col"><div class="stage-hdr" style="border-top:3px solid ${stage.color};${list.length?'':'opacity:.55'}">${esc(stage.label)}<div class="stitle">${esc(stage.title)}</div><div class="stage-cost">${list.length} event${list.length===1?'':'s'}</div></div><div class="stage-body${list.length?'':' empty-stage'}">`;
+    if (!list.length) html += '<div class="stage-skip">Not recorded</div>';
+    for (const agent of list) {
+      const cls = agent.monitor?.outcome === 'fail' ? ' outcome-fail' : agent.monitor?.outcome === 'warn' ? ' outcome-warn' : '';
+      html += `<div class="agent-node${cls}" data-trace="${esc(agent.trace_id)}"><div class="role">${esc(agent.role)} <span class="pill ${agent.monitor?.outcome==='fail'?'err':agent.monitor?.outcome==='warn'?'warn':'ok'}">${esc(agent.monitor?.outcome_label || 'recorded')}</span></div><div class="name">${esc(agent.stage_name)}</div><div class="tok">${agent.latency_s?agent.latency_s.toFixed(2)+'s · ':''}${esc(agent.status || 'completed')}</div></div>`;
+    }
+    html += '</div></div>';
+  }
+  return html + '</div></div>';
+}
+
+function renderLeanMonitor(run) {
+  State.formalRun = null;
+  const lean = run.lean_verification || { status:'none', has_result:false, attempts:[], chat:[] };
+  const status = String(lean.status || 'none');
+  const statusClass = leanMonitorClass(status);
+  const open = '<div class="lean-monitor-actions"><button type="button" data-open-lean-monitor>Open full Lean Verification</button></div>';
+  let html = '<div class="lean-monitor"><div class="lean-monitor-head"><div class="lambda">λ</div>'
+    + '<div class="copy"><h2>Formal Lean Monitor</h2>'
+    + '<p>Kernel checker rounds, statement fidelity, harness activity and human intervention for '
+    + esc(run.problem_preview || run.problem_id || run.run_id) + '.</p></div>' + open + '</div>';
+  if (!lean.has_result) {
+    return html + '<div class="lean-monitor-empty"><div style="font-size:28px;margin-bottom:7px;opacity:.5">∎</div>'
+      + '<div>No Lean verification has been recorded for this run.</div></div></div>';
+  }
+
+  html += '<div class="stats">'
+    + '<div class="stat"><div class="lbl">Status</div><div class="val"><span class="pill '+statusClass+'">'+esc(status)+'</span></div></div>'
+    + '<div class="stat"><div class="lbl">Attempts</div><div class="val">'+Number(lean.attempt_count || 0)+'</div></div>'
+    + '<div class="stat"><div class="lbl">Lean source</div><div class="val">'+Number(lean.lean_lines || 0)+'L</div></div>'
+    + '<div class="stat"><div class="lbl">Sorry / admit</div><div class="val">'+Number(lean.sorry_count || 0)+'</div></div>'
+    + '<div class="stat"><div class="lbl">Checker time</div><div class="val">'+Number(lean.duration_s || 0).toFixed(2)+'s</div></div>'
+    + '<div class="stat"><div class="lbl">Fidelity</div><div class="val"><span class="pill '+leanMonitorClass((lean.fidelity||{}).severity==='major'?'unfaithful':(lean.fidelity||{}).severity==='minor'?'incomplete':'verified')+'">'
+    + esc((lean.fidelity||{}).severity || 'ok') + '</span></div></div>'
+    + '</div>';
+
+  const formalRun = buildFormalLeanRun(run);
+  State.formalRun = formalRun;
+  const done = !lean.harness_running;
+  html += `<div class="stage-note">Full formal trace · harness messages, reasoning, commands, checker rounds, fidelity and human intervention.</div><div class="view-toggle">
+    <button class="vt-btn ${State.viewMode==='map'?'active':''}" data-view="map">🗺 Map</button>
+    <button class="vt-btn ${State.viewMode==='pipeline'?'active':''}" data-view="pipeline">☰ Pipeline</button>
+    ${State.viewMode==='map'&&done?`<button class="vt-btn ${State.showSolutionPath?'active':''}" id="btn-sol-path" title="Highlight the path leading to the formal result">◆ Solution DAG</button>`:''}
+    <button class="vt-btn" id="btn-export-logs" title="Download the full run record">⬇ Export logs</button>
+    <span class="vt-hint">${State.viewMode==='map'?'Scroll through the trace · Ctrl/⌘ + scroll to zoom · select a node':'fixed formalisation stages'}</span>
+  </div>`;
+  if (State.viewMode === 'map') {
+    html += `<div class="agent-map" id="agent-map"><div class="map-controls"><button id="map-zin" title="Zoom in">+</button><button id="map-zout" title="Zoom out">−</button><button id="map-fit" class="map-fit-control" title="Fit graph to the available width" aria-pressed="true">Fit width</button><button id="map-fit-all" class="map-fit-control" title="Fit the entire graph in view" aria-pressed="false">Fit all</button></div><div class="map-legend"><span style="font-weight:700">Formal trace:</span><span><i style="background:var(--write)"></i>messages</span><span><i style="background:var(--think)"></i>reasoning</span><span><i style="background:var(--tool)"></i>tools</span><span><i style="background:var(--critic)"></i>checker/audit</span><span><i style="background:var(--final)"></i>result</span>${State.showSolutionPath?'<span style="opacity:.4">|</span><span style="color:var(--ok);font-weight:700">— verified path</span>':''}</div></div>`;
+  } else {
+    html += renderFormalPipeline(formalRun);
+  }
+  html += renderAllAgentsTable(formalRun, formalRun.agents, 'All Formal Events') + '</div>';
+  return html;
+}
+
 function renderPipeline(run) {
+  if (State.monitorMode === 'lean') return renderLeanMonitor(run);
+  State.formalRun = null;
   const stages = run.pipeline || [];
   const agents = run.agents || [];
   const present = new Set(run.stages_present || []);
@@ -765,11 +1330,11 @@ function renderPipeline(run) {
 
   let html = renderCompare(State.runs);
   html += renderFinalProofSection(run);
+  html += renderResearchAuditSection(run);
   html += renderRunMemorySection(run);
   html += renderPapersSection(run);
   html += renderAgentFlowSection(run);
   html += renderInsights(run);
-  html += renderVisualLegend();
   const isImproof = run.source === 'improofbench_artifacts';
   const stageNote = isImproof
     ? 'IMProofBench pipeline: Workflow → Author → Critic (+ Council / Compute when used).'
@@ -786,30 +1351,32 @@ function renderPipeline(run) {
     ${run.totals?.cost_usd?`<div class="stat"><div class="lbl">Cost</div><div class="val">$${run.totals.cost_usd.toFixed(2)}</div></div>`:''}
   </div>`;
 
-  const done = ['finished','stopped','failed'].includes(run.status || '') || !run.status;
+  html += renderVisualLegend();
+
+  const done = ['finished','stopped','failed','interrupted'].includes(run.status || '') || !run.status;
   html += `<div class="view-toggle">
     <button class="vt-btn ${State.viewMode==='map'?'active':''}" data-view="map">🗺 Map</button>
     <button class="vt-btn ${State.viewMode==='pipeline'?'active':''}" data-view="pipeline">☰ Pipeline</button>
     ${State.viewMode==='map' && done ? `<button class="vt-btn ${State.showSolutionPath?'active':''}" id="btn-sol-path" title="Highlight the DAG path that leads to the final proof">◆ Solution DAG</button>` : ''}
     <button class="vt-btn" id="btn-export-logs" title="Download the full run record (agents, prompts, outputs, chat, workspace files) as JSON">⬇ Export logs</button>
-    <span class="vt-hint">${State.viewMode==='map'?'drag to pan · scroll to zoom · click a node for details':'fixed stage columns'}</span>
+    <span class="vt-hint">${State.viewMode==='map'?'Scroll through the trace · Ctrl/⌘ + scroll to zoom · select a node':'fixed stage columns'}</span>
   </div>`;
   if (State.viewMode === 'map') {
     html += `<div class="agent-map" id="agent-map">
       <div class="map-controls">
         <button id="map-zin" title="Zoom in">+</button>
         <button id="map-zout" title="Zoom out">−</button>
-        <button id="map-fit" title="Fit">⤢</button>
+        <button id="map-fit" class="map-fit-control" title="Fit graph to the available width" aria-pressed="true">Fit width</button><button id="map-fit-all" class="map-fit-control" title="Fit the entire graph in view" aria-pressed="false">Fit all</button>
       </div>
       <div class="map-legend">
         <span style="font-weight:700">Agents:</span>
-        <span><i style="background:#3b82f6"></i>write</span>
-        <span><i style="background:#14b8a6"></i>critic/verify</span>
-        <span><i style="background:#a855f7"></i>reasoning</span>
-        <span><i style="background:#f97316"></i>finalize</span>
+        <span><i style="background:var(--write)"></i>write</span>
+        <span><i style="background:var(--critic)"></i>critic/verify</span>
+        <span><i style="background:var(--think)"></i>reasoning</span>
+        <span><i style="background:var(--final)"></i>finalize</span>
         <span style="opacity:.4">|</span>
-        <span style="font-weight:700"><i style="background:#eab308"></i>Tools</span>
-        <span style="font-weight:700"><i style="background:#94a3b8"></i>Memory</span>
+        <span style="font-weight:700"><i style="background:var(--tool)"></i>Tools</span>
+        <span style="font-weight:700"><i style="background:var(--memory)"></i>Memory</span>
         ${State.showSolutionPath ? '<span style="opacity:.4">|</span><span style="color:var(--ok);font-weight:700">— solution path</span>' : ''}
       </div>
     </div>`;
@@ -825,7 +1392,7 @@ function renderPipeline(run) {
     const stageHeat = stagePct >= 40 ? ' stage-heat-critical' : stagePct >= 22 ? ' stage-heat-high' : '';
     const skipHint = list.length ? '' : (st.env ? `<div class="stage-skip">Not run<br><span style="font-size:10px">${esc(st.env)}${st.default_on===false?'=0 (off by default)':''}</span></div>` : '<div class="stage-skip">Not run</div>');
     html += `<div class="stage-col${stageHeat}">
-      <div class="stage-hdr" style="border-top:3px solid ${st.color};${list.length?'':'opacity:.55'}">
+      <div class="stage-hdr" style="border-top:3px solid ${stageColor(st.id)};${list.length?'':'opacity:.55'}">
         ${esc(st.label)}
         <div class="stitle">${esc(st.title)}</div>
         ${list.length ? `<div class="stage-cost">$${stageCost.toFixed(0)} · ${stagePct.toFixed(0)}% · ${list.length} calls</div>` : ''}
@@ -864,7 +1431,7 @@ function renderPipeline(run) {
   // misc agents without pipeline_stage
   const other = byStage['other'] || [];
   if (other.length) {
-    html += `<div class="stage-col"><div class="stage-hdr" style="border-top:3px solid #64748b">Other<div class="stitle">Unclassified</div></div><div class="stage-body">`;
+    html += `<div class="stage-col"><div class="stage-hdr" style="border-top:3px solid var(--orch)">Other<div class="stitle">Unclassified</div></div><div class="stage-body">`;
     for (const a of other) {
       html += `<div class="agent-node" data-trace="${esc(a.trace_id)}">${esc(a.stage_name)}</div>`;
     }
@@ -875,8 +1442,8 @@ function renderPipeline(run) {
   return html;
 }
 
-function renderAllAgentsTable(run, agents) {
-  let html = `<div class="table-wrap"><h2>All Agents <span style="font-weight:400;color:var(--muted)">· sorted by cost below</span></h2>
+function renderAllAgentsTable(run, agents, title='All Agents') {
+  let html = `<div class="table-wrap"><h2>${esc(title)} <span style="font-weight:400;color:var(--muted)">· sorted by cost below</span></h2>
     <table><thead><tr>
       <th>Pipeline</th><th>Stage</th><th>Role</th><th>Round</th><th>Cost</th><th>In</th><th>Out</th><th>Outcome</th><th>Flags</th><th>Impact</th>
     </tr></thead><tbody>`;
@@ -929,7 +1496,7 @@ function mapKind(a) {
 function mapNodeHtml(a, solPath) {
   const kind = mapKind(a);
   const mon = a.monitor || {};
-  const kcolor = { write:'#3b82f6', critic:'#14b8a6', think:'#a855f7', tool:'#eab308', orch:'#64748b', final:'#f97316' }[kind];
+  const kcolor = { write:'var(--write)', critic:'var(--critic)', think:'var(--think)', tool:'var(--tool)', orch:'var(--orch)', final:'var(--final)' }[kind];
   const badge = mon.outcome_label && mon.outcome_label !== '—'
     ? `<span class="mbadge" style="background:${mon.outcome==='ok'?'var(--ok)':mon.outcome==='fail'?'var(--err)':'var(--warn)'};color:#fff">${esc(mon.outcome_label)}</span>` : '';
   const run = a.status === 'running' ? ' running' : '';
@@ -1037,9 +1604,9 @@ function layoutAgentMap(run) {
     colBottom[kind] = y + NH;
   });
   // Lane metadata for the labelled columns (Agents vs Tools vs Memory).
-  const laneInfo = { orch:['orchestrator','#64748b','Agents'], think:['reasoning','#a855f7','Agents'],
-    write:['write','#3b82f6','Agents'], critic:['critic/verify','#14b8a6','Agents'],
-    final:['finalize','#f97316','Agents'], tool:['tools','#eab308','Tools'] };
+  const laneInfo = { orch:['orchestrator','var(--orch)','Agents'], think:['reasoning','var(--think)','Agents'],
+    write:['write','var(--write)','Agents'], critic:['critic/verify','var(--critic)','Agents'],
+    final:['finalize','var(--final)','Agents'], tool:['tools','var(--tool)','Tools'] };
   const laneCounts = {};
   sorted.forEach(a => { const k = mapKind(a); laneCounts[k] = (laneCounts[k] || 0) + 1; });
   const lastAgentY = Math.max(TY, ...Object.values(pos).map(p => p.y + p.h));
@@ -1074,7 +1641,7 @@ function layoutAgentMap(run) {
     if (lastWrite) memEdges.push({ from: lastWrite.trace_id, to: mid, mem: true });
   }
   if (memNodes.length) {
-    laneMeta.push({ kind: 'mem', label: 'memory', color: '#94a3b8', group: 'Memory',
+    laneMeta.push({ kind: 'mem', label: 'memory', color: 'var(--memory)', group: 'Memory',
       x: memX, w: 150, y: 4, h: colH, count: memNodes.length, cost: 0 });
   }
   const lastX = Math.max(0, ...Object.values(pos).map(p => p.x + p.w));
@@ -1084,7 +1651,10 @@ function layoutAgentMap(run) {
     h: lastY + 28 };
 }
 
+let disposeAgentMap = null;
 function initAgentMap(run) {
+  disposeAgentMap?.();
+  disposeAgentMap = null;
   const host = document.getElementById('agent-map');
   if (!host || !run?.agents?.length) return;
   const { pos, edges, memNodes, memEdges, laneMeta, w, h } = layoutAgentMap(run);
@@ -1177,17 +1747,17 @@ function initAgentMap(run) {
     const host_ = m.host ? esc(m.host.trace_id) : '';
     nodeFO += `<foreignObject class="map-node" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" data-mem="${host_}">
       <div class="map-card mk-mem" data-mem="${host_}">
-        <div class="mr" style="color:#94a3b8">🗄 memory</div>
+        <div class="mr" style="color:var(--memory)">🗄 memory</div>
         <div class="mn">${esc(preview || 'memory')}</div>
         <div class="mp">${esc(body)}</div>
       </div></foreignObject>`;
   }
   const vbW = Math.max(w, 1);
   const vbH = Math.max(h, 1);
-  const svg = `<svg xmlns="${svgNS}" viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMinYMin meet" style="aspect-ratio:${vbW}/${vbH}">
+  const svg = `<svg xmlns="${svgNS}" viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="none">
     <defs>
       <marker id="map-arrow" viewBox="0 0 14 14" refX="11" refY="7" markerWidth="9" markerHeight="9" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M2.2,1.6 C2.2,1.6 11.2,6.2 11.8,7 C11.2,7.8 2.2,12.4 2.2,12.4 L4.6,7 z" fill="#5b8def"/></marker>
+        <path d="M2.2,1.6 C2.2,1.6 11.2,6.2 11.8,7 C11.2,7.8 2.2,12.4 2.2,12.4 L4.6,7 z" fill="var(--accent)"/></marker>
       <marker id="map-arrow-sol" viewBox="0 0 14 14" refX="11" refY="7" markerWidth="9" markerHeight="9" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M2.2,1.6 C2.2,1.6 11.2,6.2 11.8,7 C11.2,7.8 2.2,12.4 2.2,12.4 L4.6,7 z" fill="var(--ok)"/></marker>
       <marker id="map-arrow-dim" viewBox="0 0 14 14" refX="11" refY="7" markerWidth="8" markerHeight="8" orient="auto" markerUnits="userSpaceOnUse">
@@ -1195,35 +1765,180 @@ function initAgentMap(run) {
     </defs>
     <g id="map-vp">${laneBands}${edgePaths}${nodeFO}</g>
   </svg>`;
-  // keep controls/legend, replace/insert svg
+  // Fit horizontally by default; a native inner scroller keeps every later step reachable.
+  host.querySelector('.map-scrollport')?.remove();
   host.querySelector('svg')?.remove();
-  host.insertAdjacentHTML('afterbegin', svg);
-
-  const vp = host.querySelector('#map-vp');
-  let scale = 1, tx = 0, ty = 0;
-  const apply = () => vp.setAttribute('transform', `translate(${tx} ${ty}) scale(${scale})`);
-  host.addEventListener('wheel', ev => {
+  host.insertAdjacentHTML('afterbegin', `<div class="map-scrollport" tabindex="0" role="region" aria-label="Agent trace. Scroll for more steps; plus and minus zoom; Home fits the width; Shift+Home fits all nodes.">${svg}</div>`);
+  const viewport = host.querySelector('.map-scrollport');
+  const svgEl = viewport.querySelector('svg');
+  const vp = viewport.querySelector('#map-vp');
+  const events = new AbortController();
+  const listen = (element, type, callback, options = {}) => element?.addEventListener(type, callback, { ...options, signal: events.signal });
+  let width = 0, height = 0, scale = 1, tx = 0, graphTop = 12;
+  let widthScale = 1, allScale = 1, fitMode = 'width';
+  let suppressClick = false;
+  const points = new Map();
+  const usableWidth = () => Math.max(1, width - 40);
+  function apply() {
+    const graphWidth = vbW * scale, graphHeight = vbH * scale;
+    tx = graphWidth <= usableWidth()
+      ? (width - graphWidth) / 2
+      : Math.max(width - 20 - graphWidth, Math.min(20, tx));
+    const stageHeight = Math.max(height, graphHeight + 24);
+    graphTop = graphHeight < height - 24 ? (height - graphHeight) / 2 : 12;
+    svgEl.style.height = `${stageHeight}px`;
+    svgEl.setAttribute('viewBox', `0 0 ${width} ${stageHeight}`);
+    vp.setAttribute('transform', `translate(${tx} ${graphTop}) scale(${scale})`);
+    host.dataset.fitMode = fitMode;
+    host.querySelector('#map-fit')?.setAttribute('aria-pressed', String(fitMode === 'width'));
+    host.querySelector('#map-fit-all')?.setAttribute('aria-pressed', String(fitMode === 'all'));
+  }
+  function fit(mode = 'width') {
+    fitMode = mode;
+    scale = mode === 'all' ? allScale : widthScale;
+    tx = 0;
+    apply();
+    viewport.scrollTop = 0;
+  }
+  function resize() {
+    if (!host.clientWidth || !host.clientHeight) return;
+    const controlsHeight = host.querySelector('.map-controls')?.offsetHeight || 30;
+    const legendHeight = host.querySelector('.map-legend')?.offsetHeight || 30;
+    viewport.style.top = `${controlsHeight + 16}px`;
+    viewport.style.bottom = `${legendHeight + 20}px`;
+    const oldWidth = width;
+    const oldScrollTop = viewport.scrollTop;
+    const firstVisible = (oldScrollTop - graphTop) / scale;
+    width = viewport.clientWidth;
+    height = viewport.clientHeight;
+    if (!width || !height) return;
+    widthScale = Math.min(usableWidth() / vbW, 1.5);
+    allScale = Math.min(widthScale, Math.max(1, height - 24) / vbH);
+    if (fitMode === 'width') scale = widthScale;
+    else if (fitMode === 'all') scale = allScale;
+    else tx += (width - oldWidth) / 2;
+    apply();
+    viewport.scrollTop = !oldWidth || fitMode === 'all' || oldScrollTop === 0 ? 0 : firstVisible * scale + graphTop;
+  }
+  function zoomTo(next, x = width / 2, y = height / 2) {
+    fitMode = 'custom';
+    next = Math.max(allScale * .75, Math.min(Math.max(3, widthScale * 3), next));
+    const worldY = (viewport.scrollTop + y - graphTop) / scale;
+    tx = x - (x - tx) * next / scale;
+    scale = next;
+    apply();
+    viewport.scrollTop = worldY * scale + graphTop - y;
+  }
+  function pan(dx, dy) {
+    if (Math.abs(dx) > 0 && vbW * scale > usableWidth() + .5) fitMode = 'custom';
+    tx += dx;
+    apply();
+    viewport.scrollTop -= dy;
+  }
+  host.removeAttribute('tabindex');
+  host.setAttribute('role', 'group');
+  host.setAttribute('aria-label', 'Agent trace graph and viewing controls');
+  if (!host.querySelector('.map-interact')) {
+    host.querySelector('.map-controls')?.insertAdjacentHTML('beforeend', '<button type="button" class="map-interact" aria-pressed="false" title="Enable touch dragging and pinch zoom inside the graph">Move graph</button>');
+  }
+  const interact = host.querySelector('.map-interact');
+  if (matchMedia('(any-pointer: coarse)').matches) {
+    const hint = host.previousElementSibling?.querySelector('.vt-hint');
+    if (hint) hint.textContent = 'Scroll through the trace · Move graph enables pinch zoom · select a node';
+  }
+  listen(interact, 'click', () => {
+    const active = host.classList.toggle('exploring');
+    interact.setAttribute('aria-pressed', String(active));
+    interact.textContent = active ? 'Done moving' : 'Move graph';
+    resize();
+  });
+  listen(viewport, 'wheel', ev => {
+    if (!ev.ctrlKey && !ev.metaKey) {
+      // Keep inner scrolling native. At a vertical boundary, explicitly hand
+      // wheel input to a pane in this document; iframe scroll chaining varies.
+      if (ev.shiftKey || !ev.deltaY || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return;
+      const atBoundary = ev.deltaY < 0
+        ? viewport.scrollTop <= 1
+        : viewport.scrollTop >= viewport.scrollHeight - viewport.clientHeight - 1;
+      if (!atBoundary) return;
+      const lineHeight = parseFloat(getComputedStyle(viewport).lineHeight) || 16;
+      const delta = ev.deltaY * (ev.deltaMode === 1 ? lineHeight : ev.deltaMode === 2 ? viewport.clientHeight : 1);
+      for (let pane = host.parentElement; pane && pane !== document.body; pane = pane.parentElement) {
+        const style = getComputedStyle(pane);
+        if (/^(auto|scroll|overlay)$/.test(style.overflowY)) {
+          const maximum = pane.scrollHeight - pane.clientHeight;
+          const next = Math.max(0, Math.min(maximum, pane.scrollTop + delta));
+          if (maximum > 0 && Math.abs(next - pane.scrollTop) >= .5) {
+            pane.scrollTop = next;
+            ev.preventDefault();
+            return;
+          }
+        }
+        if (/^(auto|scroll|overlay|hidden)$/.test(style.overflowY) &&
+            (style.overscrollBehaviorY === 'contain' || style.overscrollBehaviorY === 'none')) break;
+      }
+      return;
+    }
     ev.preventDefault();
-    const ds = ev.deltaY < 0 ? 1.12 : 0.9;
-    scale = Math.min(3, Math.max(0.25, scale * ds));
-    apply();
+    const rect = viewport.getBoundingClientRect();
+    zoomTo(scale * Math.exp(-ev.deltaY * .002), ev.clientX - rect.left, ev.clientY - rect.top);
   }, { passive: false });
-  let drag = null;
-  host.addEventListener('pointerdown', ev => {
-    if (ev.target.closest('.map-card')) return;
-    drag = { x: ev.clientX, y: ev.clientY, tx, ty };
-    host.setPointerCapture(ev.pointerId);
+  listen(viewport, 'pointerdown', ev => {
+    if (ev.button > 0) return;
+    if (ev.pointerType === 'touch' && !host.classList.contains('exploring')) return;
+    if (ev.clientX >= viewport.getBoundingClientRect().left + viewport.clientWidth) return;
+    suppressClick = false;
+    points.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, startX: ev.clientX, startY: ev.clientY });
   });
-  host.addEventListener('pointermove', ev => {
-    if (!drag) return;
-    tx = drag.tx + (ev.clientX - drag.x);
-    ty = drag.ty + (ev.clientY - drag.y);
-    apply();
+  listen(host, 'pointermove', ev => {
+    const previous = points.get(ev.pointerId);
+    if (!previous) return;
+    const distance = Math.hypot(ev.clientX - previous.startX, ev.clientY - previous.startY);
+    if (points.size < 2 && !suppressClick && distance < 4) return;
+    const dx = ev.clientX - previous.x, dy = ev.clientY - previous.y;
+    suppressClick = true;
+    if (!host.hasPointerCapture(ev.pointerId)) host.setPointerCapture(ev.pointerId);
+    if (points.size === 2) {
+      const other = [...points.entries()].find(([key]) => key !== ev.pointerId)[1];
+      const before = Math.hypot(previous.x - other.x, previous.y - other.y);
+      const after = Math.hypot(ev.clientX - other.x, ev.clientY - other.y);
+      const rect = viewport.getBoundingClientRect();
+      if (before > 5) zoomTo(scale * after / before, (previous.x + other.x) / 2 - rect.left, (previous.y + other.y) / 2 - rect.top);
+      pan(dx / 2, dy / 2);
+    } else pan(dx, dy);
+    points.set(ev.pointerId, { ...previous, x: ev.clientX, y: ev.clientY });
   });
-  host.addEventListener('pointerup', () => { drag = null; });
-  host.querySelector('#map-zin')?.addEventListener('click', () => { scale = Math.min(3, scale * 1.25); apply(); });
-  host.querySelector('#map-zout')?.addEventListener('click', () => { scale = Math.max(0.25, scale * 0.8); apply(); });
-  host.querySelector('#map-fit')?.addEventListener('click', () => { scale = 1; tx = ty = 0; apply(); });
+  const release = ev => {
+    points.delete(ev.pointerId);
+    if (host.hasPointerCapture(ev.pointerId)) host.releasePointerCapture(ev.pointerId);
+  };
+  listen(window, 'pointerup', release);
+  listen(window, 'pointercancel', release);
+  listen(host, 'click', ev => {
+    if (suppressClick && !ev.target.closest('.map-controls')) { ev.stopImmediatePropagation(); ev.preventDefault(); suppressClick = false; }
+  }, { capture: true });
+  listen(host.querySelector('#map-zin'), 'click', () => zoomTo(scale * 1.3));
+  listen(host.querySelector('#map-zout'), 'click', () => zoomTo(scale / 1.3));
+  listen(host.querySelector('#map-fit'), 'click', () => fit('width'));
+  listen(host.querySelector('#map-fit-all'), 'click', () => fit('all'));
+  listen(viewport, 'keydown', ev => {
+    if (ev.target !== viewport) return;
+    if (ev.key === '+' || ev.key === '=') zoomTo(scale * 1.3);
+    else if (ev.key === '-') zoomTo(scale / 1.3);
+    else if (ev.key === 'Home' || ev.key === '0') fit(ev.shiftKey ? 'all' : 'width');
+    else if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(ev.key)) {
+      pan(ev.key === 'ArrowLeft' ? 64 : ev.key === 'ArrowRight' ? -64 : 0,
+        ev.key === 'ArrowUp' ? 64 : ev.key === 'ArrowDown' ? -64 : 0);
+    } else return;
+    ev.preventDefault();
+  });
+  const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+  for (const target of [host, viewport, host.querySelector('.map-controls'), host.querySelector('.map-legend')]) {
+    if (target) observer?.observe(target);
+  }
+  listen(window, 'resize', resize);
+  disposeAgentMap = () => { observer?.disconnect(); events.abort(); points.clear(); };
+  resize();
   host.querySelectorAll('.map-card[data-trace], .map-node').forEach(el => {
     el.addEventListener('click', ev => {
       const memHost = el.dataset.mem ?? el.closest('[data-mem]')?.dataset.mem;
@@ -1231,11 +1946,11 @@ function initAgentMap(run) {
         ev.stopPropagation();
         // Memory node: open the host agent's Memory tab (run-level memory → first agent).
         const tid2 = memHost || (State.run?.agents?.[0]?.trace_id ?? '');
-        if (tid2) selectAgent(tid2, 'memory');
+        if (tid2) openAgentDetails(tid2, 'memory');
         return;
       }
       const tid = el.dataset.trace || el.closest('[data-trace]')?.dataset.trace;
-      if (tid) { ev.stopPropagation(); selectAgent(tid); 
+      if (tid) { ev.stopPropagation(); openAgentDetails(tid); 
         host.querySelectorAll('.map-card.selected').forEach(c => c.classList.remove('selected'));
         el.closest('foreignObject')?.querySelector('.map-card')?.classList.add('selected');
         el.classList.add('selected');
@@ -1307,6 +2022,34 @@ function renderPapersSection(run) {
   </div>`;
 }
 
+function renderResearchAuditSection(run) {
+  const audit = run?.runner_result?.research_audit;
+  if (!audit || audit.status === 'not_requested') return '';
+  const latest = Array.isArray(audit.audits) && audit.audits.length ? audit.audits[0] : {};
+  const accepts = audit.audit_accepts_final === true;
+  const valid = audit.valid === true;
+  const verdict = latest.final_audit_verdict || 'not available';
+  const findings = Number.isInteger(audit.open_finding_count)
+    ? audit.open_finding_count
+    : (Number.isInteger(latest.open_finding_count) ? latest.open_finding_count : '—');
+  const copy = valid
+    ? (accepts
+      ? 'The audit contract completed and the final merged reviewer accepted the exact saved proof bytes.'
+      : 'The audit contract completed, but the final reviewer did not accept the candidate. Review the open findings before relying on it.')
+    : 'The candidate audit is incomplete or unreconciled; this run is not audit-certified.';
+  return `<div class="insights" style="margin-bottom:16px">
+    <h2>Candidate proof audit <span class="pill ${valid?'ok':'warn'}">${esc(audit.status || 'unknown')}</span></h2>
+    <div class="flow-sub">Review execution and proof acceptance are reported separately.</div>
+    <div class="stats" style="margin-top:10px">
+      <div class="stat"><div class="lbl">Contract</div><div class="val"><span class="pill ${valid?'ok':'warn'}">${valid?'validated':'incomplete'}</span></div></div>
+      <div class="stat"><div class="lbl">Final verdict</div><div class="val">${esc(verdict)}</div></div>
+      <div class="stat"><div class="lbl">Open findings</div><div class="val">${esc(findings)}</div></div>
+      <div class="stat"><div class="lbl">Candidate accepted</div><div class="val"><span class="pill ${accepts?'ok':'warn'}">${accepts?'yes':'no'}</span></div></div>
+    </div>
+    <div class="flow-sub" style="margin-top:10px">${esc(copy)}</div>
+  </div>`;
+}
+
 function textTab(content, source, emptyMsg) {
   if (!content) return `<div class="empty" style="padding:16px">${esc(emptyMsg)}</div>`;
   const src = source ? `<div class="sec">source: ${esc(source)}</div>` : '';
@@ -1314,9 +2057,11 @@ function textTab(content, source, emptyMsg) {
 }
 
 function renderDetail(agent) {
-  if (!agent) return '<div class="empty">No agent selected</div>';
+  if (!agent) return '<div class="empty monitor-empty"><svg class="empty-mark" width="80" height="54" viewBox="0 0 80 54" fill="none" aria-hidden="true"><path d="M17 27H63" stroke="currentColor" stroke-width="1.2"/><circle cx="13" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><circle cx="40" cy="27" r="8" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-width="1.2"/><circle cx="67" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><path d="m37 27 2 2 4-4" stroke="currentColor" stroke-width="1.2"/></svg><h2>The details are here.</h2><p>Select an agent in the graph or table to read its prompt, reasoning, and output.</p></div>';
   $('d-title').textContent = agent.stage_name || 'Agent';
   $('d-meta').textContent = `${agent.trace_id} · seq ${agent.call_seq}`;
+  $('d-title').title = $('d-title').textContent;
+  $('d-meta').title = $('d-meta').textContent;
 
   if (State.tab === 'overview') {
     let html = `<div class="field-grid">
@@ -1376,8 +2121,21 @@ function renderDetail(agent) {
   return '';
 }
 
+function scrollMonitorTo(element) {
+  const layout = document.querySelector('.layout');
+  if (!element || !layout || !matchMedia('(max-width: 980px)').matches) return;
+  const top = element.getBoundingClientRect().top - layout.getBoundingClientRect().top + layout.scrollTop;
+  layout.scrollTo({ top: Math.max(0, top - 12), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+}
+function openAgentDetails(traceId, tab) {
+  selectAgent(traceId, tab);
+  scrollMonitorTo($('sidebar'));
+}
+$('back-to-trace')?.addEventListener('click', () => scrollMonitorTo($('agent-map') || $('main')));
+
 function selectAgent(traceId, tab) {
-  const agent = (State.run?.agents||[]).find(a => a.trace_id === traceId);
+  const activeRun = State.formalRun || State.run;
+  const agent = (activeRun?.agents||[]).find(a => a.trace_id === traceId);
   State.agent = agent || null;
   if (tab) {
     State.tab = tab;
@@ -1395,6 +2153,8 @@ async function loadRun(runId) {
   const lbl = $('run-hdr-label');
   if (lbl) lbl.textContent = runId ? `· ${runId}` : '';
   if (!runId) { clearRunView(); return; }
+  disposeAgentMap?.();
+  disposeAgentMap = null;
   $('main').innerHTML = '<div class="loading">Loading run…</div>';
   try {
     State.run = await api(`/api/run/${encodeURIComponent(runId)}`);
@@ -1403,12 +2163,14 @@ async function loadRun(runId) {
     $('status').textContent = 'load error';
     return;
   }
+  State.agent = null;
   $('main').innerHTML = renderPipeline(State.run);
   const rerender = () => {
     $('main').innerHTML = renderPipeline(State.run);
+    const activeRun = State.formalRun || State.run;
     bindMainClicks();
     initAgentFlow(State.run);
-    try { initAgentMap(State.run); } catch (e) { console.warn('agent map', e); }
+    try { initAgentMap(activeRun); } catch (e) { console.warn('agent map', e); }
     ensureProofSourceLoaded(State.run);
     if (State.agent) selectAgent(State.agent.trace_id);
   };
@@ -1416,10 +2178,10 @@ async function loadRun(runId) {
     $('main').querySelectorAll('.agent-node, tr[data-trace], .top-row, .flag-item[data-trace]').forEach(el => {
       const tid = el.dataset.trace;
       if (!tid) return;
-      el.addEventListener('click', () => selectAgent(tid));
+      el.addEventListener('click', () => openAgentDetails(tid));
     });
     $('main').querySelectorAll('.prov-table tr[data-trace]').forEach(el => {
-      el.addEventListener('click', () => selectAgent(el.dataset.trace));
+      el.addEventListener('click', () => openAgentDetails(el.dataset.trace));
     });
     $('main').querySelectorAll('.proof-tab').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1445,13 +2207,23 @@ async function loadRun(runId) {
     if (sp) sp.onclick = () => { State.showSolutionPath = !State.showSolutionPath; rerender(); };
     const ex = $('btn-export-logs');
     if (ex) ex.onclick = () => exportRunLogs(State.run?.run_id);
+    const leanBtn = $('main').querySelector('[data-open-lean-monitor]');
+    if (leanBtn) leanBtn.onclick = () => {
+      if (isEmbedded) {
+        window.parent.postMessage({
+          type: 'proving-console-view',
+          view: 'lean',
+          run_id: State.run?.run_id || '',
+        }, window.location.origin);
+      }
+    };
   }
   bindMainClicks();
   ensureProofSourceLoaded(State.run);
   try { initAgentFlow(State.run); } catch (e) { console.warn('agent flow', e); }
-  try { initAgentMap(State.run); } catch (e) { console.warn('agent map', e); }
-  if (State.run.agents?.length) selectAgent(State.run.agents[0].trace_id);
-  notifyParentHeight();
+  const activeRun = State.formalRun || State.run;
+  try { initAgentMap(activeRun); } catch (e) { console.warn('agent map', e); }
+  if (activeRun.agents?.length) selectAgent(activeRun.agents[0].trace_id);
 }
 
 function loadRunsManifest(runs) {
@@ -1466,14 +2238,16 @@ function loadRunsManifest(runs) {
 }
 
 function clearRunView() {
+  disposeAgentMap?.();
+  disposeAgentMap = null;
   State.run = null;
+  State.formalRun = null;
   State.agent = null;
   State.currentRunId = null;
   const lbl = $('run-hdr-label');
   if (lbl) lbl.textContent = '';
-  $('main').innerHTML = '<div class="empty">Select a run from the left Runs panel</div>';
-  $('detail-body').innerHTML = '<div class="empty">No agent selected</div>';
-  notifyParentHeight();
+  $('main').innerHTML = '<div class="empty monitor-empty"><svg class="empty-mark" width="80" height="54" viewBox="0 0 80 54" fill="none" aria-hidden="true"><path d="M17 27H63" stroke="currentColor" stroke-width="1.2"/><circle cx="13" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><circle cx="40" cy="27" r="8" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-width="1.2"/><circle cx="67" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><path d="m37 27 2 2 4-4" stroke="currentColor" stroke-width="1.2"/></svg><h2>A clear view of every step.</h2><p>Select a run from the Runs panel to explore its agents, proof, and token usage.</p></div>';
+  $('detail-body').innerHTML = '<div class="empty monitor-empty"><svg class="empty-mark" width="80" height="54" viewBox="0 0 80 54" fill="none" aria-hidden="true"><path d="M17 27H63" stroke="currentColor" stroke-width="1.2"/><circle cx="13" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><circle cx="40" cy="27" r="8" fill="currentColor" fill-opacity=".13" stroke="currentColor" stroke-width="1.2"/><circle cx="67" cy="27" r="8" stroke="currentColor" stroke-width="1.2"/><path d="m37 27 2 2 4-4" stroke="currentColor" stroke-width="1.2"/></svg><h2>The details are here.</h2><p>Select an agent in the graph or table to read its prompt, reasoning, and output.</p></div>';
 }
 
 async function init() {
@@ -1519,8 +2293,6 @@ document.querySelectorAll('.tab').forEach(t => {
 });
 
 init();
-watchContentHeight();
-notifyParentHeight();
 </script>
 </body>
 </html>

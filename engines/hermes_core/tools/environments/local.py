@@ -246,6 +246,21 @@ _HERMES_PROVIDER_ENV_BLOCKLIST = _build_provider_env_blocklist()
 # these markers is safe and only prevents the cross-project clobber (#23473).
 _ACTIVE_VENV_MARKER_VARS = ("VIRTUAL_ENV", "CONDA_PREFIX")
 
+_AGENT_MONITOR_CONTROL_PLANE_KEYS = frozenset({
+    "AGENT_MONITOR_BASE_PATH",
+    "AGENT_MONITOR_DATA_ENCRYPTION_KEY",
+    "AGENT_MONITOR_DATA_KEY_FILE",
+    "AGENT_MONITOR_ENV_PATH",
+    "AGENT_MONITOR_REQUIRE_DATA_KEY",
+    "AGENT_MONITOR_SECRET_KEY",
+    "AGENT_MONITOR_SERVER_SETTINGS_READ_ONLY",
+    "CREDENTIALS_DIRECTORY",
+    "DOTENV_PATH",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_OAUTH_CLIENT_SECRET",
+    "OAUTH_CLIENT_SECRET",
+})
+
 
 def _is_hermes_internal_secret(key: str) -> bool:
     """Return True for Hermes-internal secrets injected under *dynamic* names.
@@ -281,6 +296,8 @@ def _is_hermes_internal_secret(key: str) -> bool:
     a model-driving CLI legitimately needs matches these patterns.
     """
     upper = key.upper()
+    if upper in _AGENT_MONITOR_CONTROL_PLANE_KEYS or upper.startswith("SMTP_"):
+        return True
     if upper.startswith("AUXILIARY_") and (
         upper.endswith("_API_KEY") or upper.endswith("_BASE_URL")
     ):
@@ -405,6 +422,8 @@ def _sanitize_subprocess_env(base_env: dict | None, extra_env: dict | None = Non
 # narrow subset of _HERMES_PROVIDER_ENV_BLOCKLIST; provider keys are handled by
 # the conditional Tier-2 strip in hermes_subprocess_env().
 _ALWAYS_STRIP_KEYS: frozenset[str] = frozenset({
+    # Agent Monitor web-service credentials and credential-file pointers.
+    *_AGENT_MONITOR_CONTROL_PLANE_KEYS,
     # GitHub auth
     "GH_TOKEN",
     "GITHUB_TOKEN",

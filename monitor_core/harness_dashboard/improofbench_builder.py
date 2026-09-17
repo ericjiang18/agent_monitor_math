@@ -91,13 +91,17 @@ def _index_agent_folders(run_dir: Path) -> dict[str, Path]:
 TEXT_LIMIT = 80_000
 MEMORY_INPUT_KEYS = (
     "problem",
+    "problem_id",
     "prev_critique",
+    "previous_critique",
+    "previous_solution",
     "workflow_feedback",
     "prev_council",
     "prev_compute_response",
     "author_question",
     "instructions",
     "answer_tex",
+    "solution",
     "research_notes_tex",
     "references_bib",
     "council_question",
@@ -205,7 +209,14 @@ def _format_memory_context(inp: dict[str, Any] | None) -> dict[str, str] | None:
     if not isinstance(inp, dict):
         return None
     ctx: dict[str, str] = {}
-    for key in ("prev_critique", "workflow_feedback", "prev_council", "prev_compute_response"):
+    for key in (
+        "prev_critique",
+        "previous_critique",
+        "previous_solution",
+        "workflow_feedback",
+        "prev_council",
+        "prev_compute_response",
+    ):
         val = inp.get(key)
         if val and str(val).strip():
             ctx[key] = _clip_text(str(val)) or ""
@@ -234,6 +245,7 @@ def _agent_label(agent: dict) -> str:
 def _format_output_payload(agent_name: str, out: dict[str, Any] | None) -> tuple[str | None, dict[str, Any] | None]:
     if not isinstance(out, dict):
         return None, None
+    parsed_name = parse_improof_agent(agent_name)
     name = agent_name
     if name not in ("Author", "ACCritic", "CouncilMember", "Compute", "Council"):
         name = {
@@ -241,7 +253,8 @@ def _format_output_payload(agent_name: str, out: dict[str, Any] | None) -> tuple
             "critic": "ACCritic",
             "council_member": "CouncilMember",
             "compute": "Compute",
-        }.get(agent_name, agent_name)
+            "council": "Council",
+        }.get(parsed_name.get("role") or agent_name, agent_name)
     decision: dict[str, Any] | None = None
     parts: list[str] = []
 
@@ -259,6 +272,8 @@ def _format_output_payload(agent_name: str, out: dict[str, Any] | None) -> tuple
     elif name == "ACCritic":
         if out.get("review_md"):
             parts.append(str(out["review_md"]))
+        if out.get("critique"):
+            parts.append(str(out["critique"]))
         msgs = out.get("messages_after") or []
         if isinstance(msgs, list):
             for msg in msgs:
@@ -285,7 +300,17 @@ def _format_output_payload(agent_name: str, out: dict[str, Any] | None) -> tuple
         if out.get("summary"):
             parts.append(str(out["summary"]))
     else:
-        for key in ("review_md", "raw_text", "thinking_summary", "text", "response_md"):
+        for key in (
+            "review_md",
+            "critique",
+            "raw_text",
+            "thinking_summary",
+            "answer_tex",
+            "solution",
+            "summary",
+            "text",
+            "response_md",
+        ):
             if out.get(key):
                 parts.append(str(out[key]))
 
@@ -418,9 +443,19 @@ def _enrich_from_events(agent: dict, parent_call_id: str, event_index: ImproofEv
         if decision and not agent.get("decision_impact"):
             agent["decision_impact"] = decision
         if not agent.get("thinking"):
-            if agent_name == "Author" and out.get("thinking_summary"):
+            if agent.get("role") == "author" and out.get("thinking_summary"):
                 agent["thinking"] = _clip_text(str(out["thinking_summary"]))
                 agent["thinking_source"] = "events.jsonl:agent.end"
+
+    if not agent.get("latency_s") and start.get("ts") and end.get("ts"):
+        try:
+            start_ts = datetime.fromisoformat(str(start["ts"]).replace("Z", "+00:00"))
+            end_ts = datetime.fromisoformat(str(end["ts"]).replace("Z", "+00:00"))
+            agent["latency_s"] = max(0.0, (end_ts - start_ts).total_seconds())
+        except (TypeError, ValueError):
+            pass
+    if end:
+        agent["status"] = "finished"
 
 
 def _enrich_agent(agent: dict, folder: Path | None, parent_call_id: str, event_index: ImproofEventIndex) -> None:
@@ -474,6 +509,58 @@ def _agent_from_model_call(
     }
 
 
+def _agent_from_start(
+    event: dict,
+    *,
+    run_id: str,
+    trace_name: str,
+    seq: int,
+    round_id: int | None,
+    folder: Path | None,
+) -> dict:
+    # Project an in-flight native agent before its model.call is emitted.
+    agent_name = event.get("agent") or "unknown"
+    call_id = event.get("call_id") or ""
+    folder_name = folder.name if folder else None
+    if not folder_name and round_id is not None and call_id:
+        folder_name = f"{agent_name}-r{round_id}-{call_id}"
+    parsed = parse_improof_agent(agent_name, folder_name=folder_name, round_id=round_id)
+    latency = None
+    if event.get("ts"):
+        try:
+            started = datetime.fromisoformat(str(event["ts"]).replace("Z", "+00:00"))
+            latency = max(0.0, (datetime.now(timezone.utc) - started).total_seconds())
+        except (TypeError, ValueError):
+            pass
+    return {
+        "trace_id": f"{run_id}::{parsed['stage_name']}",
+        "trace_name": trace_name,
+        "run_id": run_id,
+        "stage_name": parsed["stage_name"],
+        "call_seq": seq,
+        "round_id": parsed.get("round_id") if parsed.get("round_id") is not None else round_id,
+        "agent_id": parsed.get("agent_id"),
+        "role": parsed.get("role"),
+        "pipeline_stage": parsed.get("pipeline_stage"),
+        "model": None,
+        "latency_s": latency,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "total_input_tokens": 0,
+        "reasoning_tokens": 0,
+        "cost_usd": None,
+        "response_id": call_id,
+        "ts": event.get("ts"),
+        "received_from": [],
+        "sent_to": [],
+        "tool_calls": [],
+        "status": "running",
+        "improof_agent": agent_name,
+        "improof_via": "events.jsonl:agent.start",
+    }
+
+
 def _build_ac_edges(agents: list[dict]) -> list[dict]:
     """Author → Critic per round; failed critic → next author."""
     edges: list[dict] = []
@@ -514,15 +601,13 @@ def _build_ac_edges(agents: list[dict]) -> list[dict]:
 
         critic = critics[-1] if critics else None
         if critic and rnd + 1 in by_round:
-            di = critic.get("decision_impact") or {}
-            if di.get("answer_ready") is False or di.get("verdict") is False:
-                nxt_authors = by_round[rnd + 1].get("author") or []
-                if nxt_authors:
-                    edges.append({
-                        "from": critic["stage_name"],
-                        "to": nxt_authors[0]["stage_name"],
-                        "type": "refine",
-                    })
+            nxt_authors = by_round[rnd + 1].get("author") or []
+            if nxt_authors:
+                edges.append({
+                    "from": critic["stage_name"],
+                    "to": nxt_authors[0]["stage_name"],
+                    "type": "refine",
+                })
     return edges
 
 
@@ -554,19 +639,45 @@ def build_run_from_improof_artifacts(run_id: str, run_dir: Path, output_root: Pa
     last_ts: str | None = None
     agent_round: dict[str, int] = {}
 
-    for row in _load_jsonl(events_path):
+    rows = _load_jsonl(events_path)
+    model_parent_ids = {
+        str(row.get("parent_call_id") or "")
+        for row in rows
+        if row.get("kind") == "model.call" and row.get("parent_call_id")
+    }
+    for row in rows:
         kind = row.get("kind")
-        if kind == "ac.round_start":
+        if kind in {"ac.round_start", "dag.loop_iteration_started"}:
             payload = row.get("payload") or {}
-            if payload.get("round") is not None:
-                current_round = int(payload["round"])
+            round_value = payload.get("round")
+            if round_value is None:
+                round_value = payload.get("iteration")
+            if round_value is not None:
+                current_round = int(round_value)
             continue
         if kind == "agent.start":
             call_id = row.get("call_id") or ""
             agent_name = row.get("agent") or ""
-            if call_id and agent_name in ("Author", "ACCritic", "CouncilMember", "Compute", "Council"):
+            parsed = parse_improof_agent(agent_name)
+            if call_id and parsed.get("role") in {
+                "author", "critic", "council_member", "compute", "council"
+            }:
                 if current_round is not None:
                     agent_round[call_id] = current_round
+                if call_id not in model_parent_ids:
+                    seq += 1
+                    folder = folder_index.get(call_id)
+                    agent = _agent_from_start(
+                        row,
+                        run_id=run_id,
+                        trace_name=trace_name,
+                        seq=seq,
+                        round_id=current_round,
+                        folder=folder,
+                    )
+                    _enrich_agent(agent, folder, call_id, event_index)
+                    agents.append(agent)
+                    last_ts = row.get("ts") or last_ts
             continue
         if kind != "model.call":
             continue

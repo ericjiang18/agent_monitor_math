@@ -24,8 +24,10 @@ call is synchronous and behaves like AIAgent's existing chat_completions loop.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -204,7 +206,11 @@ class CodexAppServerSession:
         cwd: Optional[str] = None,
         codex_bin: str = "codex",
         codex_home: Optional[str] = None,
+        model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        service_tier: Optional[str] = None,
         permission_profile: Optional[str] = None,
+        network_domains: Optional[list[str]] = None,
         approval_callback: Optional[Callable[..., str]] = None,
         on_event: Optional[Callable[[dict], None]] = None,
         request_routing: Optional[_ServerRequestRouting] = None,
@@ -213,12 +219,18 @@ class CodexAppServerSession:
         self._cwd = cwd or os.getcwd()
         self._codex_bin = codex_bin
         self._codex_home = codex_home
+        self._model = model
+        self._reasoning_effort = reasoning_effort
+        self._service_tier = service_tier
         self._permission_profile = (
             permission_profile or _HERMES_TO_CODEX_PERMISSION_PROFILE.get(
                 os.environ.get("HERMES_TERMINAL_SECURITY_MODE", "auto"),
                 "workspace-write",
             )
         )
+        self._network_domains = [
+            str(domain) for domain in (network_domains or []) if str(domain).strip()
+        ]
         self._approval_callback = approval_callback
         self._on_event = on_event  # Display hook (kawaii spinner ticks etc.)
         self._routing = request_routing or _ServerRequestRouting()
@@ -244,9 +256,75 @@ class CodexAppServerSession:
         if self._thread_id is not None:
             return self._thread_id
         if self._client is None:
-            self._client = self._client_factory(
-                codex_bin=self._codex_bin, codex_home=self._codex_home
+            configured_landlock = os.environ.get(
+                "AGENT_MONITOR_CODEX_LEGACY_LANDLOCK"
             )
+            use_landlock = (
+                sys.platform.startswith("linux")
+                and not self._network_domains
+                and self._permission_profile != "full-access"
+                and (
+                    configured_landlock is None
+                    or configured_landlock.strip().lower() in {
+                        "1", "true", "yes", "on",
+                    }
+                )
+            )
+            # Direct workspace-write enforcement is incompatible with Codex's
+            # legacy Landlock path. Keep the embedded agent read-only and let
+            # agent-monitor persist its explicit final artifact instead.
+            extra_args: list[str] = (
+                [
+                    "--enable", "use_legacy_landlock",
+                    "-c", 'sandbox_mode="read-only"',
+                ]
+                if use_landlock
+                else []
+            )
+            if self._permission_profile == "workspace-write" and not use_landlock:
+                if self._network_domains:
+                    rules = "{" + ",".join(
+                        json.dumps(domain) + '="allow"'
+                        for domain in self._network_domains
+                    ) + "}"
+                    network_args = [
+                        "-c",
+                        "sandbox_workspace_write.network_access=true",
+                        "-c",
+                        "features.network_proxy.enabled=true",
+                        "-c",
+                        "features.network_proxy.domains=" + rules,
+                    ]
+                else:
+                    network_args = [
+                        "-c",
+                        "sandbox_workspace_write.network_access=false",
+                    ]
+                extra_args += [
+                    "-c",
+                    'sandbox_mode="workspace-write"',
+                    "-c",
+                    "sandbox_workspace_write.writable_roots="
+                    + json.dumps([self._cwd]),
+                ] + network_args
+            if self._reasoning_effort:
+                extra_args += ["-c", "model_reasoning_effort=" + json.dumps(self._reasoning_effort)]
+            if self._service_tier:
+                extra_args += ["-c", "service_tier=" + json.dumps(self._service_tier)]
+            kwargs = {
+                "codex_bin": self._codex_bin,
+                "codex_home": self._codex_home,
+                "extra_args": extra_args,
+            }
+            try:
+                self._client = self._client_factory(**kwargs)
+            except TypeError as exc:
+                # Compatibility with older test/third-party factories that
+                # predate CodexAppServerClient.extra_args.
+                if "extra_args" not in str(exc):
+                    raise
+                kwargs.pop("extra_args")
+                self._client = self._client_factory(**kwargs)
         self._client.initialize(
             client_name="hermes",
             client_title="Hermes Agent",
@@ -262,12 +340,12 @@ class CodexAppServerSession:
         #      codex requires a matching `[permissions]` table in
         #      ~/.codex/config.toml or it fails the request with
         #      'default_permissions requires a [permissions] table'.
-        # Letting codex pick its default (`:read-only` unless the user has
-        # configured otherwise in their codex config.toml) is the standard
-        # codex CLI workflow and avoids fighting codex's own validation.
-        # Users who want a write-capable profile configure it in their
-        # ~/.codex/config.toml the same way they would for any codex usage.
+        # The app-server config arguments above select workspace-write and
+        # scope the writable root to this run's cwd. Permission profiles are
+        # still not sent through the experimental thread/start API.
         params: dict[str, Any] = {"cwd": self._cwd}
+        if self._model:
+            params["model"] = self._model
         result = self._client.request("thread/start", params, timeout=15)
         # Cross-fill thread.id/sessionId — different codex versions have
         # serialized this under either key. Mirrors openclaw beta.8's

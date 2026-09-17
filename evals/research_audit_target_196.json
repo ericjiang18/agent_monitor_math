@@ -1,0 +1,11 @@
+{
+  "targets": [
+    {
+      "id": "erdos196",
+      "title": "Erdos Problem #196 — monotone four-term APs in permutations",
+      "prompt": "Erdős problem #196. Must every permutation x of the positive integers contain indices i1<i2<i3<i4 for which x[i1],x[i2],x[i3],x[i4] form either an increasing or a decreasing four-term arithmetic progression? Retrieve the exact current primary statement and research status before working. Seek the strongest rigorous progress possible. Separate finite-prefix computation from the infinite assertion, test quantifiers and boundary cases, and do not claim a solution or novelty unless the unrestricted statement and current literature gap are both closed. Source identifier: https://www.erdosproblems.com/196."
+    }
+  ],
+  "audit_suffix": "\n\nCANDIDATE AUDIT GATE: Work with the selected harness and model only. Once a substantial candidate argument, central lemma, construction, or source-based claim exists, you MUST read `_agent/skills/research-proof-audit/SKILL.md` completely and follow it before finalizing. Read only the task-relevant referenced files it names. Freeze the exact statement and candidate, run independent global and decomposed audits, add the refuter pass for any proposed solution, and preserve disagreements and failed checks. A file-capable harness MUST write its individual and merged audit artifacts under `audit/<run-id>/`; if fresh-context delegation is unavailable, run isolated serial passes and record degraded independence. End proof.md with exactly one explicit line in the form `ProvingConsole outcome: <label>`, where `<label>` is Solved, Counterexample, Known/Open Status, or Partial Progress. An audit accept verdict alone is not Solved.",
+  "baseline_suffix": "\n\nCONTROL CONDITION: Use the harness's normal rigorous workflow without invoking the research-proof-audit skill. Still preserve reproducible evidence and end proof.md with exactly one ProvingConsole outcome: Solved, Counterexample, Known/Open Status, or Partial Progress."
+}

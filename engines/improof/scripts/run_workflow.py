@@ -292,6 +292,67 @@ def _read_json(path: Path) -> Any | None:
         return None
 
 
+def _substantive_proof_text(text: str) -> bool:
+    stripped = text.strip()
+    if (
+        len(stripped) < 200
+        or sum(character.isalpha() for character in stripped) < 80
+    ):
+        return False
+    lowered = stripped.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "\\begin{document}",
+            "proof",
+            "suppose",
+            "assume",
+            "therefore",
+            "hence",
+            "we show",
+        )
+    )
+
+
+def _kimi_terminal_error(outputs: Any, run_dir: Path) -> str | None:
+    if not isinstance(outputs, dict):
+        return "Kimi Author/Critic returned no outputs mapping"
+    if outputs.get("error"):
+        return f"Kimi Author/Critic workflow error: {outputs['error']}"
+    if outputs.get("status") != "finished":
+        return "Kimi Author/Critic did not reach its finished terminal state"
+    if (
+        outputs.get("compiled") is not True
+        or outputs.get("compile_status") != "done"
+    ):
+        return "Kimi Author/Critic final LaTeX artifact did not compile"
+    if int(outputs.get("rounds_completed") or 0) < 1:
+        return "Kimi Author/Critic completed no review rounds"
+    if not _substantive_proof_text(str(outputs.get("solution") or "")):
+        return "Kimi Author/Critic returned no substantive proof text"
+
+    raw_artifact = outputs.get("solution_tex")
+    if not raw_artifact:
+        return "Kimi Author/Critic returned no final proof artifact path"
+    artifact = Path(str(raw_artifact))
+    if not artifact.is_absolute():
+        artifact = run_dir / artifact
+    try:
+        if artifact.is_symlink():
+            return "Kimi Author/Critic proof artifact must not be a symlink"
+        artifact = artifact.resolve()
+        if not artifact.is_relative_to(run_dir.resolve()):
+            return "Kimi Author/Critic proof artifact escapes the run directory"
+        if not artifact.is_file() or artifact.stat().st_size < 200:
+            return "Kimi Author/Critic proof artifact is missing or too small"
+        artifact_text = artifact.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"Kimi Author/Critic proof artifact is unreadable: {type(exc).__name__}"
+    if not _substantive_proof_text(artifact_text):
+        return "Kimi Author/Critic proof artifact is not substantive"
+    return None
+
+
 def _safe_id(value: str) -> str:
     import re
 
@@ -448,6 +509,12 @@ async def amain() -> int:
 
     out_json = out.model_dump(mode="json") if hasattr(out, "model_dump") else out
 
+    if preset.name == "kimi_author_critic":
+        terminal_error = _kimi_terminal_error(out_json, ctx.root_workdir)
+        if terminal_error:
+            out_json = dict(out_json) if isinstance(out_json, dict) else {}
+            out_json["error"] = terminal_error
+
     status = "error" if isinstance(out_json, dict) and out_json.get("error") else "ok"
     await ctx.events.emit("run.end", {"status": status})
     ctx.write_metadata({"status": status, "display_name": args.run_name, "outputs": out_json})
@@ -456,7 +523,7 @@ async def amain() -> int:
     print(f"output: {ctx.root_workdir}")
     print("outputs:")
     print(json.dumps(out_json, ensure_ascii=False, indent=2, default=str))
-    return 0
+    return 1 if status == "error" else 0
 
 
 def main() -> int:

@@ -214,6 +214,7 @@ class APIClient:
         api="openai",
         api_key_env=None,
         base_url=None,
+        base_url_env=None,
         max_retries=3,
         max_retries_inner=25,
         max_wallclock_per_call_s=600.0,
@@ -231,6 +232,7 @@ class APIClient:
         throw_error_on_failure=False,
         max_tokens_param="max_tokens",
         reasoning_effort=None,
+        reasoning_effort_env=None,
         batch_processing=False,
         use_openai_responses_api=False,
         use_gdm_tools=False,
@@ -346,6 +348,8 @@ class APIClient:
         self.background = background
         if max_tokens is not None:
             self.max_tokens_param = max_tokens_param
+        if reasoning_effort_env:
+            reasoning_effort = os.getenv(str(reasoning_effort_env)) or reasoning_effort
         if reasoning_effort is not None:
             if not self.use_openai_responses_api or self.batch_processing:
                 self.kwargs["reasoning_effort"] = reasoning_effort
@@ -366,6 +370,7 @@ class APIClient:
         # Prep api
         self.api = api
         self.base_url = base_url
+        self.base_url_env = base_url_env
         self.api_key_env = api_key_env
         self.api_key = None
         self.terminated = False
@@ -509,7 +514,8 @@ class APIClient:
                 self.api = "openai"
         elif self.api == "custom":
             self.api = "openai"
-            self.base_url = self.base_url
+            if self.base_url_env:
+                self.base_url = os.getenv(str(self.base_url_env)) or self.base_url
             self.api_key = os.getenv(self.api_key_env) if self.api_key_env is not None else "EMPTY"
         elif self.api == "vllm":
             return

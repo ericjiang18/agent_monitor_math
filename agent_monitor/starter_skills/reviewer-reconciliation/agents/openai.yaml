@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reviewer Reconciliation"
+  short_description: "Repair feedback and remove stale conclusions"
+  default_prompt: "Use $reviewer-reconciliation to incorporate this review without leaving stale claims."
