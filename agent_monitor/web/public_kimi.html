@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="pk-base" content="">
+  <title>ProvingConsole · Public Kimi</title>
+  <link rel="stylesheet" href="/static/public_kimi.css">
+  <script src="/static/public_kimi.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar">
+      <div class="brand" aria-label="ProvingConsole">
+        <div class="brand-mark" aria-hidden="true">∎</div>
+        <div class="brand-name">Proving<span>Console</span></div>
+      </div>
+
+      <button class="new-proof" id="new-run" type="button" disabled>
+        <span aria-hidden="true">＋</span> New proof
+      </button>
+
+      <div class="sidebar-section">Workspace</div>
+      <div class="nav-item active">
+        <span aria-hidden="true">◇</span>
+        <span>Public prover</span>
+        <i>1</i>
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <section class="runtime-card" aria-label="Fixed runtime">
+        <div class="runtime-head">
+          <span class="runtime-dot" aria-hidden="true"></span>
+          <span>Public runtime</span>
+        </div>
+        <div class="runtime-row">
+          <span class="runtime-badge">K3</span>
+          <div><b id="model-lock">Kimi K3</b><small>Server-sponsored model</small></div>
+        </div>
+        <div class="runtime-row">
+          <span class="runtime-badge plain">P</span>
+          <div><b id="engine-lock">Plain</b><small>Response-only harness</small></div>
+        </div>
+      </section>
+
+      <div class="sidebar-note">
+        <b>No login · No API key</b>
+        <span>Shared public service — do not submit private or sensitive material.</span>
+      </div>
+    </aside>
+
+    <section class="main-stage">
+      <header class="session-top">
+        <div>
+          <span class="mobile-brand">∎ ProvingConsole</span>
+          <h1>New proof</h1>
+          <p>Anonymous workspace · fixed Kimi K3 · Plain only</p>
+        </div>
+        <div class="session-meta">
+          <span class="model-pill">Kimi K3</span>
+          <span class="engine-pill">Plain</span>
+          <span class="status" id="status" data-state="idle" role="status" aria-live="polite">Ready</span>
+        </div>
+      </header>
+
+      <div class="workbench">
+        <section class="problem-panel">
+          <div class="panel-toolbar">
+            <div>
+              <span class="panel-kicker">Input</span>
+              <h2><label for="problem">Problem</label></h2>
+            </div>
+            <span class="counter" id="counter" aria-live="polite">0</span>
+          </div>
+
+          <form class="composer" id="run-form" novalidate>
+            <textarea id="problem" name="problem" required minlength="8" placeholder="Describe a self-contained math problem…
+
+Example: Prove that √3 is irrational."></textarea>
+            <div class="validation" id="validation" role="alert" aria-live="polite"></div>
+            <div class="composer-foot">
+              <div class="fixed-route" aria-label="Fixed route">
+                <span class="route-mark">K3</span>
+                <span><b>Kimi K3</b><small>via Plain · no tools</small></span>
+              </div>
+              <button class="run-button" id="run-button" type="submit" disabled>
+                <span id="run-button-label">Prove</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </form>
+
+          <aside class="public-note" aria-label="Public service limits">
+            <span class="info-mark" aria-hidden="true">i</span>
+            <div>
+              <b>Shared public service</b>
+              <p>Server-sponsored Kimi K3. No account, No login, and No API key are required. Public rate and concurrency limits apply.</p>
+              <div class="limits" id="limit-list"><span>Loading current limits…</span></div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="result-panel" aria-label="Run result">
+          <header class="result-head">
+            <div class="run-identity">
+              <small>Current run</small>
+              <div id="run-name">No run started</div>
+            </div>
+            <button class="stop-button" id="stop-run" type="button" disabled>■ Stop</button>
+          </header>
+
+          <div class="tabs" role="tablist" aria-label="Run views">
+            <button class="tab" id="tab-proof" type="button" role="tab" aria-selected="true" aria-controls="panel-proof" data-tab="proof">Proof</button>
+            <button class="tab" id="tab-activity" type="button" role="tab" aria-selected="false" aria-controls="panel-activity" data-tab="activity">Activity <span id="event-count"></span></button>
+            <button class="tab" id="tab-details" type="button" role="tab" aria-selected="false" aria-controls="panel-details" data-tab="details">Details</button>
+          </div>
+
+          <div class="result-body">
+            <div class="empty" id="empty-state">
+              <div class="empty-mark" aria-hidden="true">∎</div>
+              <h2>Proof preview will appear here.</h2>
+              <p>Enter a problem and press Prove. The result and activity update automatically.</p>
+            </div>
+
+            <div class="panel" id="panel-proof" role="tabpanel" aria-labelledby="tab-proof" hidden>
+              <div class="error" id="error-box" hidden></div>
+              <pre class="proof placeholder" id="proof">Waiting for Plain to produce a proof…</pre>
+            </div>
+
+            <div class="panel" id="panel-activity" role="tabpanel" aria-labelledby="tab-activity" hidden>
+              <div class="event-list" id="event-list"><p class="events-empty">No activity yet.</p></div>
+            </div>
+
+            <div class="panel" id="panel-details" role="tabpanel" aria-labelledby="tab-details" hidden>
+              <div class="details" id="details"></div>
+            </div>
+          </div>
+
+          <footer class="result-footer">
+            <span id="updated">Not started</span>
+            <span>Public artifacts expire automatically</span>
+          </footer>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

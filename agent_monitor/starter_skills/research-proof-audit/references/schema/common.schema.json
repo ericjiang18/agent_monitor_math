@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:moonshot:schemas:common:v1",
+  "title": "Verifier Product Shared Mathematical Definitions",
+  "$defs": {
+    "finding_id": {
+      "type": "string",
+      "pattern": "^F[1-9][0-9]*$"
+    },
+    "repair_task_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*[1-9][0-9]*$"
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "line_start": {"type": "integer", "minimum": 1},
+        "line_end": {"type": "integer", "minimum": 1},
+        "page": {"type": "integer", "minimum": 1},
+        "section": {"type": "string", "minLength": 1},
+        "theorem": {"type": "string", "minLength": 1},
+        "equation": {"type": "string", "minLength": 1},
+        "quote": {"type": "string", "minLength": 1}
+      },
+      "anyOf": [
+        {"required": ["line_start"]},
+        {"required": ["page"]},
+        {"required": ["section"]},
+        {"required": ["theorem"]},
+        {"required": ["equation"]},
+        {"required": ["quote"]}
+      ]
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "rationale"],
+      "properties": {
+        "level": {"enum": ["high", "medium", "low"]},
+        "rationale": {"type": "string", "minLength": 1}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "kind", "reference", "summary"],
+      "properties": {
+        "evidence_id": {"type": "string", "pattern": "^E[1-9][0-9]*$"},
+        "kind": {
+          "enum": ["paper_internal", "citation", "computation", "external_source"]
+        },
+        "reference": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1},
+        "supports": {
+          "type": "array",
+          "items": {"enum": ["problem", "centrality", "repairability", "repair_task"]},
+          "uniqueItems": true
+        }
+      }
+    },
+    "repair_task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repair_task_id", "statement", "kind", "status", "success_criteria"],
+      "properties": {
+        "repair_task_id": {"$ref": "#/$defs/repair_task_id"},
+        "statement": {"type": "string", "minLength": 1},
+        "kind": {
+          "enum": ["lemma", "hypothesis_check", "citation_check", "computation", "dependency_check", "case_analysis", "other"]
+        },
+        "status": {"enum": ["open", "claimed", "discharged", "failed", "unknown"]},
+        "success_criteria": {"type": "string", "minLength": 1},
+        "evidence_refs": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^E[1-9][0-9]*$"},
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    }
+  }
+}

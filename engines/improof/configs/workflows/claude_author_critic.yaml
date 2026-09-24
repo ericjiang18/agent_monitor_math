@@ -1,0 +1,231 @@
+workflow: proofstack.agents.dag_workflow.DAGWorkflow
+description: >
+  Fixed-round Author/Critic proof workflow using the linked Claude Code
+  subscription for every model turn. The response-only worker disables tools,
+  preserves the native IMProof DAG, and never accepts Anthropic API or cloud
+  provider credentials.
+
+inputs:
+  problem: ''
+  problem_id: ''
+  workspace: ''
+  research_packet: ''
+  max_iterations: 3
+
+budget:
+  max_wallclock_s: 7200
+
+components:
+  cfg_claude_author:
+    cmd:
+      - python3
+      - -u
+      - -m
+      - agent_monitor.runners.improof_claude_worker
+      - --role
+      - author
+      - --output
+      - answer.tex
+    model: claude-haiku-4-5
+    workspace_input: workspace
+    sandbox:
+      backend: subprocess
+      timeout_s: 1200
+      cpu_limit: 2
+      memory_gb: 4
+      env_allowlist:
+        - PATH
+        - USER
+        - LANG
+        - LC_ALL
+        - TERM
+        - TMPDIR
+        - PYTHONPATH
+        - AGENT_MONITOR_CLAUDE_SUBSCRIPTION
+        - AGENT_MONITOR_CLAUDE_MODEL
+        - AGENT_MONITOR_CLAUDE_TIMEOUT
+        - AGENT_MONITOR_CLAUDE_MAX_TURNS
+        - AGENT_MONITOR_CLAUDE_EFFORT
+        - CLAUDE_CONFIG_DIR
+        - HTTP_PROXY
+        - HTTPS_PROXY
+        - ALL_PROXY
+        - NO_PROXY
+        - SSL_CERT_FILE
+        - SSL_CERT_DIR
+      provider_keys: []
+    prompt: |
+      You are the Author in an iterative mathematical proof workflow.
+      Write a complete, rigorous solution to the exact problem below. Use the
+      previous draft and the Critic's report to repair gaps rather than merely
+      discussing them. Check quantifiers, boundary cases, hidden assumptions,
+      and every algebraic implication. If the statement is false or open, say
+      so accurately instead of fabricating a proof.
+
+      Return only the LaTeX body of the mathematical write-up. Do not include
+      Markdown fences, a document preamble, or commentary about this prompt.
+
+      Problem:
+      {problem}
+
+      Previous draft:
+      {previous_solution}
+
+      Critic's previous report:
+      {previous_critique}
+
+      Host-generated research packet (already executed; do not call tools):
+      {research_packet}
+    input_schema:
+      problem: string
+      previous_solution: string
+      workspace: string
+      previous_critique: string
+      research_packet: string
+    output_schema:
+      answer_tex: string
+      status: string
+      workspace: string
+    output_files:
+      answer_tex: answer.tex
+    done_outputs:
+      status: status
+    usage:
+      type: claude_projected_jsonl
+      model: claude-haiku-4-5
+
+  cfg_claude_critic:
+    cmd:
+      - python3
+      - -u
+      - -m
+      - agent_monitor.runners.improof_claude_worker
+      - --role
+      - critic
+      - --output
+      - critique.md
+    model: claude-haiku-4-5
+    workspace_input: workspace
+    sandbox:
+      backend: subprocess
+      timeout_s: 1200
+      cpu_limit: 2
+      memory_gb: 4
+      env_allowlist:
+        - PATH
+        - USER
+        - LANG
+        - LC_ALL
+        - TERM
+        - TMPDIR
+        - PYTHONPATH
+        - AGENT_MONITOR_CLAUDE_SUBSCRIPTION
+        - AGENT_MONITOR_CLAUDE_MODEL
+        - AGENT_MONITOR_CLAUDE_TIMEOUT
+        - AGENT_MONITOR_CLAUDE_MAX_TURNS
+        - AGENT_MONITOR_CLAUDE_EFFORT
+        - CLAUDE_CONFIG_DIR
+        - HTTP_PROXY
+        - HTTPS_PROXY
+        - ALL_PROXY
+        - NO_PROXY
+        - SSL_CERT_FILE
+        - SSL_CERT_DIR
+      provider_keys: []
+    prompt: |
+      You are the independent Critic in an iterative mathematical proof
+      workflow. Audit the proposed solution against the original problem.
+      Identify incorrect claims, hidden assumptions, missing cases, circular
+      reasoning, unjustified source claims, and gaps in rigor. Give concrete
+      repair instructions for the next Author. If it is correct, say so
+      explicitly, but still check exact statement fidelity and presentation.
+
+      Return only a concise Markdown referee report.
+
+      Problem:
+      {problem}
+
+      Proposed solution:
+      {solution}
+
+      Host-generated research packet (already executed; do not call tools):
+      {research_packet}
+    input_schema:
+      problem: string
+      solution: string
+      workspace: string
+      research_packet: string
+    output_schema:
+      critique: string
+      status: string
+      workspace: string
+    output_files:
+      critique: critique.md
+    done_outputs:
+      status: status
+    usage:
+      type: claude_projected_jsonl
+      model: claude-haiku-4-5
+
+dag:
+  nodes:
+    - id: author_critic_loop
+      kind: repeat
+      max_iterations: $input.max_iterations
+      condition: true
+      initial_state:
+        solution: ''
+        critique: ''
+      body:
+        nodes:
+          - id: author
+            kind: agent
+            agent: proofstack.agents.configurable_cli.ConfigurableCLIAgent
+            name: cfg_claude_author
+            inputs:
+              problem: $input.problem
+              previous_solution: $state.solution
+              previous_critique: $state.critique
+              workspace: $input.workspace
+              research_packet: $input.research_packet
+            best_tex: $output.answer_tex
+          - id: critic
+            kind: agent
+            needs:
+              - author
+            agent: proofstack.agents.configurable_cli.ConfigurableCLIAgent
+            name: cfg_claude_critic
+            inputs:
+              problem: $input.problem
+              solution: $node.author.answer_tex
+              workspace: $input.workspace
+              research_packet: $input.research_packet
+        state_updates:
+          solution: $node.author.answer_tex
+          critique: $node.critic.critique
+      outputs:
+        solution: $state.solution
+        critique: $state.critique
+      best_tex: $output.solution
+
+    - id: final_revision
+      kind: agent
+      needs:
+        - author_critic_loop
+      agent: proofstack.agents.configurable_cli.ConfigurableCLIAgent
+      name: cfg_claude_author
+      inputs:
+        problem: $input.problem
+        previous_solution: $node.author_critic_loop.solution
+        previous_critique: $node.author_critic_loop.critique
+        workspace: $input.workspace
+        research_packet: $input.research_packet
+      best_tex: $output.answer_tex
+
+  outputs:
+    solution: $node.final_revision.answer_tex
+    critique: $node.author_critic_loop.critique
+    solution_tex:
+      stash_solution:
+        problem_id: $input.problem_id
+        tex: $node.final_revision.answer_tex

@@ -1,0 +1,211 @@
+workflow: proofstack.agents.dag_workflow.DAGWorkflow
+description: >
+  Response-only Kimi K3 Author/Critic workflow. All model calls use the
+  centralized mathagents APIClient Chat Completions path. No provider-hosted
+  files, code interpreter, web search, or other tool is requested.
+
+inputs:
+  problem: ''
+  problem_id: ''
+  n_rounds: 2
+
+budget:
+  max_usd: 40.0
+  max_wallclock_s: 7200
+
+components:
+  cfg_kimi_author:
+    model: models/kimi/k3
+    system_prompt: |
+      You are the Author in an iterative mathematical proof workflow. Produce
+      a complete, rigorous and self-contained proof. Check every quantifier,
+      boundary case and algebraic implication. Use the Critic's report to
+      repair the previous draft rather than merely discussing it.
+
+      Return exactly the LaTeX body of the proof inside
+      <solution>...</solution>. Do not include a document preamble, Markdown
+      fences, citations you did not verify, tool requests, or commentary about
+      this instruction. Use only LaTeX supported by article with amsmath,
+      amssymb and amsthm. The theorem, lemma, proposition, corollary, claim,
+      definition, example, remark and proof environments are available.
+    user_prompt: |
+      Problem:
+      {problem}
+
+      Previous draft:
+      {previous_solution}
+
+      Critic report:
+      {previous_critique}
+    input_schema:
+      problem: string
+      previous_solution: string
+      previous_critique: string
+    output:
+      regex_fields:
+        solution: '(?s)<solution>\s*(.*?)\s*</solution>'
+      default_field: solution
+
+  cfg_kimi_critic:
+    model: models/kimi/k3
+    system_prompt: |
+      You are the Critic in an iterative mathematical proof workflow. Audit
+      the proposed proof against the exact problem. Independently check every
+      essential claim, all directions of implications, hidden assumptions,
+      edge cases, and whether the conclusion actually follows. Give concise,
+      actionable repairs. Never rewrite the proof and never use tools.
+
+      End with exactly one line, either VERDICT: CORRECT or
+      VERDICT: NEEDS_REVISION.
+    user_prompt: |
+      Problem:
+      {problem}
+
+      Proposed proof:
+      {solution}
+    input_schema:
+      problem: string
+      solution: string
+    output:
+      regex_fields:
+        verdict: '(?im)^VERDICT:\s*(CORRECT|NEEDS_REVISION)\s*$'
+      default_field: critique
+
+  cfg_kimi_compile:
+    cmd:
+      - sh
+      - -c
+      - |
+        set +e
+        rm -f main.aux main.log main.pdf compile.log pages.txt
+        tectonic --keep-logs --outdir . main.tex > compile.log 2>&1
+        if [ "$?" -eq 0 ] && [ -s main.pdf ]; then
+          printf '1\n' > pages.txt
+          finish '{"status":"done","summary":"compiled with Tectonic"}'
+        else
+          printf '0\n' > pages.txt
+          finish '{"status":"error","summary":"LaTeX compile failed; see compile.log"}'
+        fi
+    sandbox:
+      backend: subprocess
+      timeout_s: 180
+      cpu_limit: 2
+      memory_gb: 2
+    input_schema:
+      solution: string
+    input_files:
+      main.tex:
+        template: |
+          \documentclass[11pt]{article}
+          \usepackage{amsmath,amssymb,amsthm}
+          \newtheorem{theorem}{Theorem}
+          \newtheorem{lemma}[theorem]{Lemma}
+          \newtheorem{proposition}[theorem]{Proposition}
+          \newtheorem{corollary}[theorem]{Corollary}
+          \newtheorem{claim}[theorem]{Claim}
+          \theoremstyle{definition}
+          \newtheorem{definition}[theorem]{Definition}
+          \newtheorem{example}[theorem]{Example}
+          \theoremstyle{remark}
+          \newtheorem{remark}[theorem]{Remark}
+          \begin{document}
+          {solution}
+          \end{document}
+    output_schema:
+      tex: string
+      tex_path: string
+      pdf_path: string
+      compiled: boolean
+      pages: integer
+      notes: string
+      compile_status: string
+    output_files:
+      tex: main.tex
+      tex_path:
+        path: main.tex
+        type: path
+      pdf_path:
+        path: main.pdf
+        type: path
+      compiled:
+        path: main.pdf
+        type: exists
+      pages:
+        path: pages.txt
+        type: int
+        default: 0
+      notes:
+        path: compile.log
+        default: ''
+    done_outputs:
+      compile_status: status
+
+dag:
+  nodes:
+    - id: author_critic_loop
+      kind: repeat
+      max_iterations: $input.n_rounds
+      condition: true
+      initial_state:
+        solution: ''
+        critique: ''
+      body:
+        nodes:
+          - id: author
+            kind: agent
+            agent: proofstack.agents.configurable_prompt.ConfigurablePromptAgent
+            name: cfg_kimi_author
+            inputs:
+              problem: $input.problem
+              previous_solution: $state.solution
+              previous_critique: $state.critique
+            best_tex: $output.solution
+          - id: critic
+            kind: agent
+            needs: [author]
+            agent: proofstack.agents.configurable_prompt.ConfigurablePromptAgent
+            name: cfg_kimi_critic
+            inputs:
+              problem: $input.problem
+              solution: $node.author.solution
+        state_updates:
+          solution: $node.author.solution
+          critique: $node.critic.critique
+      outputs:
+        solution: $state.solution
+        critique: $state.critique
+      best_tex: $output.solution
+
+    - id: final_revision
+      kind: agent
+      needs: [author_critic_loop]
+      agent: proofstack.agents.configurable_prompt.ConfigurablePromptAgent
+      name: cfg_kimi_author
+      inputs:
+        problem: $input.problem
+        previous_solution: $node.author_critic_loop.solution
+        previous_critique: $node.author_critic_loop.critique
+      best_tex: $output.solution
+
+    - id: final_compile
+      kind: agent
+      needs: [final_revision]
+      agent: proofstack.agents.configurable_cli.ConfigurableCLIAgent
+      name: cfg_kimi_compile
+      inputs:
+        solution: $node.final_revision.solution
+      best_tex: $output.tex
+
+  outputs:
+    status: finished
+    rounds_completed: $input.n_rounds
+    solution: $node.final_revision.solution
+    critique: $node.author_critic_loop.critique
+    compiled: $node.final_compile.compiled
+    compile_status: $node.final_compile.compile_status
+    pages: $node.final_compile.pages
+    compile_notes: $node.final_compile.notes
+    solution_tex:
+      stash_solution:
+        problem_id: $input.problem_id
+        tex: $node.final_compile.tex

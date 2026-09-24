@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import tempfile
 import unittest
@@ -193,6 +194,37 @@ class ConfigurableCLITests(unittest.TestCase):
             self.assertNotIn("gpt-5.4-mini", cmd)
             self.assertIn('model_reasoning_effort="xhigh"', cmd)
             self.assertNotIn('model_reasoning_effort="low"', cmd)
+
+    def test_codex_read_only_uses_landlock_on_linux(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ctx = RunContext.create(
+                run_id="test",
+                root_workdir=temp_dir,
+                flat=True,
+                component_configs={
+                    "cfg_cli": {
+                        "cmd": [
+                            "codex", "exec", "--json",
+                            "--sandbox", "read-only",
+                        ],
+                        "prompt": "Problem: {problem}",
+                        "input_schema": {"problem": "string"},
+                    }
+                },
+            )
+            agent = ConfigurableCLIAgent(ctx, name="cfg_cli")
+            with (
+                mock.patch(
+                    "proofstack.agents.configurable_cli.sys.platform", "linux"
+                ),
+                mock.patch.dict(os.environ, {}, clear=True),
+            ):
+                cmd = agent._command_for(agent.Inputs(problem="P"))
+
+        self.assertEqual(
+            cmd[cmd.index("--enable") + 1], "use_legacy_landlock"
+        )
+        self.assertEqual(cmd[cmd.index("--sandbox") + 1], "read-only")
 
     def test_compile_codex_docker_sandbox_allows_node_exec(self) -> None:
         preset = load_preset(str(ROOT / "tests" / "fixtures" / "compile_cli_agent.yaml"))

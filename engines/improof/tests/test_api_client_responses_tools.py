@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import types
 import unittest
@@ -62,6 +63,7 @@ if "loguru" not in sys.modules:
     sys.modules["loguru"] = loguru
 
 from mathagents.api_client import APIClient  # noqa: E402
+from mathagents.config_loader import load_yaml_config  # noqa: E402
 
 
 def _function_tool(name: str = "list_persisted_files") -> dict:
@@ -585,6 +587,28 @@ class BackgroundTimeoutRetryTests(unittest.TestCase):
         # at or after ``self.timeout``, not at the wallclock midpoint.
         self.assertGreater(cancelled_at[0], float(timeout) - 60.0)
         self.assertLess(cancelled_at[0], float(timeout) + 120.0)
+
+
+class CustomProviderConfigurationTests(unittest.TestCase):
+    def test_kimi_model_reads_endpoint_and_reasoning_from_environment(self) -> None:
+        config = load_yaml_config(ROOT / "configs/models/kimi/k3.yaml")
+        config = {key: value for key, value in config.items() if not key.startswith("__")}
+        with patch.dict(
+            os.environ,
+            {
+                "KIMI_API_KEY": "kimi-test",
+                "KIMI_API_BASE": "https://kimi.example/v1",
+                "KIMI_REASONING_EFFORT": "high",
+            },
+            clear=True,
+        ):
+            client = APIClient(**config)
+
+        self.assertEqual(client.api, "openai")
+        self.assertEqual(client.api_key, "kimi-test")
+        self.assertEqual(client.base_url, "https://kimi.example/v1")
+        self.assertEqual(client.kwargs["reasoning_effort"], "high")
+        self.assertFalse(client.use_openai_responses_api)
 
 
 if __name__ == "__main__":

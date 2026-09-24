@@ -1,0 +1,11 @@
+{
+  "targets": [
+    {
+      "id": "erdos196",
+      "title": "Erdos Problem #196 — monotone arithmetic progressions in permutations",
+      "prompt": "Erdős problem #196. Must every permutation x of the positive integers contain indices i1<i2<i3<i4 for which x[i1],x[i2],x[i3],x[i4] form either an increasing or a decreasing four-term arithmetic progression? Retrieve the exact current primary statement and research status before working. Seek the strongest rigorous progress possible. Separate finite-prefix computation from the infinite assertion, test quantifiers and boundary cases, and do not claim a solution or novelty unless the unrestricted statement and current literature gap are both closed. Source identifier: https://www.erdosproblems.com/196."
+    }
+  ],
+  "audit_suffix": "\n\nCANDIDATE AUDIT GATE: If a substantial candidate is produced, use the installed research-proof-audit skill and its strict file-backed contract before any promotion.",
+  "baseline_suffix": "\n\nCONTROL CONDITION: Use the harness's normal rigorous workflow without invoking the research-proof-audit skill. Still preserve reproducible evidence and end proof.md with exactly one ProvingConsole outcome: Solved, Counterexample, Known/Open Status, or Partial Progress. Do not infer that this control condition relaxes any mathematical standard."
+}

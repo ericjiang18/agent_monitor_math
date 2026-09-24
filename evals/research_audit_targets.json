@@ -1,0 +1,26 @@
+{
+  "targets": [
+    {
+      "id": "erdos944",
+      "title": "Erdos Problem #944 — unresolved k=4, r=1 case",
+      "prompt": "Erdős problem #944, unresolved k=4, r=1 case. Determine whether there exists a finite simple graph G such that: (i) its chromatic number is exactly 4; (ii) every vertex is critical, meaning chi(G-v) < 4 for every vertex v; and (iii) no edge is critical, meaning chi(G-e) = 4 for every edge e. The public problem database and Formal Conjectures source classify this case as research open. Seek a complete construction and proof if possible; otherwise give only rigorous, reusable partial progress, explicit reductions or finite-search criteria. Test every proposed finite construction exhaustively, audit all quantifiers, and do not present the known open status as a solution. Source identifiers: https://www.erdosproblems.com/944 and FormalConjectures/ErdosProblems/944.lean."
+    },
+    {
+      "id": "erdos413",
+      "title": "Erdos Problem #413 — barriers for omega",
+      "prompt": "Erdős problem #413. Let omega(m) be the number of distinct prime divisors of m. Call n a barrier when m + omega(m) <= n for every natural number m < n. Determine whether there are infinitely many such n. A relaxed open variant asks whether there exists epsilon > 0 for which infinitely many n satisfy m + epsilon*omega(m) <= n for every m < n. Retrieve the exact current primary statement and status before working. Seek a complete proof only if every original quantifier closes; otherwise provide rigorous reusable partial progress, exact equivalent reformulations, verified computations with reproducible certificates, and the precise endpoint obstruction. Distinguish omega from Omega and do not present the relaxed variant or finite computation as a solution. Source identifiers: https://www.erdosproblems.com/413, FormalConjectures/ErdosProblems/413.lean, and OEIS A005236."
+    },
+    {
+      "id": "erdos196",
+      "title": "Erdos Problem #196 — monotone four-term APs in permutations",
+      "prompt": "Erdős problem #196. Must every permutation x of the positive integers contain indices i1<i2<i3<i4 for which x[i1],x[i2],x[i3],x[i4] form either an increasing or a decreasing four-term arithmetic progression? Retrieve the exact current primary statement and research status before working. Seek the strongest rigorous progress possible. Separate finite-prefix computation from the infinite assertion, test quantifiers and boundary cases, and do not claim a solution or novelty unless the unrestricted statement and current literature gap are both closed. Source identifier: https://www.erdosproblems.com/196."
+    },
+    {
+      "id": "erdos886",
+      "title": "Erdos Problem #886 — divisors near the square root",
+      "prompt": "Audit and make rigorous progress on Erdős problem #886, concerning divisors close to the square root, using the exact current statement at https://www.erdosproblems.com/886. Retrieve the exact quantifiers and verify current primary results, especially the sharp role of the n^(1/4) window, before working. Test boundary cases and false extrapolations, independently certify every retained finite calculation, and distinguish any defect in a cited proposition from progress on the original open problem. Do not claim a solution or novelty unless every obligation of the exact unrestricted problem and the dated literature gap is closed."
+    }
+  ],
+  "audit_suffix": "\n\nCANDIDATE AUDIT GATE: Work with the selected harness and model only. Once a substantial candidate argument, central lemma, construction, or source-based claim exists, you MUST read `_agent/skills/research-proof-audit/SKILL.md` completely and follow it before finalizing. Read only the task-relevant referenced files it names. If your harness cannot read workspace files, follow the audit requirements present in this prompt and record `degraded audit: skill file unavailable`; never silently skip the gate. Freeze the exact statement and candidate, run independent global and decomposed audits, add the refuter pass for any proposed solution, and use boundary, exact-computation, citation, and statement-fidelity checks when applicable. Preserve disagreements and failed checks. A file-capable harness MUST write its individual and merged audit artifacts under `audit/<run-id>/`; if fresh-context delegation is unavailable, run isolated serial passes and record degraded independence. End proof.md with exactly one explicit line in the form `ProvingConsole outcome: <label>`, where `<label>` is Solved, Counterexample, Known/Open Status, or Partial Progress. An audit accept verdict alone is not Solved.",
+  "baseline_suffix": "\n\nCONTROL CONDITION: Use the harness's normal rigorous workflow without invoking the research-proof-audit skill. Still preserve reproducible evidence and end proof.md with exactly one ProvingConsole outcome: Solved, Counterexample, Known/Open Status, or Partial Progress. Do not infer that this control condition relaxes any mathematical standard."
+}

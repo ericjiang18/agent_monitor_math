@@ -26,16 +26,18 @@ logger = logging.getLogger(__name__)
 
 
 def _codex_note_to_tool_progress(note: dict) -> tuple[str, str, dict] | None:
-    """Map a Codex app-server ``item/started`` notification to a Hermes
+    """Map a Codex app-server tool-item notification to a Hermes
     tool-progress event ``(tool_name, preview, args)``.
 
-    The Codex app-server runtime processes ``item/started`` notifications for
-    command execution, file changes, and MCP/dynamic tool calls, but never
-    surfaced them as Hermes tool-progress events — so gateways (Telegram, etc.)
-    showed no verbose "running X" breadcrumbs on this route while every other
-    provider did (#38835). Returns None for items that aren't tool-shaped.
+    Both ``item/started`` and ``item/completed`` carry the same tool-shaped
+    item. Surfacing both lets monitor consumers close their in-flight tool
+    entries instead of leaving every Codex app-server tool permanently marked
+    as running. Returns None for items that aren't tool-shaped.
     """
-    if not isinstance(note, dict) or note.get("method") != "item/started":
+    if not isinstance(note, dict) or note.get("method") not in {
+        "item/started",
+        "item/completed",
+    }:
         return None
     params = note.get("params") or {}
     item = params.get("item") or {}
@@ -76,6 +78,17 @@ def _codex_note_to_tool_progress(note: dict) -> tuple[str, str, dict] | None:
         if not isinstance(args, dict):
             args = {"arguments": args}
         return tool, tool, args
+
+    if item_type == "webSearch":
+        action = item.get("action") or {}
+        if not isinstance(action, dict):
+            action = {"action": action}
+        query = item.get("query") or action.get("query") or ""
+        if not query and isinstance(action.get("queries"), list):
+            query = "; ".join(str(q) for q in action["queries"][:4])
+        if not query:
+            query = action.get("url") or action.get("pattern") or "web search"
+        return "web_search", str(query), {"query": str(query), "action": action}
 
     return None
 
@@ -345,10 +358,16 @@ def run_codex_app_server_turn(
         # with a missing Hermes UI. Defaults (manual/smart/unset) preserve the
         # current fail-closed behavior — this is a no-op for those users.
         auto_approve_requests = False
+        auto_approve_apply_patch = bool(
+            getattr(agent, "_monitor_auto_approve_apply_patch", False)
+        )
         try:
             from tools.approval import is_approval_bypass_active
 
             auto_approve_requests = is_approval_bypass_active()
+            auto_approve_apply_patch = (
+                auto_approve_apply_patch or auto_approve_requests
+            )
         except Exception:
             logger.debug(
                 "codex app-server: approval-bypass lookup failed; "
@@ -357,9 +376,8 @@ def run_codex_app_server_turn(
             )
 
         def _on_codex_event(note: dict) -> None:
-            # Bridge Codex app-server item/started notifications to Hermes
-            # tool-progress so gateways show verbose "running X" breadcrumbs
-            # on this route too (#38835).
+            # Bridge Codex app-server tool items to Hermes tool-progress so
+            # gateways and monitors see both the start and terminal state.
             progress_callback = getattr(agent, "tool_progress_callback", None)
             if progress_callback is None:
                 return
@@ -368,16 +386,40 @@ def run_codex_app_server_turn(
                 return
             tool_name, preview, args = mapped
             try:
-                progress_callback("tool.started", tool_name, preview, args)
+                if note.get("method") == "item/completed":
+                    item = ((note.get("params") or {}).get("item") or {})
+                    status = str(item.get("status") or "").lower()
+                    result = (
+                        item.get("aggregatedOutput")
+                        or item.get("result")
+                        or item.get("results")
+                        or item.get("error")
+                        or preview
+                    )
+                    progress_callback(
+                        "tool.completed",
+                        tool_name,
+                        None,
+                        args,
+                        result=result,
+                        is_error=status in {"failed", "error", "declined"},
+                    )
+                else:
+                    progress_callback("tool.started", tool_name, preview, args)
             except Exception:
                 logger.debug("codex tool-progress callback raised", exc_info=True)
 
         agent._codex_session = CodexAppServerSession(
             cwd=cwd,
+            # Agent Monitor scopes Codex OAuth per web user. Passing the home
+            # explicitly avoids mutating process-global CODEX_HOME while
+            # concurrent Hermes runs belong to different users.
+            codex_home=getattr(agent, "_monitor_codex_home", None),
+            network_domains=getattr(agent, "_monitor_codex_network_domains", None),
             approval_callback=approval_callback,
             request_routing=_ServerRequestRouting(
                 auto_approve_exec=auto_approve_requests,
-                auto_approve_apply_patch=auto_approve_requests,
+                auto_approve_apply_patch=auto_approve_apply_patch,
             ),
             on_event=_on_codex_event,
         )

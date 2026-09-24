@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:moonshot:schemas:layer1:verifier-output:v1",
+  "title": "Locked Blind Verifier Output v1",
+  "description": "Mathematical output only; identity, provenance, and run metadata are forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "findings", "coverage_notes"],
+  "properties": {
+    "verdict": {"enum": ["reject", "major_revision", "minor_revision", "accept"]},
+    "summary": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "coverage_notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewed_regions", "unreviewed_or_difficult_regions", "external_checks_not_performed"],
+      "properties": {
+        "reviewed_regions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "unreviewed_or_difficult_regions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "external_checks_not_performed": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"verdict": {"const": "reject"}}},
+      "then": {
+        "properties": {
+          "findings": {
+            "contains": {"properties": {"class": {"const": "central_unsalvageable_error"}}},
+            "minContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"verdict": {"const": "major_revision"}}},
+      "then": {
+        "properties": {
+          "findings": {
+            "contains": {"properties": {"class": {"enum": ["noncentral_unsalvageable_error", "major_repairable_gap"]}}},
+            "minContains": 1,
+            "not": {"contains": {"properties": {"class": {"const": "central_unsalvageable_error"}}}}
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"verdict": {"const": "minor_revision"}}},
+      "then": {
+        "properties": {
+          "findings": {
+            "contains": {"properties": {"class": {"const": "minor_repairable_gap"}}},
+            "minContains": 1,
+            "items": {"properties": {"class": {"enum": ["minor_repairable_gap", "cosmetic_or_exposition_only"]}}}
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"verdict": {"const": "accept"}}},
+      "then": {
+        "properties": {
+          "findings": {"items": {"properties": {"class": {"const": "cosmetic_or_exposition_only"}}}}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_id", "class", "location", "claim_under_review", "problem", "centrality", "repairability", "evidence", "confidence", "unresolved_checks", "repair_tasks"],
+      "properties": {
+        "finding_id": {"$ref": "urn:moonshot:schemas:common:v1#/$defs/finding_id"},
+        "class": {
+          "enum": ["central_unsalvageable_error", "noncentral_unsalvageable_error", "major_repairable_gap", "minor_repairable_gap", "cosmetic_or_exposition_only"]
+        },
+        "location": {"$ref": "urn:moonshot:schemas:common:v1#/$defs/location"},
+        "claim_under_review": {"type": "string", "minLength": 1},
+        "problem": {"type": "string", "minLength": 1},
+        "centrality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "rationale", "dependency_path"],
+          "properties": {
+            "value": {"enum": ["central_claim", "required_dependency", "noncentral", "unknown"]},
+            "rationale": {"type": "string", "minLength": 1},
+            "dependency_path": {"type": "array", "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "repairability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "effort", "rationale"],
+          "properties": {
+            "value": {"enum": ["repairable", "not_repairable", "not_applicable", "unknown"]},
+            "effort": {"enum": ["local", "substantive", "none", "unknown"]},
+            "rationale": {"type": "string", "minLength": 1}
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "urn:moonshot:schemas:common:v1#/$defs/evidence"},
+          "minItems": 1
+        },
+        "confidence": {"$ref": "urn:moonshot:schemas:common:v1#/$defs/confidence"},
+        "unresolved_checks": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "repair_tasks": {"type": "array", "items": {"$ref": "urn:moonshot:schemas:common:v1#/$defs/repair_task"}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"class": {"const": "central_unsalvageable_error"}}},
+          "then": {
+            "properties": {
+              "centrality": {"properties": {"value": {"enum": ["central_claim", "required_dependency"]}}},
+              "repairability": {"properties": {"value": {"const": "not_repairable"}, "effort": {"const": "none"}}}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"class": {"const": "noncentral_unsalvageable_error"}}},
+          "then": {
+            "properties": {
+              "centrality": {"properties": {"value": {"const": "noncentral"}}},
+              "repairability": {"properties": {"value": {"const": "not_repairable"}, "effort": {"const": "none"}}}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"class": {"const": "major_repairable_gap"}}},
+          "then": {"properties": {"repairability": {"properties": {"value": {"const": "repairable"}, "effort": {"const": "substantive"}}}}}
+        },
+        {
+          "if": {"properties": {"class": {"const": "minor_repairable_gap"}}},
+          "then": {"properties": {"repairability": {"properties": {"value": {"const": "repairable"}, "effort": {"const": "local"}}}}}
+        },
+        {
+          "if": {"properties": {"class": {"const": "cosmetic_or_exposition_only"}}},
+          "then": {"properties": {"repairability": {"properties": {"value": {"const": "not_applicable"}, "effort": {"const": "none"}}}}}
+        }
+      ]
+    }
+  }
+}

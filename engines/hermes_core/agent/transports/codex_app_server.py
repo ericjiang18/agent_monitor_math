@@ -92,6 +92,11 @@ class CodexAppServerClient:
             spawn_env.update(env)
         if codex_home:
             spawn_env["CODEX_HOME"] = codex_home
+            # An explicit per-user Codex home means subscription mode. Keep a
+            # server-level API key from silently changing the billing route.
+            spawn_env.pop("OPENAI_API_KEY", None)
+            spawn_env.pop("OPENAI_API_KEYS", None)
+            spawn_env.pop("CODEX_API_KEY", None)
 
         app_server_args = list(extra_args or [])
         # Kanban workers must be able to write their handoff/status back to

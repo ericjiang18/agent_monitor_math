@@ -1,0 +1,4 @@
+interface:
+  display_name: "Computational Certificates"
+  short_description: "Produce exact, bounded, reproducible evidence"
+  default_prompt: "Use $computational-certificates to verify this finite or numerical claim exactly."

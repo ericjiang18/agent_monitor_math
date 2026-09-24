@@ -1,0 +1,17 @@
+[Unit]
+Description=Agent Monitor fixed Lean core broker socket
+
+[Socket]
+ListenStream=/run/agent-monitor-lean/core.sock
+Accept=yes
+SocketUser=root
+SocketGroup=agent-monitor-lean
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=yes
+FlushPending=yes
+Backlog=32
+MaxConnections=8
+
+[Install]
+WantedBy=sockets.target

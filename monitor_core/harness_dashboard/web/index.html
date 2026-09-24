@@ -28,6 +28,12 @@ header select, header button { background: var(--card2); border: 1px solid var(-
 header button:hover { border-color: var(--accent); }
 header .theme-btn { width: 34px; padding: 6px 0; text-align: center; }
 header .hdr-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.monitor-mode { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--card2); }
+.monitor-mode button { border: 0; border-radius: 6px; padding: 5px 9px; background: transparent;
+  color: var(--muted); cursor: pointer; font-size: 10.5px; font-weight: 700; }
+.monitor-mode button.on { color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+.monitor-mode button:hover:not(.on) { color: var(--fg); background: var(--card); }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 420px); min-height: calc(100vh - 53px); height: auto; }
 body.embedded .layout { min-height: 0; height: auto; }
 .main { overflow: auto; padding: 16px 20px; min-width: 0; }
@@ -221,6 +227,37 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
 .prov-lines { font-family: var(--mono); color: var(--cyan); white-space: nowrap; }
 .proof-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; font-size: 11px; }
 .proof-meta span { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); color: var(--muted); }
+.lean-monitor { background:
+  radial-gradient(620px 220px at 8% 0%, color-mix(in srgb, #8b5cf6 12%, transparent), transparent 70%),
+  var(--card); border: 1px solid color-mix(in srgb, #8b5cf6 38%, var(--border));
+  border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+.lean-monitor-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.lean-monitor-head .lambda { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px;
+  color: #fff; background: linear-gradient(135deg, #8b5cf6, #3b82f6); font: 700 18px var(--mono); }
+.lean-monitor-head .copy { flex: 1; min-width: 0; }
+.lean-monitor-head h2 { font-size: 15px; margin-bottom: 3px; }
+.lean-monitor-head p { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.lean-monitor-actions button { border: 1px solid color-mix(in srgb, #8b5cf6 50%, var(--border));
+  border-radius: 8px; padding: 7px 11px; background: color-mix(in srgb, #8b5cf6 11%, var(--card2));
+  color: #c4b5fd; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+.lean-monitor-actions button:hover { border-color: #a78bfa; color: var(--fg); }
+.lean-monitor-grid { display: grid; grid-template-columns: minmax(0,1.25fr) minmax(260px,.75fr); gap: 12px; }
+@media (max-width: 900px) { .lean-monitor-grid { grid-template-columns: 1fr; } }
+.lean-monitor-block { background: var(--card2); border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; }
+.lean-monitor-block h3 { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
+.lean-attempt { border-left: 3px solid var(--border); padding: 7px 9px; margin: 6px 0;
+  border-radius: 0 7px 7px 0; background: color-mix(in srgb, var(--card) 64%, transparent); font-size: 11px; }
+.lean-attempt.ok { border-left-color: var(--ok); }
+.lean-attempt.warn { border-left-color: var(--warn); }
+.lean-attempt.err { border-left-color: var(--err); }
+.lean-attempt .head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.lean-attempt .meta { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.lean-attempt details { margin-top: 6px; }
+.lean-attempt summary { color: var(--muted); cursor: pointer; font-size: 10px; }
+.lean-attempt pre { margin-top: 5px; max-height: 180px; overflow: auto; white-space: pre-wrap;
+  color: var(--muted); font: 10px/1.45 var(--mono); }
+.lean-monitor-empty { padding: 42px 18px; text-align: center; border: 1px dashed var(--border);
+  border-radius: 10px; color: var(--muted); }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 5px; }
 .md-render { border: 1px solid var(--border); border-radius: 10px; background: var(--card); padding: 22px 28px; font-size: 13.5px; line-height: 1.7; max-height: 640px; overflow-y: auto; }
@@ -241,6 +278,10 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
   <h1>Harness Pipeline Monitor</h1>
   <span class="sub">stage · agent · token trace</span>
   <span class="sub" id="run-hdr-label"></span>
+  <div class="monitor-mode" id="monitor-mode" aria-label="Monitor mode">
+    <button type="button" class="on" data-monitor-mode="agent">Agent</button>
+    <button type="button" data-monitor-mode="lean">Formal · Lean</button>
+  </div>
   <button id="btn-rebuild" title="Rebuild from calls.jsonl">↻ Rebuild</button>
   <div class="hdr-actions">
     <button class="theme-btn" id="theme-btn" title="Toggle light / dark mode">☾</button>
@@ -304,9 +345,24 @@ initTheme();
 const fmtN = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n||0);
 const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-const State = { runs: [], run: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map', showSolutionPath: false };
+const State = { runs: [], run: null, formalRun: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map', monitorMode: localStorage.getItem('hd-monitor-mode') || 'agent', showSolutionPath: false };
 const isEmbedded = window.parent !== window;
 if (isEmbedded) document.body.classList.add('embedded');
+function syncMonitorMode() {
+  document.body.classList.toggle('formal-monitor', State.monitorMode === 'lean');
+  document.querySelectorAll('#monitor-mode [data-monitor-mode]').forEach(btn => {
+    btn.classList.toggle('on', btn.dataset.monitorMode === State.monitorMode);
+  });
+}
+document.querySelectorAll('#monitor-mode [data-monitor-mode]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    State.monitorMode = btn.dataset.monitorMode === 'lean' ? 'lean' : 'agent';
+    localStorage.setItem('hd-monitor-mode', State.monitorMode);
+    syncMonitorMode();
+    if (State.currentRunId) await loadRun(State.currentRunId);
+  });
+});
+syncMonitorMode();
 
 function notifyParentHeight() {
   if (!isEmbedded) return;
@@ -752,7 +808,237 @@ function renderCompare(runs) {
   return html;
 }
 
+function leanMonitorClass(status) {
+  if (status === 'verified' || status === 'compiled') return 'ok';
+  if (status === 'failed' || status === 'unfaithful') return 'err';
+  if (status === 'running' || status === 'incomplete' || status === 'toolchain_missing') return 'warn';
+  return 'info';
+}
+
+function buildFormalLeanRun(run) {
+  const lean = run.lean_verification || {};
+  const usage = lean.harness_usage || {};
+  const formalMemory = {
+    formal_verification: {
+      status: lean.status || 'none',
+      source: lean.lean_path || 'lean/Proof.lean',
+      environment: lean.uses_mathlib ? 'Mathlib' : 'Lean core',
+      toolchain: lean.toolchain?.version || 'not recorded',
+      fidelity: lean.fidelity?.severity || 'not audited',
+    },
+  };
+  const agents = [];
+  const stages = [
+    {id:'formalize',label:'Formalize',title:'Harness conversation',color:'#3b82f6'},
+    {id:'reason',label:'Reason',title:'Model reasoning',color:'#a855f7'},
+    {id:'act',label:'Tools',title:'Commands and edits',color:'#eab308'},
+    {id:'verify',label:'Verify',title:'Lean kernel checker',color:'#14b8a6'},
+    {id:'audit',label:'Audit',title:'Statement fidelity',color:'#06b6d4'},
+    {id:'human',label:'Human',title:'Human in the loop',color:'#0ea5e9'},
+    {id:'finalize',label:'Result',title:'Formal result',color:'#f97316'},
+  ];
+  const add = raw => {
+    const seq = agents.length + 1;
+    const status = String(raw.status || 'completed');
+    const failed = status === 'failed' || status === 'unfaithful' || raw.exit_code > 0;
+    agents.push({
+      trace_id: raw.trace_id || `lean-${seq}`,
+      call_seq: seq,
+      stage_name: raw.stage_name || `event-${seq}`,
+      pipeline_stage: raw.pipeline_stage || 'formalize',
+      role: raw.role || 'assistant',
+      agent_id: raw.agent_id || 'lean-harness',
+      round_id: raw.round_id ?? seq,
+      status,
+      prompt: raw.prompt || '',
+      prompt_source: raw.prompt_source || (raw.prompt ? 'harness command' : ''),
+      thinking: raw.thinking || '',
+      thinking_source: raw.thinking ? 'harness reasoning' : '',
+      output: raw.output || '',
+      output_source: raw.output ? 'Lean harness transcript' : '',
+      tool_calls: raw.tool_calls || [],
+      input_tokens: Number(raw.input_tokens || 0),
+      cache_read_tokens: Number(raw.cache_read_tokens || 0),
+      cache_write_tokens: Number(raw.cache_write_tokens || 0),
+      total_input_tokens: Number(raw.total_input_tokens || 0),
+      output_tokens: Number(raw.output_tokens || 0),
+      reasoning_tokens: Number(raw.reasoning_tokens || 0),
+      latency_s: Number(raw.latency_s || 0),
+      cost_usd: 0,
+      model: raw.model || lean.model || lean.harness?.label || lean.harness?.engine || run.model || 'Lean harness',
+      response_id: raw.response_id || '',
+      received_from: [],
+      sent_to: [],
+      memory_context: raw.memory_context || formalMemory,
+      memory_source: 'formal verification context',
+      monitor: {
+        outcome: failed ? 'fail' : status === 'running' ? 'warn' : 'ok',
+        outcome_label: failed ? 'failed' : status === 'running' ? 'running' : (raw.outcome_label || 'recorded'),
+        flags: raw.flags || [],
+        cost_tier: 'untracked',
+        cost_share_pct: 0,
+      },
+    });
+  };
+  for (const event of (lean.conversation || [])) {
+    const role = String(event.role || 'assistant');
+    const pipeline = role === 'tool' || role === 'system' ? 'act' : role === 'reasoning' ? 'reason' : 'formalize';
+    const isFirstModelMessage = role === 'assistant' && !agents.some(agent => agent.role === 'assistant');
+    add({
+      trace_id: `lean-conversation-${event.id || agents.length}`,
+      stage_name: event.title || event.kind || 'Harness event',
+      pipeline_stage: pipeline,
+      role,
+      status: event.status,
+      exit_code: event.exit_code,
+      prompt: event.command || (isFirstModelMessage ? lean.harness_prompt || run.problem_preview || '' : ''),
+      prompt_source: event.command ? 'harness command' : isFirstModelMessage ? 'lean/TASK.md' : '',
+      thinking: role === 'reasoning' ? event.content : '',
+      output: role === 'reasoning' ? '' : event.content,
+      tool_calls: role === 'tool' ? [event.title || event.kind || 'tool'] : [],
+      response_id: event.id || '',
+    });
+  }
+  const lastModel = [...agents].reverse().find(a => a.role === 'assistant' || a.role === 'reasoning');
+  if (lastModel) {
+    const totalInput = Number(usage.input_tokens || 0);
+    const cacheRead = Number(usage.cached_input_tokens || 0);
+    const cacheWrite = Number(usage.cache_write_input_tokens || 0);
+    lastModel.input_tokens = Math.max(0, totalInput - cacheRead - cacheWrite);
+    lastModel.cache_read_tokens = cacheRead;
+    lastModel.cache_write_tokens = cacheWrite;
+    lastModel.total_input_tokens = totalInput;
+    lastModel.output_tokens = Number(usage.output_tokens || 0);
+    lastModel.reasoning_tokens = Number(usage.reasoning_output_tokens || 0);
+  }
+  for (const attempt of (lean.attempts || [])) {
+    add({
+      trace_id: `lean-check-${attempt.index ?? agents.length}`,
+      stage_name: `Attempt ${Number(attempt.round || 0)+1} · ${attempt.action || 'check'}`,
+      pipeline_stage: 'verify', role: 'verifier', status: attempt.status,
+      exit_code: attempt.exit_code, latency_s: attempt.duration_s,
+      prompt: `lean ${lean.lean_path || 'lean/Proof.lean'}`, prompt_source: 'kernel checker invocation',
+      output: attempt.log || (attempt.ok ? 'Lean accepted this checker round.' : 'Lean rejected this checker round.'),
+      tool_calls: ['lean'], outcome_label: attempt.ok ? 'verified' : 'rejected',
+      flags: attempt.sorry_count ? [`${attempt.sorry_count} sorry/admit`] : [],
+    });
+  }
+  const fidelity = lean.fidelity || {};
+  const fidelityIssues = [...(fidelity.issues || []), ...(fidelity.flags || []).map(x => x.message)].filter(Boolean);
+  if (lean.has_result) {
+    add({
+      trace_id:'lean-fidelity', stage_name:'Statement fidelity audit', pipeline_stage:'audit', role:'evaluator',
+      status:fidelity.severity === 'major' ? 'unfaithful' : fidelity.severity === 'minor' ? 'incomplete' : 'completed',
+      prompt:'Compare the formal main declaration against the original mathematical statement and report weakening, vacuity, added assumptions, or forbidden constructs.',
+      prompt_source:'statement fidelity audit',
+      output:fidelity.verdict || 'No statement-fidelity issues recorded.', flags:fidelityIssues,
+      outcome_label:fidelity.severity || 'ok',
+    });
+  }
+  for (const [index, msg] of (lean.chat || []).entries()) {
+    add({
+      trace_id:`lean-human-${index}`, stage_name:msg.role === 'user' ? 'Human intervention' : 'Lean assistant response',
+      pipeline_stage:'human', role:msg.role === 'user' ? 'human' : 'assistant', output:msg.content || '',
+      outcome_label:'intervention',
+    });
+  }
+  if (lean.has_result) {
+    add({
+      trace_id:'lean-result', stage_name:lean.title || 'Formal result', pipeline_stage:'finalize', role:'finalize',
+      status:lean.status || 'completed', output:lean.notes || `${lean.lean_path || 'Proof.lean'} · ${lean.status || 'recorded'}`,
+      outcome_label:lean.status || 'recorded', flags:lean.sorry_count ? [`${lean.sorry_count} sorry/admit`] : [],
+    });
+  }
+  const edges = agents.slice(1).map((agent,index) => ({from:agents[index].trace_id,to:agent.trace_id}));
+  const byId = Object.fromEntries(agents.map(agent => [agent.trace_id, agent]));
+  for (const edge of edges) {
+    byId[edge.from]?.sent_to.push(edge.to);
+    byId[edge.to]?.received_from.push(edge.from);
+  }
+  const present = [...new Set(agents.map(a => a.pipeline_stage))];
+  return {
+    ...run,
+    run_id:run.run_id,
+    source:'formal_lean',
+    status:lean.status || run.status,
+    pipeline:stages,
+    stages_present:present,
+    agents,
+    edges,
+    totals:{
+      agents:agents.length,
+      input_tokens:Number(usage.input_tokens || 0),
+      output_tokens:Number(usage.output_tokens || 0),
+      latency_s:Number(lean.duration_s || 0),
+      cost_usd:0,
+    },
+  };
+}
+
+function renderFormalPipeline(run) {
+  const byStage = {};
+  for (const agent of (run.agents || [])) (byStage[agent.pipeline_stage] ||= []).push(agent);
+  let html = '<div class="pipeline-wrap"><div class="pipeline">';
+  for (const stage of (run.pipeline || [])) {
+    const list = byStage[stage.id] || [];
+    html += `<div class="stage-col"><div class="stage-hdr" style="border-top:3px solid ${stage.color};${list.length?'':'opacity:.55'}">${esc(stage.label)}<div class="stitle">${esc(stage.title)}</div><div class="stage-cost">${list.length} event${list.length===1?'':'s'}</div></div><div class="stage-body${list.length?'':' empty-stage'}">`;
+    if (!list.length) html += '<div class="stage-skip">Not recorded</div>';
+    for (const agent of list) {
+      const cls = agent.monitor?.outcome === 'fail' ? ' outcome-fail' : agent.monitor?.outcome === 'warn' ? ' outcome-warn' : '';
+      html += `<div class="agent-node${cls}" data-trace="${esc(agent.trace_id)}"><div class="role">${esc(agent.role)} <span class="pill ${agent.monitor?.outcome==='fail'?'err':agent.monitor?.outcome==='warn'?'warn':'ok'}">${esc(agent.monitor?.outcome_label || 'recorded')}</span></div><div class="name">${esc(agent.stage_name)}</div><div class="tok">${agent.latency_s?agent.latency_s.toFixed(2)+'s · ':''}${esc(agent.status || 'completed')}</div></div>`;
+    }
+    html += '</div></div>';
+  }
+  return html + '</div></div>';
+}
+
+function renderLeanMonitor(run) {
+  State.formalRun = null;
+  const lean = run.lean_verification || { status:'none', has_result:false, attempts:[], chat:[] };
+  const status = String(lean.status || 'none');
+  const statusClass = leanMonitorClass(status);
+  const open = '<div class="lean-monitor-actions"><button type="button" data-open-lean-monitor>Open full Lean Verification</button></div>';
+  let html = '<div class="lean-monitor"><div class="lean-monitor-head"><div class="lambda">λ</div>'
+    + '<div class="copy"><h2>Formal Lean Monitor</h2>'
+    + '<p>Kernel checker rounds, statement fidelity, harness activity and human intervention for '
+    + esc(run.problem_preview || run.problem_id || run.run_id) + '.</p></div>' + open + '</div>';
+  if (!lean.has_result) {
+    return html + '<div class="lean-monitor-empty"><div style="font-size:28px;margin-bottom:7px;opacity:.5">∎</div>'
+      + '<div>No Lean verification has been recorded for this run.</div></div></div>';
+  }
+
+  html += '<div class="stats">'
+    + '<div class="stat"><div class="lbl">Status</div><div class="val"><span class="pill '+statusClass+'">'+esc(status)+'</span></div></div>'
+    + '<div class="stat"><div class="lbl">Attempts</div><div class="val">'+Number(lean.attempt_count || 0)+'</div></div>'
+    + '<div class="stat"><div class="lbl">Lean source</div><div class="val">'+Number(lean.lean_lines || 0)+'L</div></div>'
+    + '<div class="stat"><div class="lbl">Sorry / admit</div><div class="val">'+Number(lean.sorry_count || 0)+'</div></div>'
+    + '<div class="stat"><div class="lbl">Checker time</div><div class="val">'+Number(lean.duration_s || 0).toFixed(2)+'s</div></div>'
+    + '<div class="stat"><div class="lbl">Fidelity</div><div class="val"><span class="pill '+leanMonitorClass((lean.fidelity||{}).severity==='major'?'unfaithful':(lean.fidelity||{}).severity==='minor'?'incomplete':'verified')+'">'
+    + esc((lean.fidelity||{}).severity || 'ok') + '</span></div></div>'
+    + '</div>';
+
+  const formalRun = buildFormalLeanRun(run);
+  State.formalRun = formalRun;
+  const done = !lean.harness_running;
+  html += `<div class="stage-note">Full formal trace · harness messages, reasoning, commands, checker rounds, fidelity and human intervention.</div><div class="view-toggle">
+    <button class="vt-btn ${State.viewMode==='map'?'active':''}" data-view="map">🗺 Map</button>
+    <button class="vt-btn ${State.viewMode==='pipeline'?'active':''}" data-view="pipeline">☰ Pipeline</button>
+    ${State.viewMode==='map'&&done?`<button class="vt-btn ${State.showSolutionPath?'active':''}" id="btn-sol-path" title="Highlight the path leading to the formal result">◆ Solution DAG</button>`:''}
+    <button class="vt-btn" id="btn-export-logs" title="Download the full run record">⬇ Export logs</button>
+    <span class="vt-hint">${State.viewMode==='map'?'drag to pan · scroll to zoom · click a node for full details':'fixed formalisation stages'}</span>
+  </div>`;
+  if (State.viewMode === 'map') {
+    html += `<div class="agent-map" id="agent-map"><div class="map-controls"><button id="map-zin" title="Zoom in">+</button><button id="map-zout" title="Zoom out">−</button><button id="map-fit" title="Fit">⤢</button></div><div class="map-legend"><span style="font-weight:700">Formal trace:</span><span><i style="background:#3b82f6"></i>messages</span><span><i style="background:#a855f7"></i>reasoning</span><span><i style="background:#eab308"></i>tools</span><span><i style="background:#14b8a6"></i>checker/audit</span><span><i style="background:#f97316"></i>result</span>${State.showSolutionPath?'<span style="opacity:.4">|</span><span style="color:var(--ok);font-weight:700">— verified path</span>':''}</div></div>`;
+  } else {
+    html += renderFormalPipeline(formalRun);
+  }
+  html += renderAllAgentsTable(formalRun, formalRun.agents, 'All Formal Events') + '</div>';
+  return html;
+}
+
 function renderPipeline(run) {
+  if (State.monitorMode === 'lean') return renderLeanMonitor(run);
+  State.formalRun = null;
   const stages = run.pipeline || [];
   const agents = run.agents || [];
   const present = new Set(run.stages_present || []);
@@ -765,6 +1051,7 @@ function renderPipeline(run) {
 
   let html = renderCompare(State.runs);
   html += renderFinalProofSection(run);
+  html += renderResearchAuditSection(run);
   html += renderRunMemorySection(run);
   html += renderPapersSection(run);
   html += renderAgentFlowSection(run);
@@ -786,7 +1073,7 @@ function renderPipeline(run) {
     ${run.totals?.cost_usd?`<div class="stat"><div class="lbl">Cost</div><div class="val">$${run.totals.cost_usd.toFixed(2)}</div></div>`:''}
   </div>`;
 
-  const done = ['finished','stopped','failed'].includes(run.status || '') || !run.status;
+  const done = ['finished','stopped','failed','interrupted'].includes(run.status || '') || !run.status;
   html += `<div class="view-toggle">
     <button class="vt-btn ${State.viewMode==='map'?'active':''}" data-view="map">🗺 Map</button>
     <button class="vt-btn ${State.viewMode==='pipeline'?'active':''}" data-view="pipeline">☰ Pipeline</button>
@@ -875,8 +1162,8 @@ function renderPipeline(run) {
   return html;
 }
 
-function renderAllAgentsTable(run, agents) {
-  let html = `<div class="table-wrap"><h2>All Agents <span style="font-weight:400;color:var(--muted)">· sorted by cost below</span></h2>
+function renderAllAgentsTable(run, agents, title='All Agents') {
+  let html = `<div class="table-wrap"><h2>${esc(title)} <span style="font-weight:400;color:var(--muted)">· sorted by cost below</span></h2>
     <table><thead><tr>
       <th>Pipeline</th><th>Stage</th><th>Role</th><th>Round</th><th>Cost</th><th>In</th><th>Out</th><th>Outcome</th><th>Flags</th><th>Impact</th>
     </tr></thead><tbody>`;
@@ -1307,6 +1594,34 @@ function renderPapersSection(run) {
   </div>`;
 }
 
+function renderResearchAuditSection(run) {
+  const audit = run?.runner_result?.research_audit;
+  if (!audit || audit.status === 'not_requested') return '';
+  const latest = Array.isArray(audit.audits) && audit.audits.length ? audit.audits[0] : {};
+  const accepts = audit.audit_accepts_final === true;
+  const valid = audit.valid === true;
+  const verdict = latest.final_audit_verdict || 'not available';
+  const findings = Number.isInteger(audit.open_finding_count)
+    ? audit.open_finding_count
+    : (Number.isInteger(latest.open_finding_count) ? latest.open_finding_count : '—');
+  const copy = valid
+    ? (accepts
+      ? 'The audit contract completed and the final merged reviewer accepted the exact saved proof bytes.'
+      : 'The audit contract completed, but the final reviewer did not accept the candidate. Review the open findings before relying on it.')
+    : 'The candidate audit is incomplete or unreconciled; this run is not audit-certified.';
+  return `<div class="insights" style="margin-bottom:16px">
+    <h2>Candidate proof audit <span class="pill ${valid?'ok':'warn'}">${esc(audit.status || 'unknown')}</span></h2>
+    <div class="flow-sub">Review execution and proof acceptance are reported separately.</div>
+    <div class="stats" style="margin-top:10px">
+      <div class="stat"><div class="lbl">Contract</div><div class="val"><span class="pill ${valid?'ok':'warn'}">${valid?'validated':'incomplete'}</span></div></div>
+      <div class="stat"><div class="lbl">Final verdict</div><div class="val">${esc(verdict)}</div></div>
+      <div class="stat"><div class="lbl">Open findings</div><div class="val">${esc(findings)}</div></div>
+      <div class="stat"><div class="lbl">Candidate accepted</div><div class="val"><span class="pill ${accepts?'ok':'warn'}">${accepts?'yes':'no'}</span></div></div>
+    </div>
+    <div class="flow-sub" style="margin-top:10px">${esc(copy)}</div>
+  </div>`;
+}
+
 function textTab(content, source, emptyMsg) {
   if (!content) return `<div class="empty" style="padding:16px">${esc(emptyMsg)}</div>`;
   const src = source ? `<div class="sec">source: ${esc(source)}</div>` : '';
@@ -1377,7 +1692,8 @@ function renderDetail(agent) {
 }
 
 function selectAgent(traceId, tab) {
-  const agent = (State.run?.agents||[]).find(a => a.trace_id === traceId);
+  const activeRun = State.formalRun || State.run;
+  const agent = (activeRun?.agents||[]).find(a => a.trace_id === traceId);
   State.agent = agent || null;
   if (tab) {
     State.tab = tab;
@@ -1403,12 +1719,14 @@ async function loadRun(runId) {
     $('status').textContent = 'load error';
     return;
   }
+  State.agent = null;
   $('main').innerHTML = renderPipeline(State.run);
   const rerender = () => {
     $('main').innerHTML = renderPipeline(State.run);
+    const activeRun = State.formalRun || State.run;
     bindMainClicks();
     initAgentFlow(State.run);
-    try { initAgentMap(State.run); } catch (e) { console.warn('agent map', e); }
+    try { initAgentMap(activeRun); } catch (e) { console.warn('agent map', e); }
     ensureProofSourceLoaded(State.run);
     if (State.agent) selectAgent(State.agent.trace_id);
   };
@@ -1445,12 +1763,23 @@ async function loadRun(runId) {
     if (sp) sp.onclick = () => { State.showSolutionPath = !State.showSolutionPath; rerender(); };
     const ex = $('btn-export-logs');
     if (ex) ex.onclick = () => exportRunLogs(State.run?.run_id);
+    const leanBtn = $('main').querySelector('[data-open-lean-monitor]');
+    if (leanBtn) leanBtn.onclick = () => {
+      if (isEmbedded) {
+        window.parent.postMessage({
+          type: 'proving-console-view',
+          view: 'lean',
+          run_id: State.run?.run_id || '',
+        }, '*');
+      }
+    };
   }
   bindMainClicks();
   ensureProofSourceLoaded(State.run);
   try { initAgentFlow(State.run); } catch (e) { console.warn('agent flow', e); }
-  try { initAgentMap(State.run); } catch (e) { console.warn('agent map', e); }
-  if (State.run.agents?.length) selectAgent(State.run.agents[0].trace_id);
+  const activeRun = State.formalRun || State.run;
+  try { initAgentMap(activeRun); } catch (e) { console.warn('agent map', e); }
+  if (activeRun.agents?.length) selectAgent(activeRun.agents[0].trace_id);
   notifyParentHeight();
 }
 
@@ -1467,6 +1796,7 @@ function loadRunsManifest(runs) {
 
 function clearRunView() {
   State.run = null;
+  State.formalRun = null;
   State.agent = null;
   State.currentRunId = null;
   const lbl = $('run-hdr-label');
