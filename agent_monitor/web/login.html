@@ -113,13 +113,29 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   body::before, .card { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
-/* Ansatz: calm surfaces and a mathematical wordmark. */
+/* Ansatz brand palette; preserve live layout and behavior. */
+:root, [data-theme="dark"] {
+  --bg: #141c19; --bg2: #18221d; --panel: #1c2822ee; --panel2: #233128;
+  --border: #3b4a40; --border2: #526457; --fg: #eeeee4; --muted: #b8c3b7; --dim: #97a794;
+  --accent: #88b89b; --accent-2: #b4cbb9; --grad: #286448;
+  --ok: #34d399; --err: #f87171;
+  --shadow: 0 18px 50px rgba(0,0,0,.38); --r: 16px;
+  --ease: cubic-bezier(.22,1,.36,1);
+}
+[data-theme="light"] {
+  --bg: #f7f4ec; --bg2: #fff; --panel: #fff; --panel2: #f0ede4;
+  --border: #d8d6ca; --border2: #939e90; --fg: #202e27; --muted: #526056; --dim: #626e64;
+  --accent: #286448; --accent-2: #245c43; --grad: #286448;
+  --shadow: 0 8px 28px rgba(15,23,42,.08);
+}
+
 body { background: var(--bg); }
 body::before, body::after { display: none; }
 .brand .nm, .sb-brand .nm { font-family: Georgia, serif; font-size: 24px; font-weight: 400; letter-spacing: -.04em; }
 .brand .logo, .sb-brand .logo { border: 1px solid var(--accent); border-radius: 50%; background: transparent; color: var(--accent); font-family: Georgia, serif; font-size: 24px; font-style: italic; font-weight: 400; animation: none; box-shadow: none; }
 .card { border-radius: 8px; backdrop-filter: none; }
 @media (prefers-reduced-motion: reduce) { .card { animation: none; } }
+
 </style>
 <style id="clear-palette-style">
 /* Neutral surfaces and clear blue accents, shared with the public website. */
@@ -276,7 +292,7 @@ function fail(msg){
   $('guest-button').removeAttribute('aria-busy');
 }
 
-async function startGuest(){
+async function startGuest({switchAccount=false}={}){
   if(authPending)return;
   if(currentUser?.guest){
     location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
@@ -287,7 +303,9 @@ async function startGuest(){
   button.setAttribute('aria-busy','true');
   $('err').style.display='none'; $('msg').style.display='none';
   try{
-    const r=await fetch('/api/auth/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const headers={'Content-Type':'application/json'};
+    if(switchAccount)headers['X-Guest-Intent']='homepage';
+    const r=await fetch('/api/auth/guest',{method:'POST',headers,body:JSON.stringify(switchAccount?{switch_account:true}:{})});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'Guest access is unavailable');
     location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
@@ -360,6 +378,10 @@ function takeGuestIntent(){
     const secure=location.protocol==='https:'?'; Secure':'';
     document.cookie=marker+'; Path=/; Max-Age=0; SameSite=Lax'+secure;
   }
+  const clean=new URL(location.href);
+  clean.searchParams.delete('guest');
+  if(clean.hash==='#guest')clean.hash='';
+  history.replaceState(null,'',clean.pathname+clean.search+clean.hash);
   return requested;
 }
 
@@ -422,13 +444,15 @@ function hasPendingCatalogueProblem(){
   }catch(e){try{localStorage.removeItem(key);}catch(ignore){}return false;}
 }
 
-
 setAuthPending(true);
 (async()=>{
   try{
     const urlParams=new URLSearchParams(location.search);
     const token=(urlParams.get('token')||'').trim();
     const isReset=location.pathname.includes('/reset-password')||Boolean(token);
+    const urlGuestRequested=urlParams.get('guest')==='1'||location.hash==='#guest';
+    const cookieGuestRequested=takeGuestIntent();
+    const guestRequested=urlGuestRequested||cookieGuestRequested;
     const solveRequested=location.hash==='#solve'&&hasPendingCatalogueProblem();
 
     const meResponse=await fetch('/api/auth/me');
@@ -438,7 +462,7 @@ setAuthPending(true);
     window.guestAccess=me.guest_access===true;
     window.registrationOpen=me.registration_open===true;
     $('tab-register').style.display=window.registrationOpen?'':'none';
-    if(me.user && (!me.user.guest || solveRequested) && !isReset){
+    if(me.user && (!me.user.guest || solveRequested) && !isReset && (solveRequested || !cookieGuestRequested)){
       location.href=(window.__pcUrl?window.__pcUrl('/'):'/');
       return;
     }
@@ -461,15 +485,13 @@ setAuthPending(true);
       document.head.appendChild(s);
     }
 
-    const cookieGuestRequested=takeGuestIntent();
-    const guestRequested=urlParams.get('guest')==='1'||location.hash==='#guest'||cookieGuestRequested;
     if(isReset){
       await initResetMode(token);
     } else if(solveRequested){
       if(window.guestAccess) await startGuest();
       else fail('Sign in to open this problem in your proving workspace.');
     } else if(guestRequested){
-      if(window.guestAccess) await startGuest();
+      if(window.guestAccess) await startGuest({switchAccount:cookieGuestRequested&&Boolean(currentUser&&!currentUser.guest)});
       else fail('Guest access is disabled for this console. Please sign in or create an account.');
     }
   }catch(e){ fail(e?.message||'Unable to reach the console. Please reload and try again.'); }

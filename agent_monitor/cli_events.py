@@ -41,6 +41,7 @@ class CLIEventParser:
         # Structured CLIs can report a useful terminal subtype even when the
         # process itself only exposes a generic non-zero exit code.
         self.terminal_error: str | None = None
+        self.terminal_status: str | None = None
 
     def _new_turn(self) -> dict[str, Any]:
         return {"items": [], "kinds": set(), "detail": [], "thinking": [], "tools": []}
@@ -134,6 +135,8 @@ class CLIEventParser:
                     self.terminal_error = message.strip()[-1200:]
                 self._close_turn()
         elif t == "turn.completed":
+            self.terminal_status = "completed"
+            self.terminal_error = None
             u = ev.get("usage") or {}
             self.usage["input_tokens"] += int(u.get("input_tokens") or 0)
             self.usage["cache_read_tokens"] += int(u.get("cached_input_tokens") or 0)
@@ -148,6 +151,13 @@ class CLIEventParser:
                 cache_read=int(u.get("cached_input_tokens") or 0),
                 reasoning=int(u.get("reasoning_output_tokens") or 0),
             )
+        elif t in {"turn.failed", "turn.cancelled"}:
+            detail = ev.get("error") or ev.get("message") or t
+            if isinstance(detail, dict):
+                detail = detail.get("message") or str(detail)
+            self.terminal_status = "failed"
+            self.terminal_error = str(detail)[-1200:]
+            self._log(f"error · {_clip(self.terminal_error)}")
         elif t == "error":
             self._log(f"error · {_clip(ev.get('message'))}")
 
@@ -194,13 +204,16 @@ class CLIEventParser:
                 self.usage["cost_usd"] = float(ev["total_cost_usd"])
             result_text = str(ev.get("result") or "").strip()
             subtype = str(ev.get("subtype") or "").strip()
-            if ev.get("is_error"):
+            if ev.get("is_error") or subtype != "success":
+                self.terminal_status = "failed"
                 self.terminal_error = result_text or subtype or "OpenClaude reported an error"
                 self._log(
                     f"✗ result · {ev.get('num_turns', '?')} turns · "
                     f"{_clip(self.terminal_error, 160)}"
                 )
             else:
+                self.terminal_status = "completed"
+                self.terminal_error = None
                 self._log(
                     f"✓ result · {ev.get('num_turns', '?')} turns · "
                     f"${ev.get('total_cost_usd', 0):.4f} · {_clip(result_text, 120)}"

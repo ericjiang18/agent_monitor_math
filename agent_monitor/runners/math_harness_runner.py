@@ -170,6 +170,7 @@ class Reply:
     usage: dict[str, int]
     provider: str
     model: str
+    observed_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -391,6 +392,7 @@ def _invoke(
         else None
     )
     emit_item({"type": "reasoning", "text": f"Math Harness · {stage}"})
+    observed_model = None
     try:
         if route.transport == "codex_exec":
             result = codex_exec(
@@ -419,10 +421,19 @@ def _invoke(
             )
             provider = route.provider
             model = str(getattr(result, "model", None) or route.model)
+            # Session initialization is a requested/configured model. Only
+            # the final assistant response supplies authorship evidence.
+            for event in reversed(getattr(result, "events", ())):
+                message = event.get("message") if event.get("type") == "assistant" else None
+                if isinstance(message, dict):
+                    actual = message.get("model")
+                    observed_model = actual.strip() if isinstance(actual, str) and actual.strip() else None
+                    break
         else:
             result = api_chat(system, user, model=route.model)
             provider = str(result.provider or "api")
             model = str(result.model or route.model)
+            observed_model = getattr(result, "observed_model", None)
             emit_item(
                 {
                     "type": "agent_message",
@@ -449,6 +460,7 @@ def _invoke(
         usage=usage,
         provider=provider,
         model=model,
+        observed_model=observed_model,
     )
 
 
@@ -2079,10 +2091,17 @@ def main() -> int:
         }
     )
     status = "accepted by model critic" if critic.verdict == "correct" else "unattested revision"
+    # Attribute the published proof to its author, never the planner/critic
+    # or the selected routing model when response telemetry is absent.
+    author_stage = "revision" if revised else f"candidate-{critic.selected_candidate}"
+    author = next((reply for stage, reply in replies if stage == author_stage), None)
+    observed = getattr(author, "observed_model", None)
     emit_item(
         {
             "type": "agent_message",
             "text": f"Math Harness completed · {status}\n\n{final_proof[:6000]}",
+            "model": observed,
+            "model_source": "response" if observed else None,
         }
     )
     return 0

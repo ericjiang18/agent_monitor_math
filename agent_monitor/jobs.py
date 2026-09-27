@@ -24,6 +24,8 @@ from agent_monitor.research_audit import (
     workspace_reconciliation_status,
 )
 from agent_monitor.schema import normalize_run
+from agent_monitor.proof_markdown import normalize_proof_markdown
+from agent_monitor import attachments as research_attachments
 
 _LOCK = threading.Lock()
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -33,7 +35,6 @@ _PROCS: dict[str, Any] = {}  # run_id -> subprocess.Popen
 _RECONCILE_LOCK = threading.Lock()
 _RUN_WRITE_LOCK = threading.Lock()
 _HERMES_HEARTBEAT_S = 2.0
-
 # Problem IDs become run-record and cache filenames, so they must never carry a
 # path separator or a traversal segment.
 _PROBLEM_ID_RE = re.compile(r"^[A-Za-z0-9_.()\[\]-]{1,128}$")
@@ -174,6 +175,7 @@ def _apply_sponsored_kimi_route(
     """Bind Kimi to the isolated response-only service, never its provider key."""
     if not _is_kimi_model(model):
         return False
+    engine = "plain" if engine == "kimi" else engine
     if force:
         for name in (
             "KIMI_API_KEY",
@@ -290,6 +292,9 @@ def _terminate_registered_proc(proc: Any, *, force: bool = True) -> None:
     sig = signal.SIGKILL if force else signal.SIGTERM
     try:
         pid = int(proc.pid)
+        from agent_monitor.process_control import terminate_descendants
+
+        terminate_descendants(pid, force=force)
         pgid = os.getpgid(pid)
         # Registered runners should be session leaders. Refuse to signal a
         # shared service group if an older/custom runner violates that contract.
@@ -528,6 +533,9 @@ def _write_run_locked(run: dict[str, Any]) -> Path:
     runs_path = RUNS_DIR / f"{run['run_id']}.json"
     _atomic_write_text(runs_path, serialized)
     _upsert_manifest(run)
+    from agent_monitor import usage_ledger
+
+    usage_ledger.record_run(run)
     return path
 
 
@@ -785,16 +793,16 @@ def _validated_problem_id(problem_id: str) -> str:
     return value
 
 
-def _contained_problem_path(relative: object) -> Path:
-    """Resolve a problem statement path without permitting escape."""
+def _manifest_problem_path(statement_path: object) -> Path:
+    """Resolve a manifest entry without permitting escape from PROBLEMS_DIR."""
     root = PROBLEMS_DIR.resolve()
-    candidate = (root / str(relative or "")).resolve()
+    candidate = (root / str(statement_path or "")).resolve()
     try:
         candidate.relative_to(root)
     except ValueError:
         raise ValueError("problem manifest path leaves the problem directory") from None
     if not candidate.is_file():
-        raise FileNotFoundError(f"Problem statement is missing: {relative}")
+        raise FileNotFoundError(f"Problem statement is missing: {statement_path}")
     return candidate
 
 
@@ -815,8 +823,8 @@ def resolve_problem(problem_id: str | None, problem_text: str | None) -> tuple[s
     man = PROBLEMS_DIR / "manifest.json"
     if man.exists():
         for p in json.loads(man.read_text(encoding="utf-8")).get("problems") or []:
-            if p.get("problem_id") == safe_problem_id:
-                path = _contained_problem_path(p.get("statement_path"))
+            if isinstance(p, dict) and p.get("problem_id") == safe_problem_id:
+                path = _manifest_problem_path(p.get("statement_path"))
                 return (
                     safe_problem_id,
                     path.read_text(encoding="utf-8", errors="replace"),
@@ -1039,13 +1047,13 @@ def start_job(
     problem_text: str | None = None,
     model: str | None = None,
     max_iterations: int = 40,
+    max_output_tokens: int | None = None,
     user: dict[str, Any] | None = None,
     use_subagents: bool = True,
     subagent_model: str | None = None,
     auth_route: str | None = None,
     reasoning_effort: str | None = None,
     speed_mode: str | None = None,
-    max_output_tokens: int | None = None,
     attachments: object = None,
 ) -> dict[str, Any]:
     from agent_monitor.engines_registry import all_engine_ids, list_engines, supported_models
@@ -1060,6 +1068,8 @@ def start_job(
             raise ValueError("That engine requires a signed-in account")
         use_subagents = False
         subagent_model = None
+        # A guest has no subscription to consume, so pin the billing route.
+        auth_route = "api_key"
         override = _GUEST_COMMAND_OVERRIDES.get(engine)
         if override and os.environ.get(override, "").strip():
             raise ValueError(
@@ -1073,7 +1083,18 @@ def start_job(
             raise ValueError(f"Kimi Proof uses {GUEST_DEFAULT_MODEL}")
 
     extra_env = _user_extra_env(user, model, subagent_model)
-    if max_output_tokens:
+    if is_guest:
+        # Two ceilings, one per transport: the Plain/Kimi harnesses read the
+        # PLAIN variable, and api_backend clamps every API call with the other.
+        try:
+            output_limit = int(max_output_tokens or 4096)
+        except (TypeError, ValueError):
+            output_limit = 4096
+        output_limit = max(256, min(output_limit, 8192))
+        extra_env = dict(extra_env)
+        extra_env["AGENT_MONITOR_PLAIN_MAX_OUTPUT_TOKENS"] = str(output_limit)
+        extra_env["AGENT_MONITOR_MAX_OUTPUT_TOKENS"] = str(output_limit)
+    elif max_output_tokens:
         extra_env["AGENT_MONITOR_MAX_OUTPUT_TOKENS"] = str(int(max_output_tokens))
     if is_guest and not extra_env.get("KIMI_API_KEY"):
         # Guests inherit no operator credentials, so the only key they may use
@@ -1094,9 +1115,21 @@ def start_job(
     auth_modes = set(engine_info.get("auth_modes") or [])
     supports_api = "api_key" in auth_modes
     selected_kimi = _is_kimi_model(model)
+    if is_guest and selected_kimi and not extra_env.get("KIMI_API_KEY") and os.environ.get("AGENT_MONITOR_GUEST_HOSTED_KIMI", "1").lower() in {"0", "false", "off", "no"}:
+        raise ValueError("Hosted Kimi is disabled; add your own Kimi API key in Settings")
+    if engine == "kimi" and is_guest and not extra_env.get("KIMI_API_KEY"):
+        from agent_monitor.settings import hosted_guest_kimi_key
+        from agent_monitor import sponsored_kimi_client
+        if not sponsored_kimi_client.configured():
+            key = hosted_guest_kimi_key()
+            if key:
+                extra_env["KIMI_API_KEY"] = key
     sponsored_kimi = _apply_sponsored_kimi_route(
-        extra_env, engine=engine, model=model
+        extra_env, engine="plain" if engine == "kimi" else engine, model=model
     )
+    if engine == "kimi" and not sponsored_kimi:
+        extra_env["KIMI_API_BASE"] = "https://api.moonshot.ai/v1"
+        extra_env["KIMI_BASE_URL"] = "https://api.moonshot.ai/v1"
     has_kimi_key = bool(str(extra_env.get("KIMI_API_KEY") or "").strip())
     if selected_kimi and not supports_api:
         raise ValueError(f"{engine_info.get('label') or engine} does not support API models")
@@ -1184,6 +1217,7 @@ def start_job(
             "develop a rigorous proof."
         )
     pid, text, path = resolve_problem(problem_id, problem_text)
+
     job_id = uuid.uuid4().hex[:10]
     run_id = f"{engine}_{pid}_{job_id}"
     if sponsored_kimi and engine != "plain":
@@ -1194,7 +1228,7 @@ def start_job(
                 engine=_sponsored_transport_engine(engine),
                 client_id=(user or {}).get("id"),
                 cache_key=run_id,
-                minimum_ttl_seconds=_cli_timeout_seconds(engine, extra_env) + _SPONSORED_KIMI_TOKEN_MARGIN,
+                minimum_ttl_seconds=(600 if engine == "kimi" else _cli_timeout_seconds(engine, extra_env) + _SPONSORED_KIMI_TOKEN_MARGIN),
             )
         )
         # The harness reads KIMI_BASE_URL; the broker issues KIMI_API_BASE.
@@ -1239,6 +1273,7 @@ def start_job(
             "problems": _seed_problems(text, source="initial"),
             "owner_id": user.get("id") if user else None,
             "owner": user.get("email") if user else None,
+            "guest": is_guest,
             "model": model,
             "requested_model": model,
             "max_iterations": max_iterations,
@@ -1275,6 +1310,7 @@ def start_job(
         "error": None,
         "model": model,
         "owner_id": user.get("id") if user else None,
+        "guest": is_guest,
         "use_subagents": use_subagents,
         "subagent_model": subagent_model,
         **tuning,
@@ -1310,8 +1346,8 @@ def start_job(
     thread.start()
 
     # The proof engine and derived views are independent background concerns.
-    # Start the sidecar now; it waits for the first stable draft before fanning
-    # out Lean and the informal DAG, then derives the formal DAG from Proof.lean.
+    # Start the sidecar now; it waits for a stable draft (the completed proof
+    # for guests), then derives Lean and both DAG views from that proof.
     # Lightweight Thread doubles used by embedders/tests intentionally do not
     # launch background work and therefore have no is_alive method.
     if (
@@ -1459,7 +1495,7 @@ def _continuation_auth_environment(
                 engine=_sponsored_transport_engine(engine),
                 client_id=owner_id,
                 cache_key=str(run_data.get("run_id") or "continuation"),
-                minimum_ttl_seconds=_cli_timeout_seconds(engine, configured) + _SPONSORED_KIMI_TOKEN_MARGIN,
+                minimum_ttl_seconds=(600 if engine == "kimi" else _cli_timeout_seconds(engine, configured) + _SPONSORED_KIMI_TOKEN_MARGIN),
             )
         )
     from agent_monitor.run_tuning import from_record as apply_recorded_tuning
@@ -1577,36 +1613,35 @@ def _execute_job(
         "enabled_tools": [],
         "persistent_skill_mutation": False,
     }
-    try:
-        if guest:
-            raise LookupError("user library disabled for anonymous guest runs")
-        if public_kimi_runtime or sponsored_kimi_runtime:
-            raise LookupError("user library disabled for isolated Kimi service")
-        from agent_monitor import library as user_library
+    if not guest:
+        try:
+            if public_kimi_runtime or sponsored_kimi_runtime:
+                raise LookupError("user library disabled for isolated Kimi service")
+            from agent_monitor import library as user_library
 
-        materialized = user_library.materialize(ws)
-        lib_ctx = user_library.compose_context()
-        library_snapshot = user_library.get_library()
-        runtime_library = {
-            "materialized": list(materialized.get("written") or []),
-            "enabled_skills": [
-                item.get("name") for item in library_snapshot.get("items") or []
-                if item.get("type") == "skill" and item.get("enabled", True)
-            ],
-            "enabled_tools": [
-                item.get("name") for item in library_snapshot.get("items") or []
-                if item.get("type") == "tool" and item.get("enabled", True)
-            ],
-            "persistent_skill_mutation": False,
-        }
-        if materialized.get("written"):
-            _append_chat(
-                run_id, "system",
-                "library injected: " + ", ".join(materialized["written"]),
-            )
-    except Exception:  # noqa: BLE001
-        lib_ctx = ""
-    if engine == "hermes":
+            materialized = user_library.materialize(ws)
+            lib_ctx = user_library.compose_context()
+            library_snapshot = user_library.get_library()
+            runtime_library = {
+                "materialized": list(materialized.get("written") or []),
+                "enabled_skills": [
+                    item.get("name") for item in library_snapshot.get("items") or []
+                    if item.get("type") == "skill" and item.get("enabled", True)
+                ],
+                "enabled_tools": [
+                    item.get("name") for item in library_snapshot.get("items") or []
+                    if item.get("type") == "tool" and item.get("enabled", True)
+                ],
+                "persistent_skill_mutation": False,
+            }
+            if materialized.get("written"):
+                _append_chat(
+                    run_id, "system",
+                    "library injected: " + ", ".join(materialized["written"]),
+                )
+        except Exception:  # noqa: BLE001
+            lib_ctx = ""
+    if not guest and engine == "hermes":
         # Native Hermes reads profile skills from HERMES_HOME, but its linked
         # Codex app-server is workspace-confined.  Materialize the same package
         # paths advertised to portable harnesses so either execution route can
@@ -1624,12 +1659,25 @@ def _execute_job(
                 )
         except Exception as exc:  # noqa: BLE001
             _append_chat(run_id, "system", f"profile skill materialization unavailable: {exc}")
+    # Only explicitly published, provenance-gated DAG results are retrievable;
+    # community discussions never become executable harness instructions.
+    if not guest and not public_kimi_runtime and not sponsored_kimi_runtime:
+        try:
+            from agent_monitor.research import compose_context as dag_context
+
+            research_context = dag_context(problem_text)
+            if research_context:
+                lib_ctx = (lib_ctx + "\n\n" + research_context).strip()
+                (ws / "dag_memory.md").write_text(research_context, encoding="utf-8")
+                runtime_library["dag_memory"] = "dag_memory.md"
+        except (OSError, ValueError, sqlite3.Error):
+            pass
     engine_problem_text = (lib_ctx + "\n" + problem_text) if lib_ctx else problem_text
     attachment_context = research_attachments.context(ws)
     if attachment_context:
         engine_problem_text += "\n\n" + attachment_context
     engine_problem_text = _augment_research_audit_prompt(engine_problem_text)
-    if engine in {"improof", "ucla"}:
+    if not guest and engine in {"improof", "ucla"}:
         try:
             from agent_monitor.agent_config import persona_preamble
 
@@ -1757,6 +1805,7 @@ def _execute_job(
                 requested_model=model,
                 max_iterations=max_iterations,
                 owner_id=owner_id,
+                include_persona=not guest,
             )
 
         if _stop_event(run_id).is_set():
@@ -1862,6 +1911,8 @@ def _execute_job(
                 "created_at": _now(),
                 "updated_at": _now(),
                 "workspace": str(ws),
+                "owner_id": owner_id,
+                "guest": bool(guest),
                 "pipeline": _pipeline_for(engine),
                 "problem_text": problem_text[:20000],
                 "reasoning_effort": reasoning_effort,
@@ -1886,7 +1937,7 @@ def _execute_job(
         _write_run(fail)
         _update_job(job_id, status="failed", error=str(exc))
     finally:
-        if not public_kimi_runtime:
+        if not guest and not public_kimi_runtime:
             _launch_pending_feedback(
                 run_id, owner_id=owner_id, model=model, max_iterations=max_iterations
             )
@@ -2010,6 +2061,8 @@ def _persist_openclaw_final_answer(parser: Any, workspace: Path) -> Path | None:
 def _persist_text_final_answer(final: Any, workspace: Path, *, engine: str) -> Path | None:
     """Persist a complete text response when an agent forgot to write its artifact."""
     text = str(final or "").strip()
+    if engine.casefold() in {"kimi", "plain"}:
+        text = normalize_proof_markdown(text)
     existing = _promote_proof_artifact(workspace)
     normalized_final = text.casefold().replace("’", "'").replace("`", "")
     def has_explicit_placeholder(value: str) -> bool:
@@ -2495,6 +2548,8 @@ def _run_hermes(
         candidate = codex_login.account_home(owner_id)
         if codex_login.account_login_ready(candidate):
             codex_home = candidate
+    if ue.get("AGENT_MONITOR_CODEX_SUBSCRIPTION") == "1" and codex_home is None:
+        raise RuntimeError("The selected Codex account is unavailable; reconnect Codex and retry.")
     agent = hermes_runner.create_agent(
         model=model or ue.get("AGENT_MONITOR_MODEL") or None,
         api_key=None if codex_home else direct_key,
@@ -2510,7 +2565,9 @@ def _run_hermes(
             else ue.get("AGENT_MONITOR_RUN_REASONING_EFFORT")
         ),
         service_tier=(
-            "fast" if ue.get("AGENT_MONITOR_RUN_SPEED_MODE") == "fast" else None
+            "fast" if ue.get("AGENT_MONITOR_RUN_SPEED_MODE") == "fast"
+            else "default" if ue.get("AGENT_MONITOR_RUN_SPEED_MODE") == "standard"
+            else None
         ),
     )
     # The embedded Codex app-server must start inside this run's isolated
@@ -2744,6 +2801,14 @@ def _run_hermes(
     def _heartbeat() -> None:
         while not heartbeat_stop.wait(_HERMES_HEARTBEAT_S):
             try:
+                if stop_ev.is_set():
+                    interrupt = getattr(agent, "interrupt", None)
+                    if callable(interrupt):
+                        interrupt("Run stopped by user.")
+                    session = getattr(agent, "_codex_session", None)
+                    if session is not None:
+                        session.request_interrupt()
+                    continue
                 _flush()
             except Exception:  # noqa: BLE001 - telemetry cannot fail a run
                 pass
@@ -2774,6 +2839,8 @@ def _run_hermes(
         # itself retire the lazy Codex app-server transport, so use the runner
         # helper to prevent completed runs leaking app-server/MCP children.
         hermes_runner.close_agent(agent, messages=(result or {}).get("messages") or [])
+    if stop_ev.is_set():
+        raise StopRequested(run_id)
     elapsed = time.time() - started
     final = (result or {}).get("final_response") or ""
     proof = _persist_text_final_answer(final, workspace, engine="Hermes")
@@ -3098,7 +3165,7 @@ def _run_sponsored_kimi_plain(
                     "model": "kimi-k3",
                 }
             )
-        proof = str(payload.get("proof") or "")
+        proof = normalize_proof_markdown(str(payload.get("proof") or ""))
         if status == "finished" and proof:
             agents.append(
                 {
@@ -3175,7 +3242,7 @@ def _run_sponsored_kimi_plain(
         return project(payload, terminal_status="stopped")
     if status != "finished":
         return project(payload, terminal_status="failed")
-    proof = str(payload.get("proof") or "").strip()
+    proof = normalize_proof_markdown(str(payload.get("proof") or "")).strip()
     if not proof:
         payload = {**payload, "error": "Sponsored Kimi finished without a proof artifact"}
         return project(payload, terminal_status="failed")
@@ -3213,6 +3280,7 @@ def _run_cli_engine(
     requested_model: str | None = None,
     max_iterations: int | None = None,
     owner_id: int | None = None,
+    include_persona: bool = True,
 ) -> dict[str, Any]:
     """Run an external CLI harness (codex / openclaude / openhands / …) live."""
     import subprocess
@@ -3227,7 +3295,10 @@ def _run_cli_engine(
     )
     # CLI engines can't read the agent home, so the operator's identity/skills/
     # memory ride along in the prompt.
-    if os.environ.get("AGENT_MONITOR_PUBLIC_KIMI", "").strip() == "1":
+    if (
+        not include_persona
+        or os.environ.get("AGENT_MONITOR_PUBLIC_KIMI", "").strip() == "1"
+    ):
         preamble = ""
     else:
         try:
@@ -3237,7 +3308,10 @@ def _run_cli_engine(
         except Exception as exc:  # noqa: BLE001
             print(f"[agent-monitor] persona preamble unavailable: {exc}")
             preamble = ""
-    prompt = proof_prompt(problem_text, workspace=workspace, preamble=preamble)
+    prompt = proof_prompt(
+        problem_text, workspace=workspace, preamble=preamble,
+        response_only=engine in {"kimi", "plain"},
+    )
     argv = build_cli_command(
         engine,
         prompt=prompt,
@@ -3421,6 +3495,11 @@ def _run_cli_engine(
     from agent_monitor.subprocess_env import child_process_env
 
     env = child_process_env(extra=extra_env)
+    if engine == "kimi" and (extra_env or {}).get("AGENT_MONITOR_SPONSORED_KIMI") != "1":
+        # Main-service availability flags are not authorization for this run.
+        # Personal-key Kimi runs use the fixed public endpoint independently.
+        env["AGENT_MONITOR_SPONSORED_KIMI"] = "0"
+        env.pop("AGENT_MONITOR_SPONSORED_KIMI_URL", None)
     _apply_math_harness_iteration_env(
         env,
         engine=engine,
@@ -3529,6 +3608,9 @@ def _run_cli_engine(
 
     def _terminate_group(*, force: bool = False) -> None:
         """Stop this wrapper and its grandchildren, without touching other runs."""
+        _terminate_registered_proc(proc, force=force)
+        # The leader may have exited while a tool still holds the output pipe.
+        # This Popen always owns a fresh session, so its original PGID is safe.
         try:
             os.killpg(proc.pid, signal.SIGKILL if force else signal.SIGTERM)
         except (OSError, ProcessLookupError):
@@ -3596,6 +3678,7 @@ def _run_cli_engine(
             _terminate_group(force=True)
             proc.wait(timeout=10)
     finally:
+        _terminate_group(force=True)
         reader.join(timeout=1)
         if proc.stdout is not None:
             proc.stdout.close()
@@ -3607,7 +3690,9 @@ def _run_cli_engine(
         _persist_openclaw_final_answer(parser, workspace)
     if stopped or stop_ev.is_set():
         return _flush(parser.output(), status="stopped")
-    ok = proc.returncode == 0 and not timed_out
+    if engine in {"codex", "claude"} and parser.terminal_status is None:
+        parser.terminal_error = "CLI ended without a terminal completion event"
+    ok = proc.returncode == 0 and not timed_out and not parser.terminal_error
     proof_missing = False
     if ok and _promote_proof_artifact(workspace) is None:
         parser.lines.append("[agent-monitor] engine exited successfully but produced no proof.md or proof.tex")
@@ -3902,9 +3987,21 @@ def list_chat(run_id: str) -> list[dict[str, Any]]:
     for message in msgs:
         if message.get("role") != "user":
             continue
-        seen_user.add(str(message.get("content") or "").strip())
+        content = str(message.get("content") or "").strip()
+        seen_user.add(content)
+        # A turn records the prompt-facing form of its text explicitly. Older
+        # records predate that field, so also reconstruct it from the files.
         if message.get("ledger_text"):
             seen_user.add(str(message["ledger_text"]).strip())
+        elif message.get("attachments"):
+            seen_user.add(
+                content
+                + "\n\nAttached research files:\n"
+                + "\n".join(
+                    f"- {json.dumps(item['name'], ensure_ascii=False)}"
+                    for item in message["attachments"]
+                )
+            )
     try:
         run = _load_run_record(run_id)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -4430,9 +4527,21 @@ def _execute_continue(
         numbered.append(f"{i}. {text}{tag}")
     problems_block = "\n".join(numbered) or problem_text
 
+    response_only = engine in {"kimi", "plain"}
+    workspace_instruction = (
+        "Return the complete updated Markdown write-up; the application saves it automatically.\n"
+        if response_only else f"WORKSPACE: {ws}\n"
+    )
+    revision_instruction = (
+        "If the human asked to revise an existing proof, include its revised version "
+        "in the returned write-up and leave the other proofs intact.\n\n"
+        if response_only else
+        "If the human asked to revise an existing proof, edit that proof in place "
+        "and leave the others intact.\n\n"
+    )
     continuation = (
         "You are continuing an informal mathematics session based on human feedback.\n"
-        f"WORKSPACE: {ws}\n"
+        f"{workspace_instruction}"
         f"{proof_name} is a notebook for this WHOLE session. "
         "Do NOT delete or replace earlier proofs. "
         "If the human asked a new theorem, keep the existing write-up intact and "
@@ -4440,8 +4549,7 @@ def _execute_continue(
         "(a `# Claim` heading, then Strategy / Setup / Lemmas / Main proof). "
         "Do NOT add 'Problem N' or 'Proof N' headings — the console already shows "
         "each user request as its own problem card. "
-        "If the human asked to revise an existing proof, edit that proof in place "
-        "and leave the others intact.\n\n"
+        f"{revision_instruction}"
         f"SESSION PROBLEMS:\n{problems_block}\n\n"
     )
     if proof_excerpt:
@@ -4755,6 +4863,11 @@ def delete_run(run_id: str) -> dict[str, Any]:
             workspace_path = None
 
     removed: dict[str, Any] = {"run_id": run_id, "deleted": []}
+
+    # Usage history outlives the run; only the trace link is retired.
+    from agent_monitor import usage_ledger
+
+    usage_ledger.mark_deleted(run_id)
 
     _stop_event(run_id).set()
     with _LOCK:

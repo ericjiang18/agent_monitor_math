@@ -42,6 +42,8 @@ PROVIDERS: list[dict[str, Any]] = [
         "default_base": "https://api.openai.com/v1",
         "models": [
             "gpt-6-astra",
+            "gpt-5.6",
+            "chat-latest",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -172,7 +174,7 @@ def sponsored_kimi_available() -> bool:
 def sponsored_kimi_engines() -> list[str]:
     from agent_monitor import sponsored_kimi_client
 
-    return list(sponsored_kimi_client.supported_engines())
+    return ["kimi", *sponsored_kimi_client.supported_engines()]
 
 
 _MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
@@ -492,8 +494,8 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
 
     sponsored_kimi = (
         user is not None
-        and not bool(user.get("guest"))
         and sponsored_kimi_available()
+        and (not user.get("guest") or hosted_guest_kimi_available())
     )
     provider_catalog = (
         [p for p in PROVIDERS if p["id"] in GUEST_PROVIDER_IDS]
@@ -501,44 +503,39 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
         else PROVIDERS
     )
     providers = [_provider_state(p, env) for p in provider_catalog]
-    hosted_guest_available = bool(
-        user and user.get("guest") and hosted_guest_kimi_available()
-    )
+    hosted_guest_available = bool(user and user.get("guest") and hosted_guest_kimi_available())
     if user and user.get("guest"):
         providers.sort(key=lambda provider: provider["id"] != "kimi")
+        for provider in providers:
+            if provider["id"] == "kimi":
+                provider["hosted_available"] = hosted_guest_available
+                provider["base_url"] = "https://api.moonshot.ai/v1"
+                provider["default_base"] = "https://api.moonshot.ai/v1"
+                if hosted_guest_available and not provider["api_key_set"]:
+                    provider["api_key_set"] = True
+                    provider["api_key_masked"] = None
     for provider in providers:
         if provider["id"] == "kimi":
             provider["sponsored_available"] = sponsored_kimi
-            provider["using_sponsored"] = sponsored_kimi and not provider["api_key_set"]
-            provider["hosted_available"] = hosted_guest_available
-            if hosted_guest_available and not provider["api_key_set"]:
-                provider["api_key_set"] = True
-                # Do not disclose even a masked operator credential.
-                provider["api_key_masked"] = None
+            provider["using_sponsored"] = sponsored_kimi and not bool(env.get("KIMI_API_KEY"))
     configured = [p["id"] for p in providers if p["api_key_set"]]
-    kimi_user_key_set = any(
-        provider["id"] == "kimi" and provider["api_key_set"] for provider in providers
-    )
+    kimi_user_key_set = bool(env.get("KIMI_API_KEY"))
 
     default_model = (
         env.get("AGENT_MONITOR_MODEL")
         or env.get("HERMES_MODEL")
-        or (
-            GUEST_DEFAULT_MODEL
-            if user and user.get("guest")
-            else kimi_k3.MODEL_ID if sponsored_kimi else "gpt-5.6-sol"
-        )
+        or (GUEST_DEFAULT_MODEL if user and user.get("guest") else kimi_k3.MODEL_ID if sponsored_kimi else "gpt-6-astra")
     )
     max_iter = int(env.get("AGENT_MONITOR_MAX_ITERATIONS") or "40")
     saved_default_engine = str(env.get("AGENT_MONITOR_ENGINE") or "").strip()
-    default_engine = _preferred_default_engine(saved_default_engine)
+    default_engine = "kimi" if user and user.get("guest") else _preferred_default_engine(saved_default_engine)
 
     runtime = account_runtime(user, env=env)
     use_codex = runtime == "codex"
     use_claude = runtime == "claude"
     codex_connected = False
     codex_models: list[str] = []
-    if user is not None:
+    if user is not None and not user.get("guest"):
         try:
             from agent_monitor import codex_login
 
@@ -552,7 +549,7 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
     claude_connected = False
     claude_reauth_required = False
     claude_models: list[str] = []
-    if user is not None:
+    if user is not None and not user.get("guest"):
         try:
             from agent_monitor import claude_login
 
@@ -628,6 +625,7 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
         "env_path": "users.db" if user is not None else str(ENV_PATH),
         "providers": providers,
         "configured_providers": configured,
+        "hosted_guest_available": hosted_guest_available,
         "default_model": selected_default,
         "saved_default_model": default_model,
         "hosted_guest_available": hosted_guest_available,
@@ -680,7 +678,9 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
 
 def save_settings(body: dict[str, Any], user: dict[str, Any] | None = None) -> dict[str, Any]:
     updates: dict[str, str] = {}
-    clear: list[str] = list(body.get("clear") or [])
+    clear: list[str] = [
+        key for key in (body.get("clear") or []) if isinstance(key, str)
+    ]
 
     runtime: str | None = None
     if "account_runtime" in body:
@@ -813,9 +813,9 @@ def verify_provider(
         key = validate_guest_api_key(key)
 
     if is_guest:
-        # Canonical provider origins only. Ignore both request input and any
-        # legacy stored route so redirects cannot begin at an attacker host.
-        base = str(spec.get("default_base") or "")
+        # Begin every anonymous verification at the canonical provider origin;
+        # ignore request input and any stale custom route stored in the DB.
+        base = "https://api.moonshot.ai/v1" if provider_id == "kimi" else str(spec.get("default_base") or "")
     else:
         base = (
             (base_url or "").strip()

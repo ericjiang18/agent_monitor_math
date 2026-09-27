@@ -70,6 +70,15 @@ _GUEST_VERIFY_WINDOWS: dict[int, deque[float]] = {}
 _GUEST_VERIFY_GLOBAL_WINDOW: deque[float] = deque()
 _GUEST_VERIFY_ACTIVE_USERS: set[int] = set()
 _GUEST_VERIFY_LOCK = threading.Lock()
+_GUEST_DERIVED_WINDOW_SECONDS = 3600.0
+_GUEST_DERIVED_WINDOWS: dict[int, deque[float]] = {}
+_GUEST_DERIVED_GLOBAL_WINDOW: deque[float] = deque()
+_GUEST_DERIVED_ACTIVE_USERS: set[int] = set()
+_GUEST_DERIVED_LOCK = threading.Lock()
+_GUEST_PIPELINE_BOOTSTRAP_LOCK = threading.Lock()
+_GUEST_PIPELINE_BOOTSTRAPS: dict[str, tuple[int, Path]] = {}
+GUEST_MAX_LEAN_CHARACTERS = 100_000
+GUEST_MAX_FEEDBACK_CHARACTERS = 8_000
 
 
 def _password_reset_worker() -> None:
@@ -160,8 +169,8 @@ PUBLIC_MODE = os.environ.get("AGENT_MONITOR_PUBLIC", "").strip().lower() in {
     "on",
 }
 
-# Only bounded remote API runners are guest-eligible. Neither runner executes
-# model tools or follows model-generated commands on the server.
+# Only the single remote API call baseline is guest-eligible. Local agent and
+# harness engines do not provide an operating-system isolation boundary.
 GUEST_ELIGIBLE_ENGINES = frozenset({"kimi", "plain"})
 GUEST_DEFAULT_ENGINES = GUEST_ELIGIBLE_ENGINES
 
@@ -288,8 +297,10 @@ def guest_policy(user: dict | None = None) -> dict[str, Any]:
         "max_problem_characters": 20_000,
         "subagents": False,
         "continuation": False,
-        "proof_graph_generation": False,
-        "lean_actions": False,
+        "proof_graph_generation": True,
+        "lean_actions": True,
+        "formal_harness": False,
+        "derived_actions_per_hour": guest_derived_actions_per_hour(),
         "provider": "kimi",
         "custom_provider_base": False,
     }
@@ -423,6 +434,134 @@ def _reserve_guest_verification(user_id: int) -> tuple[str | None, int]:
 def _release_guest_verification(user_id: int) -> None:
     with _GUEST_VERIFY_LOCK:
         _GUEST_VERIFY_ACTIVE_USERS.discard(user_id)
+
+
+def guest_derived_actions_per_hour() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_DERIVED_ACTIONS_PER_HOUR",
+        default=24,
+        minimum=1,
+        maximum=60,
+    )
+
+
+def _reserve_guest_derived_action(user_id: int) -> tuple[str | None, int]:
+    """Bound synchronous Formal/DAG work independently from key checks."""
+    now = time.monotonic()
+    cutoff = now - _GUEST_DERIVED_WINDOW_SECONDS
+    with _GUEST_DERIVED_LOCK:
+        for existing_id, window in list(_GUEST_DERIVED_WINDOWS.items()):
+            while window and window[0] <= cutoff:
+                window.popleft()
+            if not window:
+                _GUEST_DERIVED_WINDOWS.pop(existing_id, None)
+        while _GUEST_DERIVED_GLOBAL_WINDOW and _GUEST_DERIVED_GLOBAL_WINDOW[0] <= cutoff:
+            _GUEST_DERIVED_GLOBAL_WINDOW.popleft()
+        if user_id in _GUEST_DERIVED_ACTIVE_USERS:
+            return "Wait for your current Formal or DAG action to finish", 20
+        concurrency = _bounded_env_int(
+            "AGENT_MONITOR_GUEST_DERIVED_GLOBAL_CONCURRENCY",
+            default=2,
+            minimum=1,
+            maximum=8,
+        )
+        if len(_GUEST_DERIVED_ACTIVE_USERS) >= concurrency:
+            return "Guest Formal and DAG capacity is currently full", 20
+        global_limit = _bounded_env_int(
+            "AGENT_MONITOR_GUEST_DERIVED_GLOBAL_ACTIONS_PER_HOUR",
+            default=120,
+            minimum=1,
+            maximum=480,
+        )
+        # Check the global ceiling before allocating a new visitor bucket.
+        if len(_GUEST_DERIVED_GLOBAL_WINDOW) >= global_limit:
+            retry = max(1, int(_GUEST_DERIVED_WINDOW_SECONDS - (now - _GUEST_DERIVED_GLOBAL_WINDOW[0])))
+            return "Guest Formal and DAG capacity is currently full", retry
+        user_window = _GUEST_DERIVED_WINDOWS.get(user_id)
+        if user_window and len(user_window) >= guest_derived_actions_per_hour():
+            retry = max(1, int(_GUEST_DERIVED_WINDOW_SECONDS - (now - user_window[0])))
+            return "This guest session has reached its hourly Formal and DAG limit", retry
+        _GUEST_DERIVED_WINDOWS.setdefault(user_id, deque()).append(now)
+        _GUEST_DERIVED_GLOBAL_WINDOW.append(now)
+        _GUEST_DERIVED_ACTIVE_USERS.add(user_id)
+    return None, 0
+
+
+def _release_guest_derived_action(user_id: int) -> None:
+    with _GUEST_DERIVED_LOCK:
+        _GUEST_DERIVED_ACTIVE_USERS.discard(user_id)
+
+
+def _guest_formal_options() -> dict[str, Any]:
+    """Guests use the hosted API, with no local harness discovery or fallback."""
+    from agent_monitor.settings import GUEST_DEFAULT_MODEL
+
+    return {
+        "engines": [],
+        "harness_auth_route": "api_key",
+        "harness_models": [GUEST_DEFAULT_MODEL],
+        "harness_model": GUEST_DEFAULT_MODEL,
+        "harness_engine": "",
+        "harness_available": False,
+    }
+
+
+def _bootstrap_guest_pipeline(
+    user: dict[str, Any], run_id: str, workspace: Path, run_record: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Derive an old guest proof once when its owner opens that completed run."""
+    from agent_monitor import auto_pipeline, sponsored_kimi_client
+    from agent_monitor.settings import GUEST_DEFAULT_MODEL, hosted_guest_kimi_available
+
+    state = auto_pipeline.load_state(workspace)
+    if (
+        state is not None
+        or not user.get("guest")
+        or not run_record.get("guest")
+        or run_record.get("owner_id") != user.get("id")
+        or str(run_record.get("status") or "").lower() != "finished"
+        or os.environ.get("AGENT_MONITOR_DISABLE_AUTO_PIPELINE", "").strip() == "1"
+    ):
+        return state
+    # The existing bounded reader also recognizes a substantial final answer
+    # for successful legacy runs that did not persist a proof.md file.
+    if not auto_pipeline._source_signature(workspace, run_record):
+        return None
+    if not hosted_guest_kimi_available() or not sponsored_kimi_client.configured():
+        return None
+    with _GUEST_PIPELINE_BOOTSTRAP_LOCK:
+        # Polling or simultaneous tabs must never queue a second sidecar.
+        state = auto_pipeline.load_state(workspace)
+        if state is not None:
+            return state
+        for active_id, (_owner, active_workspace) in list(_GUEST_PIPELINE_BOOTSTRAPS.items()):
+            active_state = auto_pipeline.load_state(active_workspace) or {}
+            if active_state.get("status") != "running":
+                _GUEST_PIPELINE_BOOTSTRAPS.pop(active_id, None)
+        owner_id = int(user["id"])
+        if len(_GUEST_PIPELINE_BOOTSTRAPS) >= 2 or any(
+            owner == owner_id for owner, _ws in _GUEST_PIPELINE_BOOTSTRAPS.values()
+        ):
+            return None
+        error, _retry_after = _reserve_guest_derived_action(owner_id)
+        if error:
+            return None
+        try:
+            state = auto_pipeline.start(
+                run_id=run_id,
+                workspace=workspace,
+                owner_id=owner_id,
+                model=GUEST_DEFAULT_MODEL,
+                engine=str(run_record.get("engine") or "kimi"),
+            )
+            if state.get("status") == "running":
+                _GUEST_PIPELINE_BOOTSTRAPS[run_id] = (owner_id, workspace)
+            return state
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Guest pipeline bootstrap failed (%s)", type(exc).__name__)
+            return None
+        finally:
+            _release_guest_derived_action(owner_id)
 
 
 def _with_base(path: str, base_path: str | None = None) -> str:
@@ -633,19 +772,6 @@ _TEXT_SUFFIXES = {".tex", ".txt", ".md", ".py", ".json", ".yaml", ".yml", ".log"
 _PREVIEW_CACHE: dict[str, str] = {}
 
 
-def _contained_path(root: Path, relative: str) -> Path | None:
-    """Resolve one untrusted relative path beneath ``root``."""
-    if not relative or "\x00" in relative:
-        return None
-    resolved_root = root.resolve()
-    try:
-        candidate = (resolved_root / relative).resolve()
-        candidate.relative_to(resolved_root)
-    except (OSError, RuntimeError, ValueError):
-        return None
-    return candidate
-
-
 def _problem_preview_for(run_id: str | None, cache_dir: Path) -> str:
     """Backfill a short problem title for manifest entries written before
     problem_preview existed. Reads the run's problem.txt / run record once."""
@@ -694,11 +820,26 @@ def _file_revision(path: Path) -> str:
     return f"{path_stat.st_mtime_ns}:{path_stat.st_size}"
 
 
+def _contained_path(root: Path, relative: str) -> Path | None:
+    """Resolve a relative path only when its real target stays in ``root``.
+
+    Rejects absolute paths and embedded NUL bytes before touching the
+    filesystem, then requires the fully resolved target to stay under ``root``
+    so a symlink cannot lead out of it.
+    """
+    if not relative or "\x00" in relative or Path(relative).is_absolute():
+        return None
+    resolved_root = root.resolve()
+    try:
+        target = (resolved_root / relative).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return target if target.is_relative_to(resolved_root) else None
+
+
 def _workspace_target(workspace: Path, relative: str) -> Path | None:
     """Resolve a path only when its real target stays inside ``workspace``."""
-    root = workspace.resolve()
-    target = (root / relative).resolve()
-    return target if target.is_relative_to(root) else None
+    return _contained_path(workspace, relative)
 
 
 def _static_asset(relative: str) -> Path | None:
@@ -952,8 +1093,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             self._pending_session_guest = False
         return out
 
-    def _issue_guest(self) -> dict | None:
-        """Mint one rate-limited guest identity, or answer the client directly."""
+    def _issue_guest(self, *, replace_account_token: str | None = None) -> dict | None:
         from agent_monitor import auth
 
         available, retry_after = _reserve_guest_session_slot()
@@ -974,7 +1114,10 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             )
             return None
         try:
-            account, token = auth.create_guest_session()
+            if replace_account_token:
+                account, token = auth.create_guest_session(replace_account_token=replace_account_token)
+            else:
+                account, token = auth.create_guest_session()
         except Exception as exc:  # noqa: BLE001
             logger.error("Guest session creation failed (%s)", type(exc).__name__)
             self._send(
@@ -1014,6 +1157,13 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             return None
         return user
 
+    def _require_operator(self, user: dict) -> bool:
+        """Admin-only endpoints: enforced here, never by the UI alone."""
+        if _is_operator_user(user):
+            return True
+        self._send(403, json.dumps({"error": "admin access required"}), headers={"Cache-Control": "no-store"})
+        return False
+
     def _deny_guest(self, user: dict, capability: str) -> bool:
         """Reject shared control-plane actions for anonymous sessions."""
         if not user.get("guest"):
@@ -1028,6 +1178,29 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             ),
             headers={"Cache-Control": "no-store"},
         )
+        return True
+
+    def _admit_guest_derived_action(self, user: dict, workspace: Path) -> bool:
+        if not user.get("guest"):
+            return True
+        from agent_monitor import auto_pipeline
+
+        state = auto_pipeline.load_state(workspace) or {}
+        if state.get("status") == "running":
+            self._send(
+                409,
+                json.dumps({"error": "Wait for the automatic Formal and DAG pipeline to finish"}),
+                headers={"Retry-After": "20"},
+            )
+            return False
+        error, retry_after = _reserve_guest_derived_action(int(user["id"]))
+        if error:
+            self._send(
+                429,
+                json.dumps({"error": error}),
+                headers={"Retry-After": str(retry_after)},
+            )
+            return False
         return True
 
     def _deny_run_compilation(self, user: dict, run_id: str) -> bool:
@@ -1175,7 +1348,11 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             return
 
         if path.rstrip("/") in ("/login", "/reset-password"):
-            if path.rstrip("/") == "/login" and PUBLIC_MODE:
+            if (
+                path.rstrip("/") == "/login"
+                and PUBLIC_MODE
+                and guest_access_enabled()
+            ):
                 self.send_response(302)
                 self.send_header("Location", _with_base("/", self._request_base_path()))
                 self.end_headers()
@@ -1199,19 +1376,26 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
 
         if path == "/api/auth/me":
             from agent_monitor.auth import google_client_id, registration_open
+
             user = self._current_user()
             if user is None and PUBLIC_MODE and guest_access_enabled():
                 user = self._issue_guest()
                 if user is None:
                     return
-            self._send(200, json.dumps({
-                "user": user,
-                "google_client_id": google_client_id(),
-                "public": PUBLIC_MODE,
-                "guest_access": guest_access_enabled(),
-                "guest_policy": guest_policy(user),
-                "registration_open": registration_open(),
-            }), headers={"Cache-Control": "no-store"})
+            self._send(
+                200,
+                json.dumps(
+                    {
+                        "user": user,
+                        "google_client_id": google_client_id(),
+                        "public": PUBLIC_MODE,
+                        "guest_access": guest_access_enabled(),
+                        "guest_policy": guest_policy(user),
+                        "registration_open": registration_open(),
+                    }
+                ),
+                headers={"Cache-Control": "no-store"},
+            )
             return
 
         if path == "/health":
@@ -1268,12 +1452,13 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             engines = list_engines()
             if user.get("guest"):
                 allowed = guest_engine_allowlist()
-                engines = [{**engine, "requires_login": engine.get("id") not in allowed}
-                           for engine in engines]
+                engines = [{**engine, "requires_login": engine.get("id") not in allowed} for engine in engines]
             self._send(200, json.dumps({"engines": engines}))
             return
 
         if path == "/api/monitor/overview":
+            if self._deny_guest(user, "the operator overview"):
+                return
             from agent_monitor.monitor_overview import build_overview
 
             self._send(200, json.dumps(build_overview(user), ensure_ascii=False))
@@ -1288,8 +1473,29 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             return
 
         if path == "/api/jobs":
-            owner = None if _is_operator_user(user) else user["id"]
+            # Everyone's workspace lists only their own jobs; operators see
+            # other accounts through the admin view or with scope=all.
+            scope_all = (qs.get("scope") or [""])[0] == "all" and _is_operator_user(user)
+            owner = None if scope_all else user["id"]
             self._send(200, json.dumps({"jobs": job_manager.list_jobs(owner_id=owner)}))
+            return
+
+        if path in ("/api/admin/usage", "/api/admin/runs"):
+            if not self._require_operator(user):
+                return
+            from agent_monitor import usage_ledger
+
+            params = {key: (values[0] if values else "") for key, values in qs.items()}
+            try:
+                payload = (
+                    usage_ledger.usage_summary(params)
+                    if path == "/api/admin/usage"
+                    else usage_ledger.list_runs(params)
+                )
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": f"bad filter: {exc}"}))
+                return
+            self._send(200, json.dumps(payload, ensure_ascii=False), headers={"Cache-Control": "no-store"})
             return
 
         if path == "/api/agent/config":
@@ -1327,12 +1533,16 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             return
 
         if path == "/api/settings/claude/status":
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import claude_login
 
             self._send(200, json.dumps(claude_login.status(user["id"]), ensure_ascii=False))
             return
 
         if path == "/api/settings/claude/login/poll":
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import claude_login
 
             self._send(200, json.dumps(claude_login.poll_login(user["id"]), ensure_ascii=False))
@@ -1407,19 +1617,25 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 return
             from agent_monitor import lean_verify
 
-            model_options = lean_verify.harness_model_options(user)
-            engines = lean_verify.harness_engines(
-                user, model=model_options["selected"]
-            )
+            if user.get("guest"):
+                formal_options = _guest_formal_options()
+            else:
+                model_options = lean_verify.harness_model_options(user)
+                engines = lean_verify.harness_engines(
+                    user, model=model_options["selected"]
+                )
+                formal_options = {
+                    "engines": engines,
+                    "harness_auth_route": model_options["auth_route"],
+                    "harness_models": model_options["models"],
+                    "harness_model": model_options["selected"],
+                }
             self._send(
                 200,
                 json.dumps(
                     {
                         **lean_verify.toolchain_status(),
-                        "engines": engines,
-                        "harness_auth_route": model_options["auth_route"],
-                        "harness_models": model_options["models"],
-                        "harness_model": model_options["selected"],
+                        **formal_options,
                     },
                     ensure_ascii=False,
                 ),
@@ -1437,15 +1653,18 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             run_record = _run_record_for(rid)
             cached = lean_verify.load_cached(ws) or {"status": "none"}
             try:
-                model_options = lean_verify.harness_model_options(user, run_record)
-                engines = lean_verify.harness_engines(user, run_record)
-                cached["engines"] = engines
-                cached["harness_auth_route"] = model_options["auth_route"]
-                cached["harness_models"] = model_options["models"]
-                cached["harness_model"] = model_options["selected"]
-                cached["harness_engine"] = _preferred_formal_harness_engine(
-                    run_record, engines
-                )
+                if user.get("guest"):
+                    cached.update(_guest_formal_options())
+                else:
+                    model_options = lean_verify.harness_model_options(user, run_record)
+                    engines = lean_verify.harness_engines(user, run_record)
+                    cached["engines"] = engines
+                    cached["harness_auth_route"] = model_options["auth_route"]
+                    cached["harness_models"] = model_options["models"]
+                    cached["harness_model"] = model_options["selected"]
+                    cached["harness_engine"] = _preferred_formal_harness_engine(
+                        run_record, engines
+                    )
             except ValueError as exc:
                 cached["engines"] = []
                 cached["harness_models"] = []
@@ -1590,6 +1809,11 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 )
                 return
             current = self._current_user()
+            explicit_switch = (
+                body.get("switch_account") is True
+                and self.headers.get("X-Guest-Intent") == "homepage"
+                and self.headers.get_content_type() == "application/json"
+            )
             if current is not None:
                 if current.get("guest"):
                     self._send(
@@ -1597,23 +1821,23 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                         json.dumps({"ok": True, "user": current}),
                         headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
                     )
-                else:
+                    return
+                elif not explicit_switch:
                     self._send(
                         409,
                         json.dumps({"ok": False, "error": "Already signed in"}),
                         headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
                     )
-                return
-            account = self._issue_guest()
+                    return
+            account = self._issue_guest(
+                replace_account_token=self._session_token() if current and explicit_switch else None
+            )
             if account is None:
                 return
             self._send(
                 200,
                 json.dumps({"ok": True, "user": account}),
-                headers={
-                    "Cache-Control": "no-store",
-                    "Pragma": "no-cache",
-                },
+                headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
             )
             return
 
@@ -1742,6 +1966,8 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             return
 
         if path.startswith("/api/library/tools/") and path.endswith("/run"):
+            if self._deny_guest(user, "trusted library tools"):
+                return
             from urllib.parse import unquote
 
             from agent_monitor import library
@@ -1764,6 +1990,8 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             return
 
         if path.startswith("/api/workspace/") and path.endswith("/file"):
+            if self._deny_guest(user, "workspace editing"):
+                return
             rest = path.removeprefix("/api/workspace/")
             run_id, separator, action = rest.partition("/")
             ws = _workspace_for_run(run_id)
@@ -1846,6 +2074,16 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 return
             run_record = _run_record_for(rid)
             kind = str(body.get("kind") or "informal").strip().lower()
+            model = str(body.get("model") or "").strip() or None
+            if user.get("guest"):
+                from agent_monitor.settings import GUEST_DEFAULT_MODEL
+
+                model = GUEST_DEFAULT_MODEL
+                if kind not in {"informal", "formal", "engine"}:
+                    self._send(400, json.dumps({"error": "Unknown proof graph kind"}))
+                    return
+            if not self._admit_guest_derived_action(user, ws):
+                return
             try:
                 if kind == "engine":
                     from agent_monitor import engine_graph
@@ -1862,7 +2100,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                         workspace=ws,
                         run_record=run_record,
                         user=user,
-                        model=(str(body.get("model") or "").strip() or None),
+                        model=model,
                         kind=kind,
                     )
             except ValueError as exc:
@@ -1871,6 +2109,9 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": f"Graph generation failed: {exc}"}, ensure_ascii=False))
                 return
+            finally:
+                if user.get("guest"):
+                    _release_guest_derived_action(int(user["id"]))
             self._send(200, json.dumps(result, ensure_ascii=False))
             return
 
@@ -1891,6 +2132,25 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 lean_arg: str | None = lean_src
             else:
                 lean_arg = None
+            feedback = str(body.get("message") or body.get("feedback") or "")
+            if user.get("guest"):
+                from agent_monitor.settings import GUEST_DEFAULT_MODEL
+
+                model = GUEST_DEFAULT_MODEL
+                if action in {"harness", "stop_harness"}:
+                    self._deny_guest(user, "the local formal harness")
+                    return
+                if action not in {"verify", "generate", "compile", "check", "audit", "revise"}:
+                    self._send(400, json.dumps({"error": "Unknown Lean action"}))
+                    return
+                if len(lean_arg or "") > GUEST_MAX_LEAN_CHARACTERS:
+                    self._send(400, json.dumps({"error": "Lean source is too large for a guest action"}))
+                    return
+                if len(feedback) > GUEST_MAX_FEEDBACK_CHARACTERS:
+                    self._send(400, json.dumps({"error": "Feedback is too large for a guest action"}))
+                    return
+            if not self._admit_guest_derived_action(user, ws):
+                return
             try:
                 if action in {"compile", "check"}:
                     result = lean_verify.compile_or_check(
@@ -1921,10 +2181,10 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                         workspace=ws,
                         user=user,
                         run_record=_run_record_for(rid),
-                        message=str(body.get("message") or body.get("feedback") or ""),
+                        message=feedback,
                         model=model,
                         lean=lean_arg,
-                        max_repairs=max(0, min(int(repairs) if repairs is not None else 1, 3)),
+                        max_repairs=max(0, min(int(repairs) if repairs is not None else 1, 1 if user.get("guest") else 3)),
                     )
                 else:
                     repairs = body.get("max_repairs")
@@ -1933,7 +2193,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                         run_record=_run_record_for(rid),
                         user=user,
                         model=model,
-                        max_repairs=max(0, min(int(repairs) if repairs is not None else 2, 4)),
+                        max_repairs=max(0, min(int(repairs) if repairs is not None else 2, 1 if user.get("guest") else 4)),
                     )
             except ValueError as exc:
                 self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
@@ -1941,6 +2201,9 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": f"Lean verification failed: {exc}"}, ensure_ascii=False))
                 return
+            finally:
+                if user.get("guest"):
+                    _release_guest_derived_action(int(user["id"]))
             if action in {"compile", "check", "audit", "revise"} and str(
                 result.get("status") or ""
             ) != "running":
@@ -1987,7 +2250,11 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                         ),
                     )
                     return
-                if len(str(body.get("problem_text") or "")) > 20_000:
+                problem_text = body.get("problem_text")
+                if problem_text is not None and not isinstance(problem_text, str):
+                    self._send(400, json.dumps({"error": "problem_text must be text"}))
+                    return
+                if len(problem_text or "") > 20_000:
                     self._send(400, json.dumps({"error": "Guest problems are limited to 20,000 characters"}))
                     return
                 if requested_model is not None:
@@ -2000,37 +2267,30 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 max_iterations = max(1, min(max_iterations, guest_max_iterations()))
             try:
                 def start() -> dict:
-                    return research_projects.start_run(
-                        body.get("project_id"),
-                        user["id"],
-                        body.get("project_task"),
-                        lambda: job_manager.start_job(
-                            engine=engine,
-                            problem_id=body.get("problem_id"),
-                            problem_text=body.get("problem_text"),
-                            model=requested_model,
-                            max_iterations=max_iterations,
-                            max_output_tokens=(
-                                guest_max_output_tokens() if user.get("guest") else None
-                            ),
-                            user=user,
-                            use_subagents=(
-                                body.get("use_subagents") is not False
-                                and not user.get("guest")
-                            ),
-                            subagent_model=requested_subagent_model,
-                            attachments=body.get("attachments"),
-                            auth_route=(
-                                str(body.get("auth_route") or "").strip() or None
-                            ),
-                            reasoning_effort=(
-                                str(body.get("reasoning_effort") or "").strip() or None
-                            ),
-                            speed_mode=(
-                                str(body.get("speed_mode") or "").strip() or None
-                            ),
+                    return research_projects.start_run(body.get("project_id"), user["id"], body.get("project_task"), lambda: job_manager.start_job(
+                        engine=engine,
+                        problem_id=body.get("problem_id"),
+                        problem_text=body.get("problem_text"),
+                        model=requested_model,
+                        max_iterations=max_iterations,
+                        max_output_tokens=(
+                            guest_max_output_tokens() if user.get("guest") else None
                         ),
-                    )
+                        user=user,
+                        use_subagents=(
+                            body.get("use_subagents") is not False
+                            and not user.get("guest")
+                        ),
+                        subagent_model=requested_subagent_model,
+                        attachments=body.get("attachments"),
+                        auth_route=(str(body.get("auth_route") or "").strip() or None),
+                        reasoning_effort=(
+                            str(body.get("reasoning_effort") or "").strip() or None
+                        ),
+                        speed_mode=(
+                            str(body.get("speed_mode") or "").strip() or None
+                        ),
+                    ))
 
                 if user.get("guest"):
                     # Keep admission and start_job's synchronous job/run
@@ -2043,8 +2303,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                         if capacity_error:
                             self._send(
                                 429,
-                                json.dumps({"error": capacity_error, "guest_policy": guest_policy(user),
-                                            "login_required": guest_policy(user)["login_required"]}),
+                                json.dumps({"error": capacity_error, "guest_policy": guest_policy(user), "login_required": guest_policy(user)["login_required"]}),
                                 headers={"Retry-After": str(retry_after)},
                             )
                             return
@@ -2203,6 +2462,8 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             "/api/settings/claude/login/cancel",
             "/api/settings/claude/logout",
         ):
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import claude_login
 
             try:
@@ -2327,9 +2588,14 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                     payload = json.loads(dash.MANIFEST_PATH.read_text(encoding="utf-8"))
                 except json.JSONDecodeError:
                     payload = {"runs": []}
-            if not _is_operator_user(user):
+            # Operators keep ownerless legacy runs in their own list; other
+            # accounts' runs live in the admin view (or scope=all).
+            scope_all = (qs.get("scope") or [""])[0] == "all" and _is_operator_user(user)
+            if not scope_all:
                 payload["runs"] = [
-                    r for r in (payload.get("runs") or []) if r.get("owner_id") == user["id"]
+                    r for r in (payload.get("runs") or [])
+                    if r.get("owner_id") == user["id"]
+                    or (r.get("owner_id") is None and _is_operator_user(user))
                 ]
             for entry in payload.get("runs") or []:
                 if not entry.get("problem_preview"):
@@ -2349,8 +2615,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             route_action = action if separator else None
             # Ownership and loading must operate on exactly the same ID.
             # Reject extra path components instead of checking only the first
-            # component and later handing a traversal-shaped ID to the legacy
-            # dashboard loader.
+            # component and later handing a traversal-shaped ID to a loader.
             if (
                 not route_run_id
                 or (route_action is not None and (not route_action or "/" in route_action))
@@ -2426,7 +2691,6 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 pdf_cache_path,
                 resolve_latex_path,
             )
-
             data = dash._load_run(run_id)
             if not data:
                 self._send(404, json.dumps({"error": "run not found"}))
@@ -2460,7 +2724,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                     from agent_monitor import auto_pipeline, lean_verify, proof_bridge
 
                     data["lean_verification"] = lean_verify.monitor_summary(ws)
-                    data["auto_pipeline"] = auto_pipeline.load_state(ws)
+                    data["auto_pipeline"] = _bootstrap_guest_pipeline(user, run_id, ws, data)
                     data["proof_coverage"] = proof_bridge.load_cached(ws)
                 else:
                     data["auto_pipeline"] = None
@@ -2510,6 +2774,9 @@ def main(port: int | None = None):
         print(f"  public base path         -> {BASE_PATH}")
     print(f"  classic monitor           -> {root}/monitor")
     print(f"  cache: {_cache_harness()}")
+    from agent_monitor import usage_ledger
+
+    usage_ledger.start_backfill_thread()
     ThreadingHTTPServer((HOST, port), Handler).serve_forever()
 
 

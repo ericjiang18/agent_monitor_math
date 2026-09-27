@@ -21,7 +21,9 @@ class CodexBackendError(RuntimeError):
 # Callers that persist a no-tools provenance claim can fail closed on this
 # contract instead of assuming that an `enable_tools` keyword is enforced.
 RESPONSE_ONLY_TOOL_ISOLATION_VERSION = 4
-RESPONSE_ONLY_CODEX_CLI_VERSION = "codex-cli 0.147.0"
+# Re-vet the installed binary with the loopback transport contract before
+# changing this exact pin. A newer version alone does not prove tool isolation.
+RESPONSE_ONLY_CODEX_CLI_VERSION = "codex-cli 0.153.4"
 
 _MAX_BUNDLED_MODEL_CATALOG_BYTES = 2 * 1024 * 1024
 _MODEL_CATALOG_TIMEOUT_SECONDS = 20.0
@@ -109,6 +111,7 @@ def _response_only_args(*, enable_tools: bool) -> list[str]:
         "--disable", "request_permissions_tool",
         "--disable", "skill_mcp_dependency_install",
         "--disable", "skill_search",
+        "--disable", "sleep_tool",
         "--disable", "standalone_web_search",
         "--disable", "tool_call_mcp_elicitation",
         "--disable", "tool_suggest",
@@ -165,11 +168,12 @@ def _write_response_only_model_catalog(
 ) -> Path:
     """Create a vetted catalog whose model entries cannot advertise patch tools.
 
-    Codex 0.147 exposes three orchestration tools even when every feature flag
-    is disabled. Two have supported nested switches; ``apply_patch`` is
-    selected by the model catalog. Response-only callers therefore use the
-    exact bundled entry with that capability removed. The exact CLI version
-    is pinned because a future client may reinterpret these config fields.
+    Feature switches alone do not disable every orchestration tool: nested
+    switches control planning and user input, while the model catalog selects
+    patch and experimental tools. Response-only callers use the exact bundled
+    entry with these capabilities removed. CLI 0.153.4 is pinned and checked
+    against a loopback provider because future clients may reinterpret these
+    config fields or add default tools.
     """
     metadata_env = {
         "PATH": runtime_path,
@@ -225,6 +229,7 @@ def _write_response_only_model_catalog(
             raise CodexBackendError("Codex bundled model catalog contains an invalid slug")
         safe_model = dict(source_model)
         safe_model.pop("apply_patch_tool_type", None)
+        safe_model["experimental_supported_tools"] = []
         safe_model["include_apps_usage_instructions"] = False
         safe_model["include_plugin_usage_instructions"] = False
         safe_model["include_skills_usage_instructions"] = False
@@ -271,7 +276,10 @@ def _kimi_codex_args(base_url: str, *, enable_tools: bool) -> list[str]:
 
 def _stop_process_group(process: subprocess.Popen[str]) -> None:
     """Stop a timed-out Codex process and any tool subprocesses it started."""
-    if process.poll() is not None:
+    from agent_monitor.process_control import terminate_descendants
+
+    terminate_descendants(process.pid)
+    if os.name != "posix" and process.poll() is not None:
         return
     if os.name == "posix":
         try:
@@ -288,7 +296,6 @@ def _stop_process_group(process: subprocess.Popen[str]) -> None:
             pass
     try:
         process.communicate(timeout=2)
-        return
     except subprocess.TimeoutExpired:
         pass
     if os.name == "posix":
@@ -304,7 +311,7 @@ def _stop_process_group(process: subprocess.Popen[str]) -> None:
             process.kill()
         except OSError:
             pass
-    process.communicate()
+    process.communicate(timeout=3)
 
 
 def _run_codex_process(
@@ -328,9 +335,11 @@ def _run_codex_process(
     )
     try:
         stdout, stderr = process.communicate(input=input, timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except BaseException:
         _stop_process_group(process)
         raise
+    else:
+        _stop_process_group(process)
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 

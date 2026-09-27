@@ -415,6 +415,9 @@ def run_codex_app_server_turn(
             # explicitly avoids mutating process-global CODEX_HOME while
             # concurrent Hermes runs belong to different users.
             codex_home=getattr(agent, "_monitor_codex_home", None),
+            model=getattr(agent, "model", None),
+            reasoning_effort=(getattr(agent, "reasoning_config", None) or {}).get("effort"),
+            service_tier=getattr(agent, "service_tier", None),
             network_domains=getattr(agent, "_monitor_codex_network_domains", None),
             approval_callback=approval_callback,
             request_routing=_ServerRequestRouting(

@@ -188,6 +188,17 @@ Only the Lean checker determines whether a formal proof is verified. Engine,
 informal, and compiler graphs are useful provenance/structure views and cannot
 promote a run's verification status.
 
+Users select an engine and problem, then monitor agents, tokens, and cost in one UI.
+
+## Canonical website
+
+[moonshot.hailab.io](https://moonshot.hailab.io) is the project's current
+canonical website. This repository is the source of truth for that deployment,
+including the Proving Console UI, authentication, proving workflows, and
+Monitor experience. A move to a different server is planned; until that
+migration is completed and verified, the current website and server remain
+canonical.
+
 ## Library (memory · skills · tools)
 
 Open **Monitor** in the sidebar, then use Memory, Skills, or Tools to store

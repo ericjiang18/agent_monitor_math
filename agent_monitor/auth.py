@@ -41,7 +41,6 @@ SESSION_TTL_DAYS = 30
 GUEST_SESSION_TTL_HOURS = 24
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-_GUEST_EMAIL_RE = re.compile(r"^guest\+[0-9a-f]+@public\.local$")
 _INIT_LOCK = threading.Lock()
 _INITIALIZED = False
 _USER_ENV_CIPHERTEXT_PREFIX = "enc:v1:"
@@ -83,8 +82,7 @@ def _registration_override() -> bool | None:
 
 def registration_open() -> bool:
     """Whether an operator explicitly enabled HTTP self-registration."""
-    override = _registration_override()
-    return override is True
+    return _registration_override() is True
 
 
 def _now() -> str:
@@ -107,7 +105,7 @@ def _seed_new_user_defaults(conn: sqlite3.Connection, user_id: int) -> None:
 
 
 def _migrate_user_roles(conn: sqlite3.Connection) -> None:
-    """Add an explicit guest role and backfill legacy generated guests."""
+    """Add an explicit guest role and backfill generated legacy guests."""
     columns = {
         str(row["name"])
         for row in conn.execute("PRAGMA table_info(users)").fetchall()
@@ -121,8 +119,8 @@ def _migrate_user_roles(conn: sqlite3.Connection) -> None:
         " WHERE is_guest=0 AND email GLOB 'guest+*@public.local'"
         " AND password_hash IS NULL AND google_sub IS NULL"
     )
-    # Guest is the least-privileged role even if an older bootstrap flow (or a
-    # manually edited database) left both role bits set.
+    # Guest is always the least-privileged role, including after manual edits
+    # or legacy first-account bootstrap behavior.
     conn.execute("UPDATE users SET is_admin=0 WHERE is_guest=1 AND is_admin!=0")
 
 
@@ -167,7 +165,7 @@ def _conn() -> sqlite3.Connection:
                     value TEXT,
                     PRIMARY KEY (user_id, key)
                 );
-
+                CREATE TABLE IF NOT EXISTS guest_usage (user_id INTEGER PRIMARY KEY, runs_started INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS password_resets (
                     token_hash TEXT PRIMARY KEY,
                     user_id INTEGER NOT NULL,
@@ -184,6 +182,8 @@ def _conn() -> sqlite3.Connection:
                     ON sessions(expires_at);
                 """
                 )
+                # The role index must be created after upgrading an existing
+                # users table, which does not yet have the is_guest column.
                 _migrate_user_roles(conn)
                 conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_users_is_guest ON users(is_guest)"
@@ -204,6 +204,7 @@ def guest_runs_started(user_id: int) -> int:
     return int(row[0]) if row else 0
 
 
+
 def reserve_guest_run(user_id: int, limit: int, *, previous_runs: int = 0) -> bool:
     """Reserve one use atomically, including runs predating the usage ledger."""
     with _conn() as conn:
@@ -212,6 +213,7 @@ def reserve_guest_run(user_id: int, limit: int, *, previous_runs: int = 0) -> bo
         result = conn.execute("UPDATE guest_usage SET runs_started=runs_started+1 WHERE user_id=? AND runs_started<?",
                               (user_id, limit))
     return result.rowcount == 1
+
 
 
 def release_guest_run(user_id: int) -> None:
@@ -286,9 +288,8 @@ def register(
     *,
     require_open: bool = False,
 ) -> dict[str, Any]:
-    # The public route remains reachable so the UI can explain that account
-    # creation is closed. Reject before the deliberately expensive scrypt
-    # operation, then recheck under the write lock below.
+    # Reject a closed public registration route before the intentionally
+    # expensive scrypt operation. Recheck after taking the write lock below.
     if require_open and _registration_override() is not True:
         raise PermissionError("Account registration is currently closed")
     email = (email or "").strip().lower()
@@ -300,11 +301,10 @@ def register(
         raise ValueError("Password must be at least 8 characters")
     salt = secrets.token_bytes(16)
     pw_hash = _hash_password(password, salt)
-    with _conn() as conn:
+    with closing(_conn()) as conn, conn:
         # Serialize first-admin selection and ignore anonymous guest rows.
         conn.execute("BEGIN IMMEDIATE")
-        registration_override = _registration_override()
-        if require_open and registration_override is not True:
+        if require_open and _registration_override() is not True:
             raise PermissionError("Account registration is currently closed")
         is_admin = not _registered_user_exists(conn)
         try:
@@ -329,24 +329,10 @@ def register(
     return _user_dict(row)  # type: ignore[return-value]
 
 
-def ensure_guest_user() -> dict[str, Any]:
-    """Create a unique anonymous guest (public mode)."""
+def create_guest_session(*, replace_account_token: str | None = None) -> tuple[dict[str, Any], str]:
+    """Atomically create one isolated guest identity and 24-hour session."""
     email = f"guest+{secrets.token_hex(8)}@public.local"
     with closing(_conn()) as conn, conn:
-        cur = conn.execute(
-            "INSERT INTO users (email, name, password_hash, salt, is_admin, created_at)"
-            " VALUES (?,?,?,?,?,?)",
-            (email, "Guest", None, None, 0, _now()),
-        )
-        _seed_new_user_defaults(conn, int(cur.lastrowid))
-        row = conn.execute("SELECT * FROM users WHERE id=?", (cur.lastrowid,)).fetchone()
-    return _user_dict(row)  # type: ignore[return-value]
-
-
-def create_guest_session() -> tuple[dict[str, Any], str]:
-    """Atomically create one isolated guest identity and its session."""
-    email = f"guest+{secrets.token_hex(8)}@public.local"
-    with _conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
         cur = conn.execute(
             "INSERT INTO users"
@@ -354,14 +340,20 @@ def create_guest_session() -> tuple[dict[str, Any], str]:
             " VALUES (?,?,?,?,?,?,?)",
             (email, "Guest", None, None, 0, 1, _now()),
         )
-        row = conn.execute(
-            "SELECT * FROM users WHERE id=?", (cur.lastrowid,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM users WHERE id=?", (cur.lastrowid,)).fetchone()
         token = _insert_session(
             conn,
             int(cur.lastrowid),
             ttl=timedelta(hours=GUEST_SESSION_TTL_HOURS),
         )
+        if replace_account_token:
+            # Revoke only this browser's account session after guest creation
+            # succeeds, in the same transaction. Any failure rolls both back.
+            conn.execute(
+                "DELETE FROM sessions WHERE token_hash=? AND user_id IN"
+                " (SELECT id FROM users WHERE is_guest=0)",
+                (_token_hash(replace_account_token),),
+            )
     account = _user_dict(row)
     assert account is not None
     return account, token
@@ -405,17 +397,32 @@ def user_for_token(token: str | None) -> dict[str, Any] | None:
         return None
     with closing(_conn()) as conn, conn:
         row = conn.execute(
-            "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id"
-            " WHERE s.token_hash=? AND s.expires_at > ?",
-            (_token_hash(token), _now()),
+            "SELECT u.*, s.expires_at AS session_expires_at"
+            " FROM sessions s JOIN users u ON u.id = s.user_id"
+            " WHERE s.token_hash=?",
+            (_token_hash(token),),
         ).fetchone()
+        if row is not None and str(row["session_expires_at"]) <= _now():
+            user_id = int(row["id"])
+            conn.execute(
+                "DELETE FROM sessions WHERE token_hash=?", (_token_hash(token),)
+            )
+            if bool(row["is_guest"]):
+                conn.execute("DELETE FROM guest_usage WHERE user_id=?", (user_id,))
+                conn.execute("DELETE FROM password_resets WHERE user_id=?", (user_id,))
+                conn.execute("DELETE FROM user_env WHERE user_id=?", (user_id,))
+                conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+                conn.execute(
+                    "DELETE FROM users WHERE id=? AND is_guest=1", (user_id,)
+                )
+            row = None
     return _user_dict(row)
 
 
 def destroy_session(token: str | None) -> None:
     if not token:
         return
-    with _conn() as conn:
+    with closing(_conn()) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
         token_hash = _token_hash(token)
         session = conn.execute(
@@ -426,11 +433,11 @@ def destroy_session(token: str | None) -> None:
         conn.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
         if session is not None and bool(session["is_guest"]):
             user_id = int(session["user_id"])
-            # Ending a guest session is destructive by design: remove the
-            # abandoned identity and its encrypted provider credential.
+            # Ending a guest session is intentionally destructive: delete the
+            # identity and every encrypted provider setting attached to it.
+            conn.execute("DELETE FROM guest_usage WHERE user_id=?", (user_id,))
             conn.execute("DELETE FROM password_resets WHERE user_id=?", (user_id,))
             conn.execute("DELETE FROM user_env WHERE user_id=?", (user_id,))
-            conn.execute("DELETE FROM guest_usage WHERE user_id=?", (user_id,))
             conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
             conn.execute("DELETE FROM users WHERE id=? AND is_guest=1", (user_id,))
 
@@ -438,8 +445,8 @@ def destroy_session(token: str | None) -> None:
 def _purge_expired_guest_accounts(conn: sqlite3.Connection) -> int:
     """Delete expired/orphan guest identities and encrypted settings.
 
-    Cleanup runs inside session-creation transactions. Run artifacts remain
-    under the operator's ordinary retention policy, already marked ``guest``.
+    Cleanup runs inside session-creation transactions. Guest run artifacts
+    remain subject to the ordinary run-retention policy.
     """
     now = _now()
     conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
@@ -449,9 +456,9 @@ def _purge_expired_guest_accounts(conn: sqlite3.Connection) -> int:
     ).fetchall()
     user_ids = [int(row["id"]) for row in rows]
     for user_id in user_ids:
+        conn.execute("DELETE FROM guest_usage WHERE user_id=?", (user_id,))
         conn.execute("DELETE FROM password_resets WHERE user_id=?", (user_id,))
         conn.execute("DELETE FROM user_env WHERE user_id=?", (user_id,))
-        conn.execute("DELETE FROM guest_usage WHERE user_id=?", (user_id,))
         conn.execute("DELETE FROM users WHERE id=? AND is_guest=1", (user_id,))
     return len(user_ids)
 
@@ -781,9 +788,11 @@ def login_with_google(
     email = (claims.get("email") or "").lower()
     if not email or not claims.get("email_verified", False):
         raise ValueError("Google account has no verified email")
+    if email.endswith("@public.local"):
+        raise ValueError("Google account uses a reserved email address")
     name = claims.get("name")
     picture = claims.get("picture")
-    with _conn() as conn:
+    with closing(_conn()) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT * FROM users WHERE google_sub=?", (sub,)).fetchone()
         if row is None:
@@ -794,11 +803,10 @@ def login_with_google(
                     (sub, picture, row["id"]),
                 )
             else:
-                registration_override = _registration_override()
-                if require_open_for_new and registration_override is not True:
+                if require_open_for_new and _registration_override() is not True:
                     raise PermissionError("Account registration is currently closed")
                 is_admin = not _registered_user_exists(conn)
-                conn.execute(
+                cur = conn.execute(
                     "INSERT INTO users"
                     " (email, name, google_sub, picture, is_admin, is_guest, created_at)"
                     " VALUES (?,?,?,?,?,?,?)",

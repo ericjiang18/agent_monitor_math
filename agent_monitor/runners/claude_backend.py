@@ -117,7 +117,9 @@ def forward_as_codex_event(
                     emit(
                         {
                             "type": "item.completed",
-                            "item": {"type": "agent_message", "text": body},
+                            "item": {"type": "agent_message", "text": body,
+                                     "model": message.get("model"),
+                                     "model_source": "response" if isinstance(message.get("model"), str) and message["model"].strip() else None},
                         }
                     )
         return
@@ -126,7 +128,11 @@ def forward_as_codex_event(
     # A failed result must never become turn.completed, even when a Claude Code
     # release misleadingly labels its terminal subtype success. The typed
     # exception from _terminal_result reports the error once.
-    if event.get("is_error") or _terminal_auth_failure_detail(event):
+    if (
+        event.get("is_error")
+        or event.get("subtype") != "success"
+        or _terminal_auth_failure_detail(event)
+    ):
         return
     usage = event.get("usage") or {}
     emit(
@@ -482,7 +488,10 @@ def _build_command(
 
 
 def _stop_process_group(process: subprocess.Popen[str], *, force: bool = False) -> None:
-    if process.poll() is not None:
+    from agent_monitor.process_control import terminate_descendants
+
+    terminate_descendants(process.pid, force=force)
+    if os.name != "posix" and process.poll() is not None:
         return
     sig = signal.SIGKILL if force else signal.SIGTERM
     if os.name == "posix":
@@ -552,7 +561,9 @@ def _run_stream(
                     break
                 continue
             if line is None:
-                break
+                if process.poll() is not None:
+                    break
+                continue
             output.append(line)
             if emit_line is not None:
                 emit_line(line)
@@ -566,11 +577,14 @@ def _run_stream(
             if emit_event is not None:
                 emit_event(event)
         try:
-            process.wait(timeout=3 if timed_out else 30)
+            process.wait(timeout=3 if timed_out else max(.01, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
+            timed_out = True
             _stop_process_group(process, force=True)
             process.wait(timeout=10)
     finally:
+        _stop_process_group(process, force=True)
+        process.wait(timeout=3)
         reader.join(timeout=1)
         if process.stdout is not None:
             process.stdout.close()
@@ -626,7 +640,7 @@ def _terminal_result(process: _ProcessResult) -> ClaudeResult:
         raise ClaudeAuthenticationError(
             f"Claude Code subscription authentication failed: {auth_detail}"
         )
-    if terminal.get("is_error"):
+    if terminal.get("is_error") or subtype != "success":
         detail = result_text or subtype or "unknown Claude Code error"
         safe_subtype = subtype if subtype.lower() not in {"success", "completed"} else ""
         suffix = f" ({safe_subtype})" if safe_subtype else ""

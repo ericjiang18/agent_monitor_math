@@ -488,9 +488,7 @@ def test_guest_does_not_inherit_server_env_but_admin_does(
     assert "OPENAI_API_KEY" not in guest_env
     assert "AGENT_MONITOR_MODEL" not in guest_env
     assert "OPENAI_API_KEY" not in regular_env
-    # Some deployments initialize an account's own Kimi default. It must
-    # never inherit the operator's model override or provider credential.
-    assert regular_env.get("AGENT_MONITOR_MODEL") != "gpt-server"
+    assert "AGENT_MONITOR_MODEL" not in regular_env
     assert "OPENAI_API_KEY" not in stale_guest_env
     assert "AGENT_MONITOR_MODEL" not in stale_guest_env
     assert admin_env["OPENAI_API_KEY"] == "server-file-secret"

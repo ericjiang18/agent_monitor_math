@@ -7,10 +7,15 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-try:
+if __package__:
+    from ..proof_markdown import normalize_proof_markdown
     from .plain_runner import emit, emit_item
-except ImportError:
-    from plain_runner import emit, emit_item
+else:
+    repository_root = Path(__file__).resolve().parents[2]
+    if str(repository_root) not in sys.path:
+        sys.path.insert(0, str(repository_root))
+    from agent_monitor.proof_markdown import normalize_proof_markdown
+    from agent_monitor.runners.plain_runner import emit, emit_item
 
 
 def main() -> int:
@@ -52,7 +57,11 @@ def main() -> int:
         "You are a careful mathematician. Write in English and Markdown with LaTeX math. "
         "Distinguish complete proofs, conditional arguments, and remaining gaps. "
         "Never claim an open problem is solved without a complete justified proof. "
-        "You have no tools. Return text only; do not request shell commands or file access. "
+        "You have no tools. Return the stage's mathematical Markdown directly, "
+        "starting with a level-one heading, without enclosing it in a code fence. "
+        "The application automatically saves the response. Do not request shell "
+        "commands or file access, discuss filesystem permissions, or tell the reader "
+        "to save or copy the text. "
         "Cite only real references you know and state uncertainty where needed."
     )
     draft = critique = ""
@@ -73,7 +82,7 @@ def main() -> int:
                 max_tokens=output_limit,
                 reasoning_effort=effort,
             )
-            text = response.choices[0].message.content or ""
+            text = normalize_proof_markdown(response.choices[0].message.content or "")
             if not text.strip():
                 raise ValueError("Kimi returned an empty response")
             if response.choices[0].finish_reason == "length":
