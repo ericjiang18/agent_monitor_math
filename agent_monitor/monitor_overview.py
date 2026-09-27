@@ -17,10 +17,11 @@ def _number(value: Any) -> float:
 
 
 def _owned(record: dict[str, Any], user: dict[str, Any]) -> bool:
+    # Account usage is personal; admins see everyone in /api/admin/usage.
     owner = record.get("owner_id")
     if owner is None:
         return bool(user.get("is_admin"))
-    return owner == user.get("id") or bool(user.get("is_admin"))
+    return owner == user.get("id")
 
 
 def _load_runs(cache_dir: Path, user: dict[str, Any]) -> list[dict[str, Any]]:

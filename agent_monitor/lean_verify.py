@@ -34,6 +34,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from agent_monitor import usage_ledger
 from agent_monitor.proof_graph import (  # reuse LLM plumbing and safe reads
     CLAUDE_DERIVED_TIMEOUT_ENV,
     MAX_PROBLEM_BYTES as MAX_WORKSPACE_PROBLEM_BYTES,
@@ -1510,6 +1511,29 @@ def _llm_environment(
     from agent_monitor.jobs import _configure_auth_route, _route_from_record
     from agent_monitor.settings import resolved_user_env
 
+    if (user or {}).get("guest") or (run_record or {}).get("guest"):
+        from agent_monitor import sponsored_kimi_client
+
+        if os.environ.get("AGENT_MONITOR_GUEST_HOSTED_KIMI", "1").lower() in {
+            "0", "false", "off", "no"
+        } or not sponsored_kimi_client.configured():
+            raise ValueError("Guest Formal and DAG generation require the included Kimi service")
+        # Derived guest work receives only an expiring proxy token. It cannot
+        # inherit operator credentials, account subscriptions, or custom URLs.
+        return {
+            **sponsored_kimi_client.issue_credentials(
+                engine="formal",
+                client_id=(user or {}).get("id") or (run_record or {}).get("owner_id"),
+                cache_key=str((run_record or {}).get("run_id") or "guest-formal"),
+                minimum_ttl_seconds=600,
+            ),
+            "AGENT_MONITOR_GUEST_DERIVED": "1",
+            "AGENT_MONITOR_MODEL": "kimi-k3",
+            "AGENT_MONITOR_LLM_MAX_OUTPUT": "8192",
+            "AGENT_MONITOR_USE_CODEX": "0",
+            "AGENT_MONITOR_USE_CLAUDE": "0",
+        }
+
     runtime_env = {
         name: os.environ[name]
         for name in _FORMAL_RUNTIME_ENV_NAMES
@@ -1578,6 +1602,14 @@ def _llm_environment(
     return env
 
 
+class _ObservedModel(str):
+    """Keep the requested routing ID and provider-reported identity separate."""
+    def __new__(cls, requested: str, observed: object = None):
+        value = super().__new__(cls, requested)
+        value.observed_model = observed.strip() if isinstance(observed, str) else ""
+        return value
+
+
 def _chat(
     env: dict[str, str],
     model: str | None,
@@ -1602,10 +1634,16 @@ def _chat(
             )
         except ClaudeBackendError as exc:
             raise ValueError(str(exc)) from exc
+        usage_ledger.record_usage(
+            model=str(result.model or selected),
+            usage=usage_ledger.cli_usage(getattr(result, "usage", None), input_includes_cache=False),
+            billing="subscription",
+            cost_usd=getattr(result, "cost_usd", None),
+        )
         content = str(result.text or "").strip()
         if not content:
             raise ValueError("Claude Code returned an empty Lean response")
-        return str(result.model or selected), content
+        return _ObservedModel(str(result.model or selected), result.model), content
     if env.get("AGENT_MONITOR_CODEX_SUBSCRIPTION") == "1":
         from agent_monitor.proof_graph import _run_codex_prompt_env
 
@@ -1624,7 +1662,10 @@ def _chat(
 
 def _terminate_process_group(proc: subprocess.Popen[str], *, force: bool = False) -> None:
     """Terminate a verifier and every Lake/Lean child it spawned."""
-    if proc.poll() is not None:
+    from agent_monitor.process_control import terminate_descendants
+
+    terminate_descendants(proc.pid, force=force)
+    if os.name != "posix" and proc.poll() is not None:
         return
     try:
         os.killpg(proc.pid, signal.SIGKILL if force else signal.SIGTERM)
@@ -2166,6 +2207,7 @@ def _persist(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     prev = load_cached(workspace) or {}
+    lean_src = lean_src.rstrip() + "\n"
     kernel_receipt = _trusted_kernel_receipt(authoritative_check)
     verified_source_sha256 = ""
     if status in {"verified", "unfaithful"} and kernel_receipt is not None:
@@ -2234,7 +2276,18 @@ def _persist(
             ],
             "checker_profile": kernel_receipt["checker_profile"],
         })
+    # Keep authorship tied to the exact generated source. Checking or auditing
+    # a hand-edited file must not inherit the previous model's authorship.
+    source_digest = hashlib.sha256(lean_src.encode()).hexdigest()
+    provenance = prev.get("source_provenance") or {}
+    if action in {"verify", "revise"}:
+        observed = getattr(model, "observed_model", "")
+        provenance = ({"model": observed, "sha256": source_digest,
+                       "evidence": "provider_response"} if observed else {})
+    elif provenance.get("sha256") != source_digest or action == "harness":
+        provenance = {}
     result = {
+        "source_provenance": provenance,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "model": model or prev.get("model"),
         "source": source or prev.get("source") or "",
@@ -2542,6 +2595,8 @@ def _codex_subscription_interaction(
     edited source is copied back only after this function returns and the
     normal checker path validates it.
     """
+    if (user or {}).get("guest") or (run_record or {}).get("guest"):
+        raise ValueError("Guest Formal actions use the included Kimi service")
     from agent_monitor import codex_login
     from agent_monitor.cli_events import CLIEventParser
     from agent_monitor.engines_registry import build_cli_command
@@ -2611,6 +2666,11 @@ def _codex_subscription_interaction(
             raise ValueError(f"Codex intervention timed out after {timeout_s}s") from exc
         parser = CLIEventParser("codex")
         parser.feed((proc.stdout or "") + "\n" + (proc.stderr or ""))
+        usage_ledger.record_usage(
+            model=str(parser.usage.get("model") or "codex"),
+            usage=usage_ledger.cli_usage(parser.usage, input_includes_cache=True),
+            billing="subscription",
+        )
         answer = parser.final_message().strip()
         if proc.returncode != 0:
             detail = (parser.output() or proc.stderr or proc.stdout or "Codex failed")[-1200:]
@@ -2815,7 +2875,7 @@ def _revise_with_feedback_impl(
             notes = str(codex_result["answer"] or notes)
             citations = _citations_from_lean(lean_src)
         else:
-            _, repair_content = _chat(env, chosen_model, repair_prompt)
+            chosen_model, repair_content = _chat(env, chosen_model, repair_prompt)
             repaired = _parse_model_payload(repair_content)
             lean_src = repaired["lean"]
             uses_mathlib = bool(repaired["uses_mathlib"]) or uses_mathlib
@@ -2857,6 +2917,7 @@ def _revise_with_feedback_impl(
 
 
 @_serialized_formal_operation("revise")
+@usage_ledger.attributed("lean")
 def revise_with_feedback(
     *,
     workspace: Path,
@@ -2868,6 +2929,9 @@ def revise_with_feedback(
     max_repairs: int = 1,
 ) -> dict[str, Any]:
     """Serialize a run's interventions and guarantee visible failure feedback."""
+    if (user or {}).get("guest") or (run_record or {}).get("guest"):
+        model = "kimi-k3"
+        max_repairs = max(0, min(int(max_repairs), 1))
     lock = _intervention_lock(workspace)
     if not lock.acquire(blocking=False):
         raise ValueError("Another Lean intervention is already running for this proof")
@@ -2902,6 +2966,7 @@ def revise_with_feedback(
 
 
 @_serialized_formal_operation("generate")
+@usage_ledger.attributed("lean")
 def generate(
     *,
     workspace: Path,
@@ -2920,6 +2985,10 @@ def generate(
     convincingly is the failure mode this guards against.
     """
     from agent_monitor.settings import resolved_user_env
+
+    if (user or {}).get("guest") or (run_record or {}).get("guest"):
+        model = "kimi-k3"
+        max_repairs = max(0, min(int(max_repairs), 1))
 
     problem = (
         _read_optional_workspace_text(
@@ -2993,7 +3062,7 @@ def generate(
         repair_prompt = REPAIR_PROMPT.replace("{lean}", lean_src[:40000]).replace(
             "{errors}", err_blob
         )
-        _, repair_content = _chat(env, chosen_model, repair_prompt)
+        chosen_model, repair_content = _chat(env, chosen_model, repair_prompt)
         repaired = _parse_model_payload(repair_content)
         lean_src = repaired["lean"]
         uses_mathlib = bool(repaired["uses_mathlib"]) or uses_mathlib
@@ -3062,7 +3131,7 @@ def generate(
                     repair_prompt = REPAIR_PROMPT.replace("{lean}", lean_src[:40000]).replace(
                         "{errors}", err_blob
                     )
-                    _, repair_content = _chat(env, chosen_model, repair_prompt)
+                    chosen_model, repair_content = _chat(env, chosen_model, repair_prompt)
                     repaired = _parse_model_payload(repair_content)
                     lean_src = repaired["lean"]
                     uses_mathlib = bool(repaired["uses_mathlib"]) or uses_mathlib
@@ -3172,6 +3241,7 @@ def _repair_statement(
 
 
 @_serialized_formal_operation("audit")
+@usage_ledger.attributed("lean")
 def audit_current(
     *,
     workspace: Path,
@@ -3342,6 +3412,8 @@ def harness_model_options(
     run_record: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return route-specific Formal Lean models for the selected run."""
+    if (user or {}).get("guest") or (run_record or {}).get("guest"):
+        return {"auth_route": "api_key", "models": ["kimi-k3"], "selected": "kimi-k3"}
     route, _env = _harness_auth_route(user, run_record)
     owner_id = (user or {}).get("id") or (run_record or {}).get("owner_id")
     models: list[str] = []
@@ -3386,6 +3458,8 @@ def harness_engines(
     model: str | None = None,
 ) -> list[dict[str, Any]]:
     """CLI agents usable for Lean work on exactly one authentication route."""
+    if (user or {}).get("guest") or (run_record or {}).get("guest"):
+        return []
     from agent_monitor import claude_login, codex_login
     from agent_monitor.engines_registry import (
         CLI_ENGINES,
@@ -4009,6 +4083,8 @@ def start_harness(
     audit: bool = True,
 ) -> dict[str, Any]:
     """Reserve a proof workspace and launch its Formal Lean harness."""
+    if (user or {}).get("guest") or (run_record or {}).get("guest"):
+        raise ValueError("Sign in to use a coding-agent Formal harness")
     resolved = Path(workspace).resolve()
     token = _reserve_formal_operation(resolved, f"harness/{engine}")
     try:
@@ -4168,6 +4244,10 @@ def _harness_worker(
     except (OSError, subprocess.TimeoutExpired) as exc:
         lines.append(f"\n[agent-monitor] harness error: {exc}\n")
     finally:
+        _terminate_process_group(proc, force=True)
+        reader.join(timeout=1)
+        if proc.stdout is not None:
+            proc.stdout.close()
         with _HARNESS_LOCK:
             job = _HARNESS_JOBS.get(key) or {}
             stopped = bool(job.get("stopping"))
@@ -4265,6 +4345,37 @@ def _harness_fidelity_audit(
 
 
 
+def _record_harness_usage(
+    engine: str,
+    log: str,
+    model: str,
+    route: str,
+    run_record: dict[str, Any] | None,
+) -> None:
+    """Book the Lean harness CLI's own token usage (never part of run totals)."""
+    from agent_monitor.cli_events import CLIEventParser
+
+    is_claude = str(engine or "").startswith("claude")
+    parser = CLIEventParser("claude" if is_claude else "codex")
+    try:
+        parser.feed(log or "")
+    except Exception:  # noqa: BLE001 - usage capture is best-effort
+        return
+    if route in {"codex_subscription", "claude_subscription"}:
+        billing = "subscription"
+    elif str((run_record or {}).get("credential_source") or "") == "sponsored_kimi":
+        billing = "sponsored"
+    else:
+        billing = "api" if route == "api_key" else None
+    usage_ledger.record_usage(
+        model=str(parser.usage.get("model") or model or engine),
+        usage=usage_ledger.cli_usage(parser.usage, input_includes_cache=not is_claude),
+        billing=billing,
+        cost_usd=parser.usage.get("cost_usd"),
+    )
+
+
+@usage_ledger.attributed("lean")
 def _harness_finish(
     *,
     workspace: Path,
@@ -4301,6 +4412,7 @@ def _harness_finish(
         or _route_from_record(run_record)
         or ""
     ).strip()
+    _record_harness_usage(engine, log, effective_model, effective_route, run_record)
     tail = log[-4000:]
     lean_text, final_fingerprint, artifact_reason = _regular_root_lean_artifact(
         workspace

@@ -43,6 +43,7 @@ _MAX_OUTPUT_CHARS = 4000
 # run usable during that short bootstrap window; the account's real cache takes
 # precedence as soon as Codex creates it.
 DEFAULT_CODEX_MODELS = (
+    "gpt-6-astra",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
@@ -103,13 +104,15 @@ def available_models(user_id: int) -> list[str]:
         if not isinstance(item, dict):
             continue
         slug = str(item.get("slug") or "").strip()
-        if not slug or str(item.get("visibility") or "").lower() in {"hide", "hidden"}:
+        if not slug or (slug != "gpt-6-astra" and str(item.get("visibility") or "").lower() in {"hide", "hidden"}):
             continue
         priority = item.get("priority")
         rank = int(priority) if isinstance(priority, (int, float)) else 10_000
         ranked.append((rank, slug))
     ranked.sort(key=lambda item: (item[0], item[1]))
     models = list(dict.fromkeys(slug for _, slug in ranked))
+    if models and "gpt-6-astra" not in models and any(m.startswith("gpt-5.6-") for m in models):
+        models.insert(0, "gpt-6-astra")
     return models or fallback
 
 

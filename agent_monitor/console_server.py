@@ -13,10 +13,16 @@ import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse, urlsplit, urlunsplit
+from typing import Any
+from urllib.parse import parse_qs, quote, urlparse, urlsplit, urlunsplit
 
 from agent_monitor import CACHE_DIR, PROBLEMS_DIR, ROOT, RUNS_DIR
 from agent_monitor import jobs as job_manager
+from agent_monitor.run_sharing import RunSharingMixin
+from agent_monitor.projects import ProjectsMixin
+from agent_monitor.research import ResearchMixin
+from agent_monitor import projects as research_projects
+from agent_monitor import attachments as research_attachments
 from agent_monitor.paths import ensure_data_dirs, ensure_import_paths
 
 ensure_import_paths()
@@ -50,6 +56,29 @@ _PASSWORD_RESET_LOCK = threading.Lock()
 _PASSWORD_RESET_RECENT: dict[bytes, float] = {}
 _PASSWORD_RESET_WINDOW: deque[float] = deque()
 _PASSWORD_RESET_WORKER_STARTED = False
+_GUEST_SESSION_WINDOW_SECONDS = 60.0
+_GUEST_SESSION_WINDOW: deque[float] = deque()
+_GUEST_SESSION_LOCK = threading.Lock()
+_GUEST_RUN_WINDOW_SECONDS = 3600.0
+_GUEST_RUN_WINDOWS: dict[int, deque[float]] = {}
+_GUEST_GLOBAL_RUN_WINDOW: deque[float] = deque()
+# Held through both admission and job registration so simultaneous HTTP
+# requests cannot all pass the same concurrency/retained-run snapshot.
+_GUEST_RUN_START_LOCK = threading.RLock()
+_GUEST_VERIFY_WINDOW_SECONDS = 3600.0
+_GUEST_VERIFY_WINDOWS: dict[int, deque[float]] = {}
+_GUEST_VERIFY_GLOBAL_WINDOW: deque[float] = deque()
+_GUEST_VERIFY_ACTIVE_USERS: set[int] = set()
+_GUEST_VERIFY_LOCK = threading.Lock()
+_GUEST_DERIVED_WINDOW_SECONDS = 3600.0
+_GUEST_DERIVED_WINDOWS: dict[int, deque[float]] = {}
+_GUEST_DERIVED_GLOBAL_WINDOW: deque[float] = deque()
+_GUEST_DERIVED_ACTIVE_USERS: set[int] = set()
+_GUEST_DERIVED_LOCK = threading.Lock()
+_GUEST_PIPELINE_BOOTSTRAP_LOCK = threading.Lock()
+_GUEST_PIPELINE_BOOTSTRAPS: dict[str, tuple[int, Path]] = {}
+GUEST_MAX_LEAN_CHARACTERS = 100_000
+GUEST_MAX_FEEDBACK_CHARACTERS = 8_000
 
 
 def _password_reset_worker() -> None:
@@ -139,6 +168,400 @@ PUBLIC_MODE = os.environ.get("AGENT_MONITOR_PUBLIC", "").strip().lower() in {
     "yes",
     "on",
 }
+
+# Only the single remote API call baseline is guest-eligible. Local agent and
+# harness engines do not provide an operating-system isolation boundary.
+GUEST_ELIGIBLE_ENGINES = frozenset({"kimi", "plain"})
+GUEST_DEFAULT_ENGINES = GUEST_ELIGIBLE_ENGINES
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _bounded_env_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+def guest_access_enabled() -> bool:
+    """Whether visitors may deliberately create a restricted guest session."""
+    # An explicit false value must also disable legacy auto-public mode.
+    return _env_flag("AGENT_MONITOR_GUEST_ACCESS", default=True) and bool(
+        guest_engine_allowlist()
+    )
+
+
+def guest_engine_allowlist() -> frozenset[str]:
+    """Guest-safe engines selected by the operator, within a fixed ceiling."""
+    raw = os.environ.get("AGENT_MONITOR_GUEST_ENGINES")
+    requested = (
+        set(GUEST_DEFAULT_ENGINES)
+        if raw is None
+        else {part.strip().lower() for part in raw.split(",") if part.strip()}
+    )
+    allowed = requested & GUEST_ELIGIBLE_ENGINES
+    # A command override changes Plain from the reviewed single-call runner
+    # into arbitrary operator-selected local code. Never expose that variant
+    # through an anonymous session.
+    if os.environ.get("PLAIN_CMD", "").strip():
+        allowed.discard("plain")
+    if os.environ.get("KIMI_PROOF_CMD", "").strip():
+        allowed.discard("kimi")
+    return frozenset(allowed)
+
+
+def guest_max_iterations() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_MAX_ITERATIONS", default=8, minimum=1, maximum=20
+    )
+
+
+def guest_max_output_tokens() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_MAX_OUTPUT_TOKENS",
+        default=4096,
+        minimum=256,
+        maximum=8192,
+    )
+
+
+def guest_runs_per_session() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_RUNS_PER_SESSION", default=10, minimum=1, maximum=10
+    )
+
+
+def guest_runs_per_hour() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_RUNS_PER_HOUR", default=6, minimum=1, maximum=24
+    )
+
+
+def guest_global_runs_per_hour() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_GLOBAL_RUNS_PER_HOUR",
+        default=30,
+        minimum=1,
+        maximum=240,
+    )
+
+
+def guest_verifications_per_hour() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_VERIFICATIONS_PER_HOUR",
+        default=6,
+        minimum=1,
+        maximum=24,
+    )
+
+
+def guest_global_verifications_per_hour() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_GLOBAL_VERIFICATIONS_PER_HOUR",
+        default=60,
+        minimum=1,
+        maximum=240,
+    )
+
+
+def _is_operator_user(user: dict[str, Any]) -> bool:
+    """Guest status always overrides a stale/corrupt admin bit."""
+    return bool(user.get("is_admin")) and not bool(user.get("guest"))
+
+
+def guest_policy(user: dict | None = None) -> dict[str, Any]:
+    """Client-visible policy; enforcement remains entirely server-side."""
+    from agent_monitor.auth import guest_runs_started
+    from agent_monitor.settings import GUEST_DEFAULT_MODEL, hosted_guest_kimi_available
+    used = max(guest_runs_started(int(user["id"])), job_manager.persisted_run_count(int(user["id"]))) if user and user.get("guest") else 0
+    return {
+        "engines": sorted(guest_engine_allowlist()),
+        "default_engine": "kimi" if "kimi" in guest_engine_allowlist() else "plain",
+        "default_model": GUEST_DEFAULT_MODEL,
+        "runs_used": used,
+        "runs_remaining": max(0, guest_runs_per_session() - used),
+        "login_required": used >= guest_runs_per_session(),
+        "hosted_guest_available": hosted_guest_kimi_available(),
+        "max_iterations": guest_max_iterations(),
+        "max_output_tokens": guest_max_output_tokens(),
+        "runs_per_session": guest_runs_per_session(),
+        "runs_per_hour": guest_runs_per_hour(),
+        "provider_verifications_per_hour": guest_verifications_per_hour(),
+        "max_problem_characters": 20_000,
+        "subagents": False,
+        "continuation": False,
+        "proof_graph_generation": True,
+        "lean_actions": True,
+        "formal_harness": False,
+        "derived_actions_per_hour": guest_derived_actions_per_hour(),
+        "provider": "kimi",
+        "custom_provider_base": False,
+    }
+
+
+def _guest_run_capacity_error(user_id: int) -> str | None:
+    from agent_monitor.auth import guest_runs_started
+    if max(guest_runs_started(user_id), job_manager.persisted_run_count(user_id)) >= guest_runs_per_session():
+        return f"You have used all {guest_runs_per_session()} guest runs. Sign in to continue"
+    active_states = {"queued", "starting", "running", "continuing"}
+    active = [
+        job
+        for job in job_manager.list_jobs()
+        if str(job.get("status") or "").lower() in active_states
+    ]
+    per_guest_limit = _bounded_env_int(
+        "AGENT_MONITOR_GUEST_CONCURRENCY", default=1, minimum=1, maximum=4
+    )
+    if sum(job.get("owner_id") == user_id for job in active) >= per_guest_limit:
+        return "Wait for your current guest run to finish before starting another"
+    global_limit = _bounded_env_int(
+        "AGENT_MONITOR_GUEST_GLOBAL_CONCURRENCY", default=2, minimum=1, maximum=16
+    )
+    if sum(bool(job.get("guest")) for job in active) >= global_limit:
+        return "Guest run capacity is currently full; please try again later"
+    return None
+
+
+def _reserve_guest_run_slot(user_id: int) -> tuple[str | None, int]:
+    """Atomically enforce active, per-session, and rolling guest run limits."""
+    now = time.monotonic()
+    cutoff = now - _GUEST_RUN_WINDOW_SECONDS
+    with _GUEST_RUN_START_LOCK:
+        for existing_id, window in list(_GUEST_RUN_WINDOWS.items()):
+            while window and window[0] <= cutoff:
+                window.popleft()
+            if not window:
+                _GUEST_RUN_WINDOWS.pop(existing_id, None)
+        while _GUEST_GLOBAL_RUN_WINDOW and _GUEST_GLOBAL_RUN_WINDOW[0] <= cutoff:
+            _GUEST_GLOBAL_RUN_WINDOW.popleft()
+
+        capacity_error = _guest_run_capacity_error(user_id)
+        if capacity_error:
+            return capacity_error, 30
+        user_window = _GUEST_RUN_WINDOWS.setdefault(user_id, deque())
+        if len(user_window) >= guest_runs_per_hour():
+            retry = max(1, int(_GUEST_RUN_WINDOW_SECONDS - (now - user_window[0])))
+            return "This guest session has reached its hourly run limit", retry
+        if len(_GUEST_GLOBAL_RUN_WINDOW) >= guest_global_runs_per_hour():
+            retry = max(
+                1,
+                int(
+                    _GUEST_RUN_WINDOW_SECONDS
+                    - (now - _GUEST_GLOBAL_RUN_WINDOW[0])
+                ),
+            )
+            return "Guest run capacity is currently full; please try again later", retry
+
+        user_window.append(now)
+        _GUEST_GLOBAL_RUN_WINDOW.append(now)
+    return None, 0
+
+
+def _reserve_guest_session_slot() -> tuple[bool, int]:
+    """Bound anonymous account creation; existing guest sessions bypass this."""
+    limit = _bounded_env_int(
+        "AGENT_MONITOR_GUEST_SESSIONS_PER_MINUTE",
+        default=10,
+        minimum=1,
+        maximum=120,
+    )
+    now = time.monotonic()
+    with _GUEST_SESSION_LOCK:
+        cutoff = now - _GUEST_SESSION_WINDOW_SECONDS
+        while _GUEST_SESSION_WINDOW and _GUEST_SESSION_WINDOW[0] <= cutoff:
+            _GUEST_SESSION_WINDOW.popleft()
+        if len(_GUEST_SESSION_WINDOW) >= limit:
+            retry = max(1, int(_GUEST_SESSION_WINDOW_SECONDS - (now - _GUEST_SESSION_WINDOW[0])))
+            return False, retry
+        _GUEST_SESSION_WINDOW.append(now)
+    return True, 0
+
+
+def _reserve_guest_verification(user_id: int) -> tuple[str | None, int]:
+    """Bound slow outbound key checks by guest and across the service."""
+    now = time.monotonic()
+    cutoff = now - _GUEST_VERIFY_WINDOW_SECONDS
+    with _GUEST_VERIFY_LOCK:
+        for existing_id, window in list(_GUEST_VERIFY_WINDOWS.items()):
+            while window and window[0] <= cutoff:
+                window.popleft()
+            if not window:
+                _GUEST_VERIFY_WINDOWS.pop(existing_id, None)
+        while _GUEST_VERIFY_GLOBAL_WINDOW and _GUEST_VERIFY_GLOBAL_WINDOW[0] <= cutoff:
+            _GUEST_VERIFY_GLOBAL_WINDOW.popleft()
+
+        if user_id in _GUEST_VERIFY_ACTIVE_USERS:
+            return "Wait for the current key verification to finish", 20
+        global_concurrency = _bounded_env_int(
+            "AGENT_MONITOR_GUEST_VERIFY_GLOBAL_CONCURRENCY",
+            default=4,
+            minimum=1,
+            maximum=16,
+        )
+        if len(_GUEST_VERIFY_ACTIVE_USERS) >= global_concurrency:
+            return "Guest verification capacity is currently full", 20
+
+        user_window = _GUEST_VERIFY_WINDOWS.setdefault(user_id, deque())
+        if len(user_window) >= guest_verifications_per_hour():
+            retry = max(
+                1,
+                int(_GUEST_VERIFY_WINDOW_SECONDS - (now - user_window[0])),
+            )
+            return "This guest session has reached its verification limit", retry
+        if len(_GUEST_VERIFY_GLOBAL_WINDOW) >= guest_global_verifications_per_hour():
+            retry = max(
+                1,
+                int(
+                    _GUEST_VERIFY_WINDOW_SECONDS
+                    - (now - _GUEST_VERIFY_GLOBAL_WINDOW[0])
+                ),
+            )
+            return "Guest verification capacity is currently full", retry
+
+        user_window.append(now)
+        _GUEST_VERIFY_GLOBAL_WINDOW.append(now)
+        _GUEST_VERIFY_ACTIVE_USERS.add(user_id)
+    return None, 0
+
+
+def _release_guest_verification(user_id: int) -> None:
+    with _GUEST_VERIFY_LOCK:
+        _GUEST_VERIFY_ACTIVE_USERS.discard(user_id)
+
+
+def guest_derived_actions_per_hour() -> int:
+    return _bounded_env_int(
+        "AGENT_MONITOR_GUEST_DERIVED_ACTIONS_PER_HOUR",
+        default=24,
+        minimum=1,
+        maximum=60,
+    )
+
+
+def _reserve_guest_derived_action(user_id: int) -> tuple[str | None, int]:
+    """Bound synchronous Formal/DAG work independently from key checks."""
+    now = time.monotonic()
+    cutoff = now - _GUEST_DERIVED_WINDOW_SECONDS
+    with _GUEST_DERIVED_LOCK:
+        for existing_id, window in list(_GUEST_DERIVED_WINDOWS.items()):
+            while window and window[0] <= cutoff:
+                window.popleft()
+            if not window:
+                _GUEST_DERIVED_WINDOWS.pop(existing_id, None)
+        while _GUEST_DERIVED_GLOBAL_WINDOW and _GUEST_DERIVED_GLOBAL_WINDOW[0] <= cutoff:
+            _GUEST_DERIVED_GLOBAL_WINDOW.popleft()
+        if user_id in _GUEST_DERIVED_ACTIVE_USERS:
+            return "Wait for your current Formal or DAG action to finish", 20
+        concurrency = _bounded_env_int(
+            "AGENT_MONITOR_GUEST_DERIVED_GLOBAL_CONCURRENCY",
+            default=2,
+            minimum=1,
+            maximum=8,
+        )
+        if len(_GUEST_DERIVED_ACTIVE_USERS) >= concurrency:
+            return "Guest Formal and DAG capacity is currently full", 20
+        global_limit = _bounded_env_int(
+            "AGENT_MONITOR_GUEST_DERIVED_GLOBAL_ACTIONS_PER_HOUR",
+            default=120,
+            minimum=1,
+            maximum=480,
+        )
+        # Check the global ceiling before allocating a new visitor bucket.
+        if len(_GUEST_DERIVED_GLOBAL_WINDOW) >= global_limit:
+            retry = max(1, int(_GUEST_DERIVED_WINDOW_SECONDS - (now - _GUEST_DERIVED_GLOBAL_WINDOW[0])))
+            return "Guest Formal and DAG capacity is currently full", retry
+        user_window = _GUEST_DERIVED_WINDOWS.get(user_id)
+        if user_window and len(user_window) >= guest_derived_actions_per_hour():
+            retry = max(1, int(_GUEST_DERIVED_WINDOW_SECONDS - (now - user_window[0])))
+            return "This guest session has reached its hourly Formal and DAG limit", retry
+        _GUEST_DERIVED_WINDOWS.setdefault(user_id, deque()).append(now)
+        _GUEST_DERIVED_GLOBAL_WINDOW.append(now)
+        _GUEST_DERIVED_ACTIVE_USERS.add(user_id)
+    return None, 0
+
+
+def _release_guest_derived_action(user_id: int) -> None:
+    with _GUEST_DERIVED_LOCK:
+        _GUEST_DERIVED_ACTIVE_USERS.discard(user_id)
+
+
+def _guest_formal_options() -> dict[str, Any]:
+    """Guests use the hosted API, with no local harness discovery or fallback."""
+    from agent_monitor.settings import GUEST_DEFAULT_MODEL
+
+    return {
+        "engines": [],
+        "harness_auth_route": "api_key",
+        "harness_models": [GUEST_DEFAULT_MODEL],
+        "harness_model": GUEST_DEFAULT_MODEL,
+        "harness_engine": "",
+        "harness_available": False,
+    }
+
+
+def _bootstrap_guest_pipeline(
+    user: dict[str, Any], run_id: str, workspace: Path, run_record: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Derive an old guest proof once when its owner opens that completed run."""
+    from agent_monitor import auto_pipeline, sponsored_kimi_client
+    from agent_monitor.settings import GUEST_DEFAULT_MODEL, hosted_guest_kimi_available
+
+    state = auto_pipeline.load_state(workspace)
+    if (
+        state is not None
+        or not user.get("guest")
+        or not run_record.get("guest")
+        or run_record.get("owner_id") != user.get("id")
+        or str(run_record.get("status") or "").lower() != "finished"
+        or os.environ.get("AGENT_MONITOR_DISABLE_AUTO_PIPELINE", "").strip() == "1"
+    ):
+        return state
+    # The existing bounded reader also recognizes a substantial final answer
+    # for successful legacy runs that did not persist a proof.md file.
+    if not auto_pipeline._source_signature(workspace, run_record):
+        return None
+    if not hosted_guest_kimi_available() or not sponsored_kimi_client.configured():
+        return None
+    with _GUEST_PIPELINE_BOOTSTRAP_LOCK:
+        # Polling or simultaneous tabs must never queue a second sidecar.
+        state = auto_pipeline.load_state(workspace)
+        if state is not None:
+            return state
+        for active_id, (_owner, active_workspace) in list(_GUEST_PIPELINE_BOOTSTRAPS.items()):
+            active_state = auto_pipeline.load_state(active_workspace) or {}
+            if active_state.get("status") != "running":
+                _GUEST_PIPELINE_BOOTSTRAPS.pop(active_id, None)
+        owner_id = int(user["id"])
+        if len(_GUEST_PIPELINE_BOOTSTRAPS) >= 2 or any(
+            owner == owner_id for owner, _ws in _GUEST_PIPELINE_BOOTSTRAPS.values()
+        ):
+            return None
+        error, _retry_after = _reserve_guest_derived_action(owner_id)
+        if error:
+            return None
+        try:
+            state = auto_pipeline.start(
+                run_id=run_id,
+                workspace=workspace,
+                owner_id=owner_id,
+                model=GUEST_DEFAULT_MODEL,
+                engine=str(run_record.get("engine") or "kimi"),
+            )
+            if state.get("status") == "running":
+                _GUEST_PIPELINE_BOOTSTRAPS[run_id] = (owner_id, workspace)
+            return state
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Guest pipeline bootstrap failed (%s)", type(exc).__name__)
+            return None
+        finally:
+            _release_guest_derived_action(owner_id)
 
 
 def _with_base(path: str, base_path: str | None = None) -> str:
@@ -397,11 +820,21 @@ def _file_revision(path: Path) -> str:
     return f"{path_stat.st_mtime_ns}:{path_stat.st_size}"
 
 
+def _contained_path(root: Path, relative: str) -> Path | None:
+    """Resolve a relative path only when its real target stays in ``root``."""
+    if not relative or Path(relative).is_absolute():
+        return None
+    resolved_root = root.resolve()
+    try:
+        target = (resolved_root / relative).resolve()
+    except (OSError, RuntimeError):
+        return None
+    return target if target.is_relative_to(resolved_root) else None
+
+
 def _workspace_target(workspace: Path, relative: str) -> Path | None:
     """Resolve a path only when its real target stays inside ``workspace``."""
-    root = workspace.resolve()
-    target = (root / relative).resolve()
-    return target if target.is_relative_to(root) else None
+    return _contained_path(workspace, relative)
 
 
 def _static_asset(relative: str) -> Path | None:
@@ -591,6 +1024,7 @@ _PUBLIC_PATHS = {
     "/api/auth/login",
     "/api/auth/register",
     "/api/auth/google",
+    "/api/auth/guest",
     "/api/auth/me",
     "/api/auth/forgot-password",
     "/api/auth/reset-password",
@@ -598,13 +1032,14 @@ _PUBLIC_PATHS = {
 }
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # noqa: A003
         print(f"[console] {self.address_string()} {fmt % args}")
 
     def log_request(self, code="-", size="-"):
         """Log request paths without query strings that may contain reset tokens."""
         path = urlparse(self.path).path
+        path = re.sub(r"/(?:api/)?shared/[^/]+|/invite/[^/]+", "/private-link/[redacted]", path)
         self.log_message('"%s %s %s" %s %s', self.command, path, self.request_version, code, size)
 
     def _send(self, code: int, body: str, ctype: str = "application/json", headers: dict[str, str] | None = None):
@@ -635,15 +1070,54 @@ class Handler(BaseHTTPRequestHandler):
         )
         pending = getattr(self, "_pending_session_cookie", None)
         if pending and "Set-Cookie" not in out:
-            out["Set-Cookie"] = self._session_cookie_header(pending)
+            out["Set-Cookie"] = self._session_cookie_header(
+                pending,
+                guest=bool(getattr(self, "_pending_session_guest", False)),
+            )
             self._pending_session_cookie = None
+            self._pending_session_guest = False
         return out
 
-    def _issue_guest(self) -> dict:
+    def _issue_guest(self, *, replace_account_token: str | None = None) -> dict | None:
         from agent_monitor import auth
 
-        account = auth.ensure_guest_user()
-        self._pending_session_cookie = auth.create_session(int(account["id"]))
+        available, retry_after = _reserve_guest_session_slot()
+        if not available:
+            self._send(
+                429,
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "Guest capacity is busy; please try again shortly",
+                    }
+                ),
+                headers={
+                    "Cache-Control": "no-store",
+                    "Pragma": "no-cache",
+                    "Retry-After": str(retry_after),
+                },
+            )
+            return None
+        try:
+            if replace_account_token:
+                account, token = auth.create_guest_session(replace_account_token=replace_account_token)
+            else:
+                account, token = auth.create_guest_session()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Guest session creation failed (%s)", type(exc).__name__)
+            self._send(
+                503,
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "Guest access is temporarily unavailable",
+                    }
+                ),
+                headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+            )
+            return None
+        self._pending_session_cookie = token
+        self._pending_session_guest = True
         return account
 
     # ── auth helpers ─────────────────────────────────────────────────────
@@ -663,11 +1137,86 @@ class Handler(BaseHTTPRequestHandler):
     def _current_user(self) -> dict | None:
         from agent_monitor import auth
 
-        return auth.user_for_token(self._session_token())
+        user = auth.user_for_token(self._session_token())
+        if user and user.get("guest") and not guest_access_enabled():
+            return None
+        return user
 
-    def _session_cookie_header(self, token: str | None) -> str:
+    def _require_operator(self, user: dict) -> bool:
+        """Admin-only endpoints: enforced here, never by the UI alone."""
+        if _is_operator_user(user):
+            return True
+        self._send(403, json.dumps({"error": "admin access required"}), headers={"Cache-Control": "no-store"})
+        return False
+
+    def _deny_guest(self, user: dict, capability: str) -> bool:
+        """Reject shared control-plane actions for anonymous sessions."""
+        if not user.get("guest"):
+            return False
+        self._send(
+            403,
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": f"Sign in to access {capability}",
+                }
+            ),
+            headers={"Cache-Control": "no-store"},
+        )
+        return True
+
+    def _admit_guest_derived_action(self, user: dict, workspace: Path) -> bool:
+        if not user.get("guest"):
+            return True
+        from agent_monitor import auto_pipeline
+
+        state = auto_pipeline.load_state(workspace) or {}
+        if state.get("status") == "running":
+            self._send(
+                409,
+                json.dumps({"error": "Wait for the automatic Formal and DAG pipeline to finish"}),
+                headers={"Retry-After": "20"},
+            )
+            return False
+        error, retry_after = _reserve_guest_derived_action(int(user["id"]))
+        if error:
+            self._send(
+                429,
+                json.dumps({"error": error}),
+                headers={"Retry-After": str(retry_after)},
+            )
+            return False
+        return True
+
+    def _deny_run_compilation(self, user: dict, run_id: str) -> bool:
+        """Never execute TeX originating from an anonymous guest run."""
+        if user.get("guest"):
+            return self._deny_guest(user, "server-side proof compilation")
+        record = _run_record_for(run_id) or {}
+        owner = str(record.get("owner") or "").strip().lower()
+        if record.get("guest") or owner.endswith("@public.local"):
+            self._send(
+                403,
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "Server-side compilation is disabled for guest-generated artifacts",
+                    }
+                ),
+                headers={"Cache-Control": "no-store"},
+            )
+            return True
+        return False
+
+    def _session_cookie_header(
+        self, token: str | None, *, guest: bool = False
+    ) -> str:
         """Set-Cookie value; token=None clears the cookie."""
-        from agent_monitor.auth import SESSION_COOKIE, SESSION_TTL_DAYS
+        from agent_monitor.auth import (
+            GUEST_SESSION_TTL_HOURS,
+            SESSION_COOKIE,
+            SESSION_TTL_DAYS,
+        )
 
         # Only mark Secure on HTTPS. Using Host!=localhost used to drop cookies
         # for anyone opening the console over plain HTTP on a public IP.
@@ -675,7 +1224,9 @@ class Handler(BaseHTTPRequestHandler):
         cookie_path = self._request_base_path() or "/"
         if token is None:
             return f"{SESSION_COOKIE}=; Path={cookie_path}; Max-Age=0; HttpOnly;{secure} SameSite=Lax"
-        max_age = SESSION_TTL_DAYS * 86400
+        max_age = (
+            GUEST_SESSION_TTL_HOURS * 3600 if guest else SESSION_TTL_DAYS * 86400
+        )
         return f"{SESSION_COOKIE}={token}; Path={cookie_path}; Max-Age={max_age}; HttpOnly;{secure} SameSite=Lax"
 
     def _require_user(self, path: str) -> dict | None:
@@ -683,7 +1234,7 @@ class Handler(BaseHTTPRequestHandler):
         user = self._current_user()
         if user:
             return user
-        if PUBLIC_MODE:
+        if PUBLIC_MODE and guest_access_enabled():
             return self._issue_guest()
         login = _with_base("/login", self._request_base_path())
         if path.startswith("/api/"):
@@ -746,18 +1297,21 @@ class Handler(BaseHTTPRequestHandler):
         return None
 
     def _owns_run(self, run_id: str, user: dict) -> bool:
+        if research_projects.can_read_run(run_id, user.get("id")):
+            return True
         owner = job_manager.run_owner(run_id)
         if owner is None:
-            return bool(user.get("is_admin"))  # legacy runs belong to the operator
-        return owner == user.get("id") or bool(user.get("is_admin"))
+            return _is_operator_user(user)  # legacy runs belong to the operator
+        return owner == user.get("id") or _is_operator_user(user)
 
-    def _send_bytes(self, code: int, body: bytes, ctype: str, *, download_name: str | None = None):
+    def _send_bytes(self, code: int, body: bytes, ctype: str, *, download_name: str | None = None, headers: dict[str, str] | None = None):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         if download_name:
-            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
-        for k, v in self._merge_headers(None).items():
+            fallback = re.sub(r'[^A-Za-z0-9_.-]', '_', download_name)
+            self.send_header("Content-Disposition", f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{quote(download_name, safe="")}')
+        for k, v in self._merge_headers(headers).items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -772,8 +1326,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         qs = parse_qs(parsed.query)
 
+        if self._research_route(path, "GET") or self._sharing_get(path) or self._projects_route(path, "GET"):
+            return
+
         if path.rstrip("/") in ("/login", "/reset-password"):
-            if path.rstrip("/") == "/login" and PUBLIC_MODE:
+            if (
+                path.rstrip("/") == "/login"
+                and PUBLIC_MODE
+                and guest_access_enabled()
+            ):
                 self.send_response(302)
                 self.send_header("Location", _with_base("/", self._request_base_path()))
                 self.end_headers()
@@ -796,11 +1357,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/auth/me":
-            from agent_monitor.auth import google_client_id
+            from agent_monitor.auth import google_client_id, registration_open
 
             user = self._current_user()
-            if user is None and PUBLIC_MODE:
+            if user is None and PUBLIC_MODE and guest_access_enabled():
                 user = self._issue_guest()
+                if user is None:
+                    return
             self._send(
                 200,
                 json.dumps(
@@ -808,8 +1371,12 @@ class Handler(BaseHTTPRequestHandler):
                         "user": user,
                         "google_client_id": google_client_id(),
                         "public": PUBLIC_MODE,
+                        "guest_access": guest_access_enabled(),
+                        "guest_policy": guest_policy(user),
+                        "registration_open": registration_open(),
                     }
                 ),
+                headers={"Cache-Control": "no-store"},
             )
             return
 
@@ -831,6 +1398,26 @@ class Handler(BaseHTTPRequestHandler):
         if user is None:
             return
 
+        attachment_route = re.fullmatch(r"/api/runs/([^/]+)/attachments/([a-f0-9]{32})", path)
+        if attachment_route:
+            run_id, attachment_id = attachment_route.groups()
+            if not self._owns_run(run_id, user):
+                self._send(404, json.dumps({"error": "not found"}))
+                return
+            workspace = RUNS_DIR / "workspaces" / run_id
+            item = next((item for item in research_attachments.list_files(workspace)
+                         if item["id"] == attachment_id), None)
+            if item is None:
+                self._send(404, json.dumps({"error": "not found"}))
+                return
+            file = research_attachments.file_path(workspace, item)
+            if not file.is_file():
+                self._send(404, json.dumps({"error": "file not found"}))
+                return
+            self._send_bytes(200, file.read_bytes(), item["type"],
+                             download_name=item["name"], headers={"Cache-Control": "private, no-store"})
+            return
+
         if path in ("/", "/index.html", "/console"):
             html_path = WEB_DIR / "console.html"
             self._send_html(html_path.read_text(encoding="utf-8"))
@@ -845,10 +1432,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/engines":
             from agent_monitor.engines_registry import list_engines
 
-            self._send(200, json.dumps({"engines": list_engines()}))
+            engines = list_engines()
+            if user.get("guest"):
+                allowed = guest_engine_allowlist()
+                engines = [{**engine, "requires_login": engine.get("id") not in allowed} for engine in engines]
+            self._send(200, json.dumps({"engines": engines}))
             return
 
         if path == "/api/monitor/overview":
+            if self._deny_guest(user, "the operator overview"):
+                return
             from agent_monitor.monitor_overview import build_overview
 
             self._send(200, json.dumps(build_overview(user), ensure_ascii=False))
@@ -863,11 +1456,34 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/jobs":
-            owner = None if user.get("is_admin") else user["id"]
+            # Everyone's workspace lists only their own jobs; operators see
+            # other accounts through the admin view or with scope=all.
+            scope_all = (qs.get("scope") or [""])[0] == "all" and _is_operator_user(user)
+            owner = None if scope_all else user["id"]
             self._send(200, json.dumps({"jobs": job_manager.list_jobs(owner_id=owner)}))
             return
 
+        if path in ("/api/admin/usage", "/api/admin/runs"):
+            if not self._require_operator(user):
+                return
+            from agent_monitor import usage_ledger
+
+            params = {key: (values[0] if values else "") for key, values in qs.items()}
+            try:
+                payload = (
+                    usage_ledger.usage_summary(params)
+                    if path == "/api/admin/usage"
+                    else usage_ledger.list_runs(params)
+                )
+            except ValueError as exc:
+                self._send(400, json.dumps({"error": f"bad filter: {exc}"}))
+                return
+            self._send(200, json.dumps(payload, ensure_ascii=False), headers={"Cache-Control": "no-store"})
+            return
+
         if path == "/api/agent/config":
+            if self._deny_guest(user, "the shared agent profile"):
+                return
             from agent_monitor import agent_config
 
             self._send(200, json.dumps(agent_config.get_agent_config(), ensure_ascii=False))
@@ -876,34 +1492,48 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/settings":
             from agent_monitor.settings import get_settings
 
-            self._send(200, json.dumps(get_settings(user), ensure_ascii=False))
+            payload = get_settings(user)
+            if user.get("guest"):
+                payload["max_iterations"] = guest_max_iterations()
+                payload["guest_policy"] = guest_policy(user)
+            self._send(200, json.dumps(payload, ensure_ascii=False))
             return
 
         if path == "/api/settings/codex/status":
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import codex_login
 
             self._send(200, json.dumps(codex_login.status(user["id"]), ensure_ascii=False))
             return
 
         if path == "/api/settings/codex/login/poll":
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import codex_login
 
             self._send(200, json.dumps(codex_login.poll_login(user["id"]), ensure_ascii=False))
             return
 
         if path == "/api/settings/claude/status":
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import claude_login
 
             self._send(200, json.dumps(claude_login.status(user["id"]), ensure_ascii=False))
             return
 
         if path == "/api/settings/claude/login/poll":
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import claude_login
 
             self._send(200, json.dumps(claude_login.poll_login(user["id"]), ensure_ascii=False))
             return
 
         if path == "/api/library":
+            if self._deny_guest(user, "the shared library"):
+                return
             from agent_monitor import library
 
             self._send(200, json.dumps(library.get_library(), ensure_ascii=False))
@@ -912,7 +1542,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/jobs/"):
             job_id = path.removeprefix("/api/jobs/")
             job = job_manager.get_job(job_id)
-            if not job or (job.get("owner_id") not in (None, user["id"]) and not user.get("is_admin")):
+            if not job or (
+                job.get("owner_id") != user["id"] and not _is_operator_user(user)
+            ):
                 self._send(404, json.dumps({"error": "job not found"}))
                 return
             self._send(200, json.dumps(job))
@@ -966,19 +1598,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/lean/status":
             from agent_monitor import lean_verify
 
-            model_options = lean_verify.harness_model_options(user)
-            engines = lean_verify.harness_engines(
-                user, model=model_options["selected"]
-            )
+            if user.get("guest"):
+                formal_options = _guest_formal_options()
+            else:
+                model_options = lean_verify.harness_model_options(user)
+                engines = lean_verify.harness_engines(
+                    user, model=model_options["selected"]
+                )
+                formal_options = {
+                    "engines": engines,
+                    "harness_auth_route": model_options["auth_route"],
+                    "harness_models": model_options["models"],
+                    "harness_model": model_options["selected"],
+                }
             self._send(
                 200,
                 json.dumps(
                     {
                         **lean_verify.toolchain_status(),
-                        "engines": engines,
-                        "harness_auth_route": model_options["auth_route"],
-                        "harness_models": model_options["models"],
-                        "harness_model": model_options["selected"],
+                        **formal_options,
                     },
                     ensure_ascii=False,
                 ),
@@ -996,15 +1634,18 @@ class Handler(BaseHTTPRequestHandler):
             run_record = _run_record_for(rid)
             cached = lean_verify.load_cached(ws) or {"status": "none"}
             try:
-                model_options = lean_verify.harness_model_options(user, run_record)
-                engines = lean_verify.harness_engines(user, run_record)
-                cached["engines"] = engines
-                cached["harness_auth_route"] = model_options["auth_route"]
-                cached["harness_models"] = model_options["models"]
-                cached["harness_model"] = model_options["selected"]
-                cached["harness_engine"] = _preferred_formal_harness_engine(
-                    run_record, engines
-                )
+                if user.get("guest"):
+                    cached.update(_guest_formal_options())
+                else:
+                    model_options = lean_verify.harness_model_options(user, run_record)
+                    engines = lean_verify.harness_engines(user, run_record)
+                    cached["engines"] = engines
+                    cached["harness_auth_route"] = model_options["auth_route"]
+                    cached["harness_models"] = model_options["models"]
+                    cached["harness_model"] = model_options["selected"]
+                    cached["harness_engine"] = _preferred_formal_harness_engine(
+                        run_record, engines
+                    )
             except ValueError as exc:
                 cached["engines"] = []
                 cached["harness_models"] = []
@@ -1055,6 +1696,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if action == "files":
             self._send(200, json.dumps({"run_id": run_id, "files": _list_workspace_files(ws)}))
+            return
+
+        if action == "pdf" and self._deny_run_compilation(user, run_id):
             return
 
         rel = (qs.get("path", [""])[0] or "").strip()
@@ -1108,17 +1752,85 @@ class Handler(BaseHTTPRequestHandler):
         path = self._resolve_path()
         if path is None:
             return
-        length = int(self.headers.get("Content-Length") or 0)
+        # Authenticate before accepting the larger attachment request bodies.
+        accepts_attachments = path == "/api/runs" or bool(re.fullmatch(r"/api/runs/[^/]+/chat", path))
+        upload_user = self._require_user(path) if accepts_attachments else None
+        if accepts_attachments and upload_user is None:
+            self.close_connection = True
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self._send(400, json.dumps({"error": "invalid content length"}))
+            return
+        max_body = research_attachments.MAX_REQUEST_BYTES if accepts_attachments else 1_000_000
+        if length < 0 or length > max_body:
+            self.close_connection = True
+            self._send(413, json.dumps({"error": "request body too large"}))
+            return
         raw = self.rfile.read(length) if length else b"{}"
         try:
             body = json.loads(raw.decode("utf-8") or "{}")
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             self._send(400, json.dumps({"error": "invalid json"}))
+            return
+        if not isinstance(body, dict):
+            self._send(400, json.dumps({"error": "JSON body must be an object"}))
+            return
+
+        if self._research_route(path, "POST", body) or self._sharing_write(path, "POST", body) or self._projects_route(path, "POST", body):
+            return
+
+        if path == "/api/auth/guest":
+            if not guest_access_enabled():
+                self._send(
+                    403,
+                    json.dumps({"ok": False, "error": "Guest access is disabled"}),
+                    headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+                )
+                return
+            current = self._current_user()
+            explicit_switch = (
+                body.get("switch_account") is True
+                and self.headers.get("X-Guest-Intent") == "homepage"
+                and self.headers.get_content_type() == "application/json"
+            )
+            if current is not None:
+                if current.get("guest"):
+                    self._send(
+                        200,
+                        json.dumps({"ok": True, "user": current}),
+                        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+                    )
+                    return
+                elif not explicit_switch:
+                    self._send(
+                        409,
+                        json.dumps({"ok": False, "error": "Already signed in"}),
+                        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+                    )
+                    return
+            account = self._issue_guest(
+                replace_account_token=self._session_token() if current and explicit_switch else None
+            )
+            if account is None:
+                return
+            self._send(
+                200,
+                json.dumps({"ok": True, "user": account}),
+                headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+            )
             return
 
         if path in ("/api/auth/register", "/api/auth/login", "/api/auth/google"):
             from agent_monitor import auth
 
+            prior_token = self._session_token()
+            # Inspect the cookie directly for cleanup. `_current_user()` hides
+            # existing guests when access has just been disabled, but a
+            # successful account sign-in should still retire that abandoned
+            # guest identity and its encrypted key.
+            prior_user = auth.user_for_token(prior_token)
             try:
                 token = None
                 if path == "/api/auth/register":
@@ -1126,6 +1838,7 @@ class Handler(BaseHTTPRequestHandler):
                         str(body.get("email") or ""),
                         str(body.get("password") or ""),
                         name=body.get("name"),
+                        require_open=True,
                     )
                 elif path == "/api/auth/login":
                     account, token = auth.login_and_create_session(
@@ -1133,15 +1846,23 @@ class Handler(BaseHTTPRequestHandler):
                         str(body.get("password") or ""),
                     )
                 else:
-                    account = auth.login_with_google(str(body.get("credential") or ""))
+                    account = auth.login_with_google(
+                        str(body.get("credential") or ""),
+                        require_open_for_new=True,
+                    )
             except ValueError as exc:
                 self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
+                return
+            except PermissionError as exc:
+                self._send(403, json.dumps({"error": str(exc)}, ensure_ascii=False))
                 return
             except Exception as exc:  # noqa: BLE001
                 self._send(400, json.dumps({"error": f"Sign-in failed: {exc}"}, ensure_ascii=False))
                 return
             if token is None:
                 token = auth.create_session(int(account["id"]))
+            if prior_user and prior_user.get("guest"):
+                auth.destroy_session(prior_token)
             self._send(
                 200,
                 json.dumps({"ok": True, "user": account}, ensure_ascii=False),
@@ -1221,11 +1942,13 @@ class Handler(BaseHTTPRequestHandler):
                 headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
             )
             return
-        user = self._require_user(path)
+        user = upload_user if accepts_attachments else self._require_user(path)
         if user is None:
             return
 
         if path.startswith("/api/library/tools/") and path.endswith("/run"):
+            if self._deny_guest(user, "trusted library tools"):
+                return
             from urllib.parse import unquote
 
             from agent_monitor import library
@@ -1248,6 +1971,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/workspace/") and path.endswith("/file"):
+            if self._deny_guest(user, "workspace editing"):
+                return
             rest = path.removeprefix("/api/workspace/")
             run_id, separator, action = rest.partition("/")
             ws = _workspace_for_run(run_id)
@@ -1276,6 +2001,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/agent/config":
+            if self._deny_guest(user, "the shared agent profile"):
+                return
             from agent_monitor import agent_config
 
             try:
@@ -1289,6 +2016,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/agent/skills":
+            if self._deny_guest(user, "the shared agent profile"):
+                return
             from agent_monitor import agent_config
 
             try:
@@ -1303,6 +2032,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/agent/memory":
+            if self._deny_guest(user, "the shared agent profile"):
+                return
             from agent_monitor import agent_config
 
             try:
@@ -1320,6 +2051,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
             run_record = _run_record_for(rid)
             kind = str(body.get("kind") or "informal").strip().lower()
+            model = str(body.get("model") or "").strip() or None
+            if user.get("guest"):
+                from agent_monitor.settings import GUEST_DEFAULT_MODEL
+
+                model = GUEST_DEFAULT_MODEL
+                if kind not in {"informal", "formal", "engine"}:
+                    self._send(400, json.dumps({"error": "Unknown proof graph kind"}))
+                    return
+            if not self._admit_guest_derived_action(user, ws):
+                return
             try:
                 if kind == "engine":
                     from agent_monitor import engine_graph
@@ -1336,7 +2077,7 @@ class Handler(BaseHTTPRequestHandler):
                         workspace=ws,
                         run_record=run_record,
                         user=user,
-                        model=(str(body.get("model") or "").strip() or None),
+                        model=model,
                         kind=kind,
                     )
             except ValueError as exc:
@@ -1345,6 +2086,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": f"Graph generation failed: {exc}"}, ensure_ascii=False))
                 return
+            finally:
+                if user.get("guest"):
+                    _release_guest_derived_action(int(user["id"]))
             self._send(200, json.dumps(result, ensure_ascii=False))
             return
 
@@ -1363,6 +2107,25 @@ class Handler(BaseHTTPRequestHandler):
                 lean_arg: str | None = lean_src
             else:
                 lean_arg = None
+            feedback = str(body.get("message") or body.get("feedback") or "")
+            if user.get("guest"):
+                from agent_monitor.settings import GUEST_DEFAULT_MODEL
+
+                model = GUEST_DEFAULT_MODEL
+                if action in {"harness", "stop_harness"}:
+                    self._deny_guest(user, "the local formal harness")
+                    return
+                if action not in {"verify", "generate", "compile", "check", "audit", "revise"}:
+                    self._send(400, json.dumps({"error": "Unknown Lean action"}))
+                    return
+                if len(lean_arg or "") > GUEST_MAX_LEAN_CHARACTERS:
+                    self._send(400, json.dumps({"error": "Lean source is too large for a guest action"}))
+                    return
+                if len(feedback) > GUEST_MAX_FEEDBACK_CHARACTERS:
+                    self._send(400, json.dumps({"error": "Feedback is too large for a guest action"}))
+                    return
+            if not self._admit_guest_derived_action(user, ws):
+                return
             try:
                 if action in {"compile", "check"}:
                     result = lean_verify.compile_or_check(
@@ -1393,10 +2156,10 @@ class Handler(BaseHTTPRequestHandler):
                         workspace=ws,
                         user=user,
                         run_record=_run_record_for(rid),
-                        message=str(body.get("message") or body.get("feedback") or ""),
+                        message=feedback,
                         model=model,
                         lean=lean_arg,
-                        max_repairs=max(0, min(int(repairs) if repairs is not None else 1, 3)),
+                        max_repairs=max(0, min(int(repairs) if repairs is not None else 1, 1 if user.get("guest") else 3)),
                     )
                 else:
                     repairs = body.get("max_repairs")
@@ -1405,7 +2168,7 @@ class Handler(BaseHTTPRequestHandler):
                         run_record=_run_record_for(rid),
                         user=user,
                         model=model,
-                        max_repairs=max(0, min(int(repairs) if repairs is not None else 2, 4)),
+                        max_repairs=max(0, min(int(repairs) if repairs is not None else 2, 1 if user.get("guest") else 4)),
                     )
             except ValueError as exc:
                 self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
@@ -1413,6 +2176,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001
                 self._send(500, json.dumps({"error": f"Lean verification failed: {exc}"}, ensure_ascii=False))
                 return
+            finally:
+                if user.get("guest"):
+                    _release_guest_derived_action(int(user["id"]))
             if action in {"compile", "check", "audit", "revise"} and str(
                 result.get("status") or ""
             ) != "running":
@@ -1431,21 +2197,105 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/runs":
             try:
-                job = job_manager.start_job(
-                    engine=str(body.get("engine") or "").lower(),
-                    problem_id=body.get("problem_id"),
-                    problem_text=body.get("problem_text"),
-                    model=body.get("model") or None,
-                    max_iterations=int(body.get("max_iterations") or 40),
-                    user=user,
-                    use_subagents=body.get("use_subagents") is not False,
-                    subagent_model=(str(body.get("subagent_model") or "").strip() or None),
-                    auth_route=(str(body.get("auth_route") or "").strip() or None),
-                    reasoning_effort=(
-                        str(body.get("reasoning_effort") or "").strip() or None
-                    ),
-                    speed_mode=(str(body.get("speed_mode") or "").strip() or None),
-                )
+                research_projects.prepare_run(body, user)
+            except (PermissionError, ValueError) as exc:
+                self._send(403, json.dumps({"error": str(exc)}))
+                return
+            engine = str(body.get("engine") or ("kimi" if user.get("guest") else "")).lower()
+            requested_model = body.get("model") or None
+            requested_subagent_model = (
+                str(body.get("subagent_model") or "").strip() or None
+            )
+            try:
+                max_iterations = int(body.get("max_iterations") or 40)
+            except (TypeError, ValueError):
+                self._send(400, json.dumps({"error": "max_iterations must be an integer"}))
+                return
+            if user.get("guest"):
+                from agent_monitor.settings import validate_guest_model
+
+                if engine not in guest_engine_allowlist():
+                    self._send(
+                        403,
+                        json.dumps(
+                            {
+                                "error": "That engine requires a signed-in account",
+                                "allowed_engines": sorted(guest_engine_allowlist()),
+                            }
+                        ),
+                    )
+                    return
+                problem_text = body.get("problem_text")
+                if problem_text is not None and not isinstance(problem_text, str):
+                    self._send(400, json.dumps({"error": "problem_text must be text"}))
+                    return
+                if len(problem_text or "") > 20_000:
+                    self._send(400, json.dumps({"error": "Guest problems are limited to 20,000 characters"}))
+                    return
+                if requested_model is not None:
+                    try:
+                        requested_model = validate_guest_model(requested_model)
+                    except ValueError as exc:
+                        self._send(400, json.dumps({"error": str(exc)}))
+                        return
+                requested_subagent_model = None
+                max_iterations = max(1, min(max_iterations, guest_max_iterations()))
+            try:
+                def start() -> dict:
+                    return research_projects.start_run(body.get("project_id"), user["id"], body.get("project_task"), lambda: job_manager.start_job(
+                        engine=engine,
+                        problem_id=body.get("problem_id"),
+                        problem_text=body.get("problem_text"),
+                        model=requested_model,
+                        max_iterations=max_iterations,
+                        max_output_tokens=(
+                            guest_max_output_tokens() if user.get("guest") else None
+                        ),
+                        user=user,
+                        use_subagents=(
+                            body.get("use_subagents") is not False
+                            and not user.get("guest")
+                        ),
+                        subagent_model=requested_subagent_model,
+                        attachments=body.get("attachments"),
+                        auth_route=(str(body.get("auth_route") or "").strip() or None),
+                        reasoning_effort=(
+                            str(body.get("reasoning_effort") or "").strip() or None
+                        ),
+                        speed_mode=(
+                            str(body.get("speed_mode") or "").strip() or None
+                        ),
+                    ))
+
+                if user.get("guest"):
+                    # Keep admission and start_job's synchronous job/run
+                    # registration atomic with respect to other guest starts.
+                    # The runner itself executes on its own worker thread.
+                    with _GUEST_RUN_START_LOCK:
+                        capacity_error, retry_after = _reserve_guest_run_slot(
+                            int(user["id"])
+                        )
+                        if capacity_error:
+                            self._send(
+                                429,
+                                json.dumps({"error": capacity_error, "guest_policy": guest_policy(user), "login_required": guest_policy(user)["login_required"]}),
+                                headers={"Retry-After": str(retry_after)},
+                            )
+                            return
+                        from agent_monitor.auth import reserve_guest_run, release_guest_run
+                        if not reserve_guest_run(int(user["id"]), guest_runs_per_session(),
+                                                 previous_runs=job_manager.persisted_run_count(int(user["id"]))):
+                            self._send(403, json.dumps({"error": "Guest limit reached. Sign in to continue",
+                                                       "login_required": True, "guest_policy": guest_policy(user)}))
+                            return
+                        try:
+                            job = start()
+                        except Exception:
+                            release_guest_run(int(user["id"]))
+                            raise
+                        job = {**job, "guest_policy": guest_policy(user)}
+                else:
+                    job = start()
             except Exception as exc:  # noqa: BLE001
                 self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
                 return
@@ -1466,6 +2316,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/runs/") and path.endswith("/continue"):
+            if self._deny_guest(user, "run continuation"):
+                return
             run_id = path.removeprefix("/api/runs/").removesuffix("/continue")
             if not run_id or "/" in run_id or not self._owns_run(run_id, user):
                 self._send(404, json.dumps({"error": "not found"}))
@@ -1488,6 +2340,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/runs/") and path.endswith("/chat"):
+            if self._deny_guest(user, "run continuation"):
+                return
             run_id = path.removeprefix("/api/runs/").removesuffix("/chat")
             if not run_id or "/" in run_id or not self._owns_run(run_id, user):
                 self._send(404, json.dumps({"error": "not found"}))
@@ -1499,6 +2353,7 @@ class Handler(BaseHTTPRequestHandler):
                     model=body.get("model"),
                     max_iterations=int(body.get("max_iterations") or 40),
                     user=user,
+                    attachments=body.get("attachments"),
                 )
             except (ValueError, FileNotFoundError) as exc:
                 self._send(400, json.dumps({"error": str(exc)}))
@@ -1512,7 +2367,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/settings/verify":
             from agent_monitor.settings import verify_provider
 
+            guest_verification_reserved = False
             try:
+                if user.get("guest"):
+                    capacity_error, retry_after = _reserve_guest_verification(
+                        int(user["id"])
+                    )
+                    if capacity_error:
+                        self._send(
+                            429,
+                            json.dumps({"error": capacity_error}),
+                            headers={"Retry-After": str(retry_after)},
+                        )
+                        return
+                    guest_verification_reserved = True
                 result = verify_provider(
                     str(body.get("provider") or ""),
                     api_key=body.get("api_key"),
@@ -1523,6 +2391,9 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._send(400, json.dumps({"error": str(exc)}))
                 return
+            finally:
+                if guest_verification_reserved:
+                    _release_guest_verification(int(user["id"]))
             code = 200 if result.get("ok") else 400
             self._send(code, json.dumps(result, ensure_ascii=False))
             return
@@ -1543,6 +2414,8 @@ class Handler(BaseHTTPRequestHandler):
             "/api/settings/codex/login/cancel",
             "/api/settings/codex/logout",
         ):
+            if self._deny_guest(user, "account connections"):
+                return
             # Every operation is scoped to user["id"] from the authenticated
             # session — never from the request body — so a user can only
             # ever start, poll, cancel, or disconnect their *own* Codex
@@ -1564,6 +2437,8 @@ class Handler(BaseHTTPRequestHandler):
             "/api/settings/claude/login/cancel",
             "/api/settings/claude/logout",
         ):
+            if self._deny_guest(user, "account connections"):
+                return
             from agent_monitor import claude_login
 
             try:
@@ -1582,6 +2457,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/library":
+            if self._deny_guest(user, "the shared library"):
+                return
             from agent_monitor import library
 
             try:
@@ -1593,6 +2470,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/library/settings":
+            if self._deny_guest(user, "the shared library"):
+                return
             from agent_monitor import library
 
             self._send(200, json.dumps(library.update_settings(body), ensure_ascii=False))
@@ -1605,11 +2484,15 @@ class Handler(BaseHTTPRequestHandler):
         if path is None:
             return
 
+        if self._research_route(path, "DELETE", {}) or self._sharing_write(path, "DELETE", {}) or self._projects_route(path, "DELETE", {}):
+            return
         user = self._require_user(path)
         if user is None:
             return
 
         if path.startswith("/api/agent/skills/"):
+            if self._deny_guest(user, "the shared agent profile"):
+                return
             from urllib.parse import unquote
 
             from agent_monitor import agent_config
@@ -1623,6 +2506,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/agent/memory/"):
+            if self._deny_guest(user, "the shared agent profile"):
+                return
             from urllib.parse import unquote
 
             from agent_monitor import agent_config
@@ -1636,6 +2521,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/library/"):
+            if self._deny_guest(user, "the shared library"):
+                return
             from agent_monitor import library
 
             item_id = path.removeprefix("/api/library/")
@@ -1676,9 +2563,14 @@ class Handler(BaseHTTPRequestHandler):
                     payload = json.loads(dash.MANIFEST_PATH.read_text(encoding="utf-8"))
                 except json.JSONDecodeError:
                     payload = {"runs": []}
-            if not user.get("is_admin"):
+            # Operators keep ownerless legacy runs in their own list; other
+            # accounts' runs live in the admin view (or scope=all).
+            scope_all = (qs.get("scope") or [""])[0] == "all" and _is_operator_user(user)
+            if not scope_all:
                 payload["runs"] = [
-                    r for r in (payload.get("runs") or []) if r.get("owner_id") == user["id"]
+                    r for r in (payload.get("runs") or [])
+                    if r.get("owner_id") == user["id"]
+                    or (r.get("owner_id") is None and _is_operator_user(user))
                 ]
             for entry in payload.get("runs") or []:
                 if not entry.get("problem_preview"):
@@ -1690,14 +2582,26 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"ok": True, "note": "use agent-monitor build"}))
             return
 
+        route_run_id: str | None = None
+        route_action: str | None = None
         if path.startswith("/api/run/"):
-            rid = path.removeprefix("/api/run/").split("/", 1)[0]
-            if not self._owns_run(rid, user):
+            tail = path.removeprefix("/api/run/")
+            route_run_id, separator, action = tail.partition("/")
+            route_action = action if separator else None
+            # Ownership and loading must operate on exactly the same ID.
+            # Reject extra path components instead of checking only the first
+            # component and later handing a traversal-shaped ID to a loader.
+            if (
+                not route_run_id
+                or (route_action is not None and (not route_action or "/" in route_action))
+                or not self._owns_run(route_run_id, user)
+            ):
                 self._send(404, json.dumps({"error": "run not found"}))
                 return
 
-        if path.startswith("/api/run/") and path.endswith("/export"):
-            run_id = path.removeprefix("/api/run/").removesuffix("/export")
+        if route_action == "export":
+            run_id = route_run_id
+            assert run_id is not None
             data = dash._load_run(run_id)
             if not data:
                 self._send(404, json.dumps({"error": "run not found"}))
@@ -1729,8 +2633,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_bytes(200, body, "application/json", download_name=f"{run_id}_logs.json")
             return
 
-        if path.startswith("/api/run/") and path.endswith("/final_latex"):
-            run_id = path.removeprefix("/api/run/").removesuffix("/final_latex")
+        if route_action == "final_latex":
+            run_id = route_run_id
+            assert run_id is not None
+            if self._deny_run_compilation(user, run_id):
+                return
             data = dash._load_run(run_id)
             if not data:
                 self._send(404, json.dumps({"error": "run not found"}))
@@ -1738,8 +2645,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, json.dumps(dash._final_latex_payload(run_id, data), ensure_ascii=False))
             return
 
-        if path.startswith("/api/run/") and path.endswith("/final.tex"):
-            run_id = path.removeprefix("/api/run/").removesuffix("/final.tex")
+        if route_action == "final.tex":
+            run_id = route_run_id
+            assert run_id is not None
             data = dash._load_run(run_id)
             tex = dash._read_final_tex(data) if data else None
             if tex:
@@ -1748,14 +2656,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"error": "final proof not found"}))
             return
 
-        if path.startswith("/api/run/") and path.endswith("/final.pdf"):
+        if route_action == "final.pdf":
+            run_id = route_run_id
+            assert run_id is not None
+            if self._deny_run_compilation(user, run_id):
+                return
             from harness_dashboard.latex_provenance import (
                 compile_pdf,
                 pdf_cache_path,
                 resolve_latex_path,
             )
-
-            run_id = path.removeprefix("/api/run/").removesuffix("/final.pdf")
             data = dash._load_run(run_id)
             if not data:
                 self._send(404, json.dumps({"error": "run not found"}))
@@ -1771,10 +2681,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_bytes(200, cache_pdf.read_bytes(), "application/pdf")
             return
 
-        if path.startswith("/api/run/"):
-            run_id = path.removeprefix("/api/run/")
-            # strip nested suffixes already handled
-            if "/" in run_id:
+        if route_run_id is not None:
+            run_id = route_run_id
+            if route_action is not None:
                 self._send(404, json.dumps({"error": "not found"}))
                 return
             job_manager.reconcile_run_status(run_id)
@@ -1790,7 +2699,7 @@ class Handler(BaseHTTPRequestHandler):
                     from agent_monitor import auto_pipeline, lean_verify, proof_bridge
 
                     data["lean_verification"] = lean_verify.monitor_summary(ws)
-                    data["auto_pipeline"] = auto_pipeline.load_state(ws)
+                    data["auto_pipeline"] = _bootstrap_guest_pipeline(user, run_id, ws, data)
                     data["proof_coverage"] = proof_bridge.load_cached(ws)
                 else:
                     data["auto_pipeline"] = None
@@ -1840,6 +2749,9 @@ def main(port: int | None = None):
         print(f"  public base path         -> {BASE_PATH}")
     print(f"  classic monitor           -> {root}/monitor")
     print(f"  cache: {_cache_harness()}")
+    from agent_monitor import usage_ledger
+
+    usage_ledger.start_backfill_thread()
     ThreadingHTTPServer((HOST, port), Handler).serve_forever()
 
 

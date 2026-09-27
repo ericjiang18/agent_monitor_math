@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
+from agent_monitor import usage_ledger
+
 GRAPH_FILENAME = "proof_graph.json"
 LEAN_GRAPH_FILENAME = "lean_proof_graph.json"
 MAX_GRAPH_CACHE_BYTES = 4_000_000
@@ -327,7 +329,7 @@ def _resolve_llm_provider(
         order = ["xai"]
     elif "/" in chosen:
         order = ["openrouter"]
-    elif lowered.startswith(("gpt-", "o1", "o3", "o4")):
+    elif lowered == "chat-latest" or lowered.startswith(("gpt-", "o1", "o3", "o4")):
         order = ["openai"]
     else:
         raise ValueError(
@@ -399,6 +401,8 @@ def _call_llm(
     """Call OpenAI, Anthropic, Gemini, or an OpenAI-compatible provider natively."""
     from agent_monitor.settings import _http_json
 
+    if env.get("AGENT_MONITOR_GUEST_DERIVED") == "1":
+        model = "kimi-k3"
     provider, base, key, chosen = _resolve_llm_provider(env, model)
     max_output = max(1024, min(int(env.get("AGENT_MONITOR_LLM_MAX_OUTPUT") or 32768), 128000))
     headers: dict[str, str]
@@ -476,6 +480,13 @@ def _call_llm(
             f"{provider.title()} model call failed for {chosen} (HTTP {code}): "
             f"{detail[-1600:]}"
         )
+    from agent_monitor import usage_ledger
+
+    usage_ledger.record_usage(
+        model=str(body.get("model") or chosen),
+        usage=usage_ledger.http_usage(provider, body),
+        billing="sponsored" if provider == "kimi" and env.get("AGENT_MONITOR_GUEST_DERIVED") == "1" else None,
+    )
     try:
         if provider == "openai":
             content = _openai_response_text(body)
@@ -505,7 +516,9 @@ def _call_llm(
         ) from exc
     if not content.strip():
         raise ValueError(f"{provider.title()} returned an empty response for {chosen}")
-    return chosen, content, provider
+    from agent_monitor.lean_verify import _ObservedModel
+
+    return _ObservedModel(chosen, body.get("model")), content, provider
 
 _AMBIGUOUS_LATEX_ESCAPE = re.compile(
     r'\\u(?![0-9A-Fa-f]{4})'
@@ -729,6 +742,14 @@ def _run_claude_prompt(
         )
     except ClaudeBackendError as exc:
         raise ValueError(str(exc)) from exc
+    from agent_monitor import usage_ledger
+
+    usage_ledger.record_usage(
+        model=str(result.model or selected),
+        usage=usage_ledger.cli_usage(getattr(result, "usage", None), input_includes_cache=False),
+        billing="subscription",
+        cost_usd=getattr(result, "cost_usd", None),
+    )
     content = str(result.text or "").strip()
     if not content:
         raise ValueError("Claude Code returned an empty proof graph response")
@@ -773,6 +794,13 @@ def _run_codex_prompt_env(
         )
     except CodexBackendError as exc:
         raise ValueError(str(exc)) from exc
+    from agent_monitor import usage_ledger
+
+    usage_ledger.record_usage(
+        model=requested or "codex",
+        usage=usage_ledger.cli_usage(getattr(result, "usage", None), input_includes_cache=True),
+        billing="subscription",
+    )
     return str(result.text or "").strip()
 
 
@@ -1305,6 +1333,7 @@ def load_or_parse_formal(workspace: Path) -> dict[str, Any] | None:
     }
 
 
+@usage_ledger.attributed("dag")
 def generate(
     *,
     workspace: Path,
@@ -1344,9 +1373,18 @@ def generate(
         prompt = GRAPH_PROMPT.replace("{problem}", problem[:6000]).replace("{proof}", proof[:60000])
         out_name = GRAPH_FILENAME
 
-    env = resolved_user_env(user)
+    is_guest = bool((user or {}).get("guest") or (run_record or {}).get("guest"))
+    if is_guest:
+        from agent_monitor.lean_verify import _llm_environment
+
+        env = _llm_environment(user, run_record)
+        model = "kimi-k3"
+        allow_codex_fallback = False
+    else:
+        env = resolved_user_env(user)
     if (
-        str((run_record or {}).get("credential_source") or "").strip()
+        not is_guest
+        and str((run_record or {}).get("credential_source") or "").strip()
         == "sponsored_kimi"
     ):
         from agent_monitor import sponsored_kimi_client
@@ -1363,7 +1401,8 @@ def generate(
         )
     from agent_monitor.run_tuning import from_record as apply_recorded_tuning
 
-    apply_recorded_tuning(env, run_record)
+    if not is_guest:
+        apply_recorded_tuning(env, run_record)
     graph: dict[str, Any] | None = None
     compiler_snapshot: dict[str, Any] | None = None
     used_structural_fallback = False
@@ -1371,7 +1410,7 @@ def generate(
     content = ""
     from agent_monitor.jobs import _route_from_record
 
-    recorded_route = _route_from_record(run_record)
+    recorded_route = "api_key" if is_guest else _route_from_record(run_record)
     requested = str(model or "").strip().lower()
     requested_codex = requested in {"codex", "codex-cli", "codex cli"}
     requested_claude = requested in _CLAUDE_ACCOUNT_MODELS

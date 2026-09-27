@@ -40,6 +40,9 @@ PROVIDERS: list[dict[str, Any]] = [
         "base_var": "OPENAI_BASE_URL",
         "default_base": "https://api.openai.com/v1",
         "models": [
+            "gpt-6-astra",
+            "gpt-5.6",
+            "chat-latest",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -155,6 +158,47 @@ def _preferred_default_engine(engine: str) -> str:
     return _DEFAULT_ENGINE_MIGRATIONS.get(engine, engine)
 
 _SECRET_RE = re.compile(r"^sk-[A-Za-z0-9._-]{8,}$|^[A-Za-z0-9._-]{20,}$")
+_MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+GUEST_PROVIDER_IDS = frozenset({"kimi", "openai"})
+GUEST_ENV_KEYS = frozenset({"OPENAI_API_KEY", "KIMI_API_KEY", "AGENT_MONITOR_MODEL"})
+GUEST_DEFAULT_MODEL = "kimi-k3"
+
+
+def hosted_guest_kimi_key() -> str:
+    """The only operator credential available to the bounded guest harness."""
+    if os.environ.get("AGENT_MONITOR_GUEST_HOSTED_KIMI", "1").lower() in {"0", "false", "off", "no"}:
+        return ""
+    values = _read_env_file()
+    return str(os.environ.get("AGENT_MONITOR_GUEST_KIMI_API_KEY")
+               or values.get("AGENT_MONITOR_GUEST_KIMI_API_KEY")
+               or os.environ.get("KIMI_API_KEY") or values.get("KIMI_API_KEY") or "").strip()
+
+
+
+def hosted_guest_kimi_available() -> bool:
+    if os.environ.get("AGENT_MONITOR_GUEST_HOSTED_KIMI", "1").lower() in {"0", "false", "off", "no"}:
+        return False
+    from agent_monitor import sponsored_kimi_client
+    return sponsored_kimi_client.configured() or bool(hosted_guest_kimi_key())
+
+
+
+def validate_guest_api_key(value: object) -> str:
+    """Return a bounded provider key suitable for a public guest session."""
+    key = str(value or "").strip()
+    if not 12 <= len(key) <= 512 or not _SECRET_RE.fullmatch(key):
+        raise ValueError("Enter a valid API key")
+    return key
+
+
+def validate_guest_model(value: object) -> str:
+    """Return a bounded model identifier with no markup or shell syntax."""
+    model = str(value or "").strip()
+    if not _MODEL_ID_RE.fullmatch(model):
+        raise ValueError("Guest model identifiers contain unsupported characters")
+    return model
+
+
 def sponsored_kimi_available() -> bool:
     """Return whether the isolated loopback Kimi proxy is healthy."""
     from agent_monitor import sponsored_kimi_client
@@ -165,7 +209,7 @@ def sponsored_kimi_available() -> bool:
 def sponsored_kimi_engines() -> list[str]:
     from agent_monitor import sponsored_kimi_client
 
-    return list(sponsored_kimi_client.supported_engines())
+    return ["kimi", *sponsored_kimi_client.supported_engines()]
 
 
 def _known_env_keys() -> set[str]:
@@ -185,17 +229,13 @@ def _known_env_keys() -> set[str]:
 def resolved_user_env(user: dict[str, Any] | None) -> dict[str, str]:
     """Effective provider/general env for a user.
 
-    Per-user values (users.db) always win. The admin account additionally
-    falls back to the server .env, so the operator's keys keep working;
-    regular users only ever see their own keys — except in public mode,
-    where guests also inherit the server .env so anyone can start a run.
+    Per-user values (users.db) always win. Only the operator/admin account
+    inherits server credentials; regular and guest accounts provide their own.
     """
     out: dict[str, str] = {}
-    inherit_server = user is None or user.get("is_admin")
-    if not inherit_server:
-        from agent_monitor.auth import public_mode
-
-        inherit_server = public_mode()
+    inherit_server = user is None or (
+        bool(user.get("is_admin")) and not bool(user.get("guest"))
+    )
     if inherit_server:
         file_env = _read_env_file()
         for k in _known_env_keys():
@@ -205,7 +245,30 @@ def resolved_user_env(user: dict[str, Any] | None) -> dict[str, str]:
     if user is not None:
         from agent_monitor.auth import get_user_env
 
-        for k, v in get_user_env(int(user["id"])).items():
+        user_values = get_user_env(int(user["id"]))
+        if user.get("guest"):
+            # Guest jobs are restricted to the tool-free OpenAI baseline.
+            # Never honor a stored custom origin: doing so would expose an
+            # internal-network request primitive to an anonymous visitor.
+            user_values = {
+                key: value
+                for key, value in user_values.items()
+                if key in GUEST_ENV_KEYS
+            }
+            for key_var in ("OPENAI_API_KEY", "KIMI_API_KEY"):
+                try:
+                    if key_var in user_values:
+                        user_values[key_var] = validate_guest_api_key(user_values[key_var])
+                except ValueError:
+                    user_values.pop(key_var, None)
+            try:
+                if "AGENT_MONITOR_MODEL" in user_values:
+                    user_values["AGENT_MONITOR_MODEL"] = validate_guest_model(
+                        user_values["AGENT_MONITOR_MODEL"]
+                    )
+            except ValueError:
+                user_values.pop("AGENT_MONITOR_MODEL", None)
+        for k, v in user_values.items():
             if v:
                 out[k] = v
             else:
@@ -346,6 +409,8 @@ def account_runtime(
     env: dict[str, str] | None = None,
 ) -> str:
     """Mutually exclusive account routing: API, Codex, or Claude Code."""
+    if user is not None and user.get("guest"):
+        return "api"
     effective = env if env is not None else resolved_user_env(user)
     explicit = str(effective.get("AGENT_MONITOR_ACCOUNT_RUNTIME") or "").strip().lower()
     if explicit in {"api", "codex", "claude"}:
@@ -387,34 +452,48 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
 
     sponsored_kimi = (
         user is not None
-        and not bool(user.get("guest"))
         and sponsored_kimi_available()
+        and (not user.get("guest") or hosted_guest_kimi_available())
     )
-    providers = [_provider_state(p, env) for p in PROVIDERS]
+    provider_catalog = (
+        [p for p in PROVIDERS if p["id"] in GUEST_PROVIDER_IDS]
+        if user and user.get("guest")
+        else PROVIDERS
+    )
+    providers = [_provider_state(p, env) for p in provider_catalog]
+    hosted_guest_available = bool(user and user.get("guest") and hosted_guest_kimi_available())
+    if user and user.get("guest"):
+        providers.sort(key=lambda provider: provider["id"] != "kimi")
+        for provider in providers:
+            if provider["id"] == "kimi":
+                provider["hosted_available"] = hosted_guest_available
+                provider["base_url"] = "https://api.moonshot.ai/v1"
+                provider["default_base"] = "https://api.moonshot.ai/v1"
+                if hosted_guest_available and not provider["api_key_set"]:
+                    provider["api_key_set"] = True
+                    provider["api_key_masked"] = None
     for provider in providers:
         if provider["id"] == "kimi":
             provider["sponsored_available"] = sponsored_kimi
-            provider["using_sponsored"] = sponsored_kimi and not provider["api_key_set"]
+            provider["using_sponsored"] = sponsored_kimi and not bool(env.get("KIMI_API_KEY"))
     configured = [p["id"] for p in providers if p["api_key_set"]]
-    kimi_user_key_set = any(
-        provider["id"] == "kimi" and provider["api_key_set"] for provider in providers
-    )
+    kimi_user_key_set = bool(env.get("KIMI_API_KEY"))
 
     default_model = (
         env.get("AGENT_MONITOR_MODEL")
         or env.get("HERMES_MODEL")
-        or (kimi_k3.MODEL_ID if sponsored_kimi else "gpt-5.6-sol")
+        or (GUEST_DEFAULT_MODEL if user and user.get("guest") else kimi_k3.MODEL_ID if sponsored_kimi else "gpt-6-astra")
     )
     max_iter = int(env.get("AGENT_MONITOR_MAX_ITERATIONS") or "40")
     saved_default_engine = str(env.get("AGENT_MONITOR_ENGINE") or "").strip()
-    default_engine = _preferred_default_engine(saved_default_engine)
+    default_engine = "kimi" if user and user.get("guest") else _preferred_default_engine(saved_default_engine)
 
     runtime = account_runtime(user, env=env)
     use_codex = runtime == "codex"
     use_claude = runtime == "claude"
     codex_connected = False
     codex_models: list[str] = []
-    if user is not None:
+    if user is not None and not user.get("guest"):
         try:
             from agent_monitor import codex_login
 
@@ -428,7 +507,7 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
     claude_connected = False
     claude_reauth_required = False
     claude_models: list[str] = []
-    if user is not None:
+    if user is not None and not user.get("guest"):
         try:
             from agent_monitor import claude_login
 
@@ -449,6 +528,8 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
                 api_models.append(model_id)
     if sponsored_kimi and kimi_k3.MODEL_ID not in api_models:
         api_models.insert(0, kimi_k3.MODEL_ID)
+    if user and user.get("guest") and GUEST_DEFAULT_MODEL not in api_models:
+        api_models.insert(0, GUEST_DEFAULT_MODEL)
     # A model selector is also a billing selector. Never mix dormant API
     # models into an active subscription catalog (or vice versa): a stale
     # ``kimi-*``/Anthropic model left in a dropdown can otherwise redirect a
@@ -500,6 +581,7 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
         "env_path": "users.db" if user is not None else str(ENV_PATH),
         "providers": providers,
         "configured_providers": configured,
+        "hosted_guest_available": hosted_guest_available,
         "default_model": selected_default,
         "saved_default_model": default_model,
         "max_iterations": max_iter,
@@ -551,7 +633,9 @@ def get_settings(user: dict[str, Any] | None = None) -> dict[str, Any]:
 
 def save_settings(body: dict[str, Any], user: dict[str, Any] | None = None) -> dict[str, Any]:
     updates: dict[str, str] = {}
-    clear: list[str] = list(body.get("clear") or [])
+    clear: list[str] = [
+        key for key in (body.get("clear") or []) if isinstance(key, str)
+    ]
 
     runtime: str | None = None
     if "account_runtime" in body:
@@ -600,6 +684,21 @@ def save_settings(body: dict[str, Any], user: dict[str, Any] | None = None) -> d
         from agent_monitor.auth import set_user_env
 
         allowed = _known_env_keys()
+        if user.get("guest"):
+            requested = set(updates) | set(clear)
+            disallowed = sorted(requested - GUEST_ENV_KEYS)
+            if disallowed:
+                raise PermissionError(
+                    "Guest sessions may only save a Kimi or OpenAI API key and model"
+                )
+            allowed &= GUEST_ENV_KEYS
+            for key_var in ("OPENAI_API_KEY", "KIMI_API_KEY"):
+                if key_var in updates:
+                    updates[key_var] = validate_guest_api_key(updates[key_var])
+            if "AGENT_MONITOR_MODEL" in updates:
+                updates["AGENT_MONITOR_MODEL"] = validate_guest_model(
+                    updates["AGENT_MONITOR_MODEL"]
+                )
         set_user_env(
             int(user["id"]),
             {k: v for k, v in updates.items() if k in allowed},
@@ -651,6 +750,9 @@ def verify_provider(
     spec = next((p for p in PROVIDERS if p["id"] == provider_id), None)
     if not spec:
         raise ValueError(f"Unknown provider: {provider_id}")
+    is_guest = bool(user and user.get("guest"))
+    if is_guest and provider_id not in GUEST_PROVIDER_IDS:
+        raise ValueError("That provider requires a signed-in account")
 
     env = resolved_user_env(user) if user is not None else _read_env_file()
     key = (api_key or "").strip() or env.get(spec["key_var"]) or ""
@@ -658,9 +760,23 @@ def verify_provider(
         if not key and env.get(alt):
             key = env[alt]
     if not key:
+        if is_guest and provider_id == "kimi" and hosted_guest_kimi_available():
+            return {"ok": True, "provider": "kimi", "hosted": True, "message": "Hosted Kimi is configured for your guest runs"}
         return {"ok": False, "provider": provider_id, "error": "API key not set"}
+    if is_guest:
+        key = validate_guest_api_key(key)
 
-    base = (base_url or "").strip() or env.get(spec.get("base_var") or "") or spec.get("default_base") or ""
+    if is_guest:
+        # Begin every anonymous verification at the canonical provider origin;
+        # ignore request input and any stale custom route stored in the DB.
+        base = "https://api.moonshot.ai/v1" if provider_id == "kimi" else str(spec.get("default_base") or "")
+    else:
+        base = (
+            (base_url or "").strip()
+            or env.get(spec.get("base_var") or "")
+            or spec.get("default_base")
+            or ""
+        )
 
     if provider_id == "kimi":
         effort = kimi_k3.reasoning_effort(

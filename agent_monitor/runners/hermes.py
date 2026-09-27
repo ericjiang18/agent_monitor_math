@@ -63,6 +63,14 @@ def close_agent(agent: Any, *, messages: list[dict[str, Any]] | None = None) -> 
     try:
         session = getattr(agent, "_codex_session", None)
         if session is not None:
+            from agent_monitor.process_control import terminate_descendants
+
+            try:
+                process = getattr(getattr(session, "_client", None), "_proc", None)
+                if process is not None and isinstance(process.pid, int):
+                    terminate_descendants(process.pid)
+            except Exception:  # noqa: BLE001 - still close the transport
+                pass
             session.close()
         agent._codex_session = None
     except Exception:  # noqa: BLE001 - continue to the agent-level cleanup
@@ -185,7 +193,7 @@ def create_agent(
     if not base_url and os.environ.get("OPENAI_API_KEY"):
         base_url = "https://api.openai.com/v1"
 
-    toolsets = ["terminal", "file", "code_execution", "skills"]
+    toolsets = ["terminal", "file", "code_execution", "skills", "vision"]
     if enable_subagents:
         toolsets.append("delegation")
     kwargs: dict[str, Any] = {
@@ -209,9 +217,9 @@ def create_agent(
         # Hermes' own auth store (which would create token-rotation races).
         kwargs["provider"] = "openai-codex"
         kwargs["api_mode"] = "codex_app_server"
-    if api_key:
+    if api_key and not use_codex_subscription:
         kwargs["api_key"] = api_key
-    if base_url:
+    if base_url and not use_codex_subscription:
         kwargs["base_url"] = base_url
     # Persistent memory (memories/MEMORY.md + USER.md) is opt-in via the
     # console's Agent panel — it toggles memory.memory_enabled in config.yaml.

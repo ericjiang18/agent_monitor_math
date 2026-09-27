@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 if __package__:
+    from ..proof_markdown import normalize_proof_markdown
     from .api_backend import APIBackendError, api_chat
     from .claude_backend import (
         ClaudeBackendError,
@@ -30,6 +31,7 @@ else:
     repository_root = Path(__file__).resolve().parents[2]
     if str(repository_root) not in sys.path:
         sys.path.insert(0, str(repository_root))
+    from agent_monitor.proof_markdown import normalize_proof_markdown
     from agent_monitor.runners.api_backend import APIBackendError, api_chat
     from agent_monitor.runners.claude_backend import (
         ClaudeBackendError,
@@ -57,6 +59,8 @@ SYSTEM_PROMPT = (
     "counterexample. If it is open or you cannot close every gap, say so "
     "plainly and provide only verified partial progress—never present a "
     "plausible outline as a solution. Use $...$ / $$...$$ for math. "
+    "Render the write-up directly without enclosing it in a code fence; "
+    "do not ask the reader to save or copy the response. "
     "During a continuation, if CURRENT proof.md is already correct and the "
     "human explicitly asks to preserve it exactly, return only "
     "[[PRESERVE_EXISTING_PROOF]]; the wrapper will keep the existing file. "
@@ -174,7 +178,10 @@ def _save_result(prompt: str, text: str) -> bool:
             }
         )
         return False
-    rendered = _ensure_audit_disclosure(prompt, text)
+    rendered = normalize_proof_markdown(text)
+    if not rendered.strip():
+        raise ValueError("Model returned an empty proof; no proof artifact was saved")
+    rendered = _ensure_audit_disclosure(prompt, rendered)
     if "provingconsole outcome:" in prompt.lower():
         rendered = _ensure_outcome_contract(rendered)
     proof.write_text(rendered, encoding="utf-8")
@@ -191,12 +198,47 @@ def emit_item(item: dict) -> None:
     emit({"type": "item.completed", "item": item})
 
 
+def _guest_plain_output_limit() -> int | None:
+    """Return the bounded guest cap, or None for ordinary account runs."""
+    raw = os.environ.get("AGENT_MONITOR_PLAIN_MAX_OUTPUT_TOKENS", "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 4096
+    return max(256, min(value, 8192))
+
+
+def _api_chat_with_output_limit(
+    system: str,
+    prompt: str,
+    *,
+    model: str,
+    max_output_tokens: int | None,
+):
+    """Apply a per-call limit without leaking it into later in-process runs."""
+    if max_output_tokens is None:
+        return api_chat(system, prompt, model=model)
+    key = "AGENT_MONITOR_API_MAX_TOKENS"
+    previous = os.environ.get(key)
+    os.environ[key] = str(max_output_tokens)
+    try:
+        return api_chat(system, prompt, model=model)
+    finally:
+        if previous is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = previous
+
+
 def main() -> int:
     prompt = sys.argv[1] if len(sys.argv) > 1 else ""
     if not prompt.strip():
         emit_item({"type": "error", "message": "empty prompt"})
         return 2
 
+    guest_output_limit = _guest_plain_output_limit()
     use_codex = subscription_enabled()
     use_claude = claude_subscription_enabled()
     if use_codex and use_claude:
@@ -217,10 +259,10 @@ def main() -> int:
     if use_codex:
         try:
             result = codex_exec(system, prompt, model=model, emit_event=emit)
-        except CodexBackendError as exc:
+            _save_result(prompt, result.text)
+        except (CodexBackendError, ValueError) as exc:
             emit_item({"type": "error", "message": str(exc)})
             return 1
-        _save_result(prompt, result.text)
         return 0
 
     if use_claude:
@@ -232,59 +274,99 @@ def main() -> int:
                 emit_event=lambda event: forward_as_codex_event(event, emit),
                 source_env=os.environ,
             )
-        except ClaudeBackendError as exc:
+            _save_result(prompt, result.text)
+        except (ClaudeBackendError, ValueError) as exc:
             emit_item({"type": "error", "message": str(exc)})
             return 1
-        _save_result(prompt, result.text)
         return 0
 
     api_system = system + API_RUNTIME_CONTRACT
     try:
-        result = api_chat(api_system, prompt, model=model)
+        # api_backend maps this limit to the native output-token field for
+        # OpenAI, Anthropic, Gemini, Kimi, and OpenAI-compatible providers.
+        result = _api_chat_with_output_limit(
+            api_system,
+            prompt,
+            model=model,
+            max_output_tokens=guest_output_limit,
+        )
     except APIBackendError as exc:
         emit_item({"type": "error", "message": str(exc)})
         return 1
-    issues = _api_artifact_issues(result.text)
+    text = normalize_proof_markdown(result.text)
+    if not text.strip():
+        emit_item({"type": "error", "message": "Model returned an empty proof; no proof artifact was saved"})
+        return 1
+    issues = _api_artifact_issues(text)
     if issues:
-        emit_item(
-            {
-                "type": "agent_message",
-                "text": "Rejected pseudo-tool markup; retrying once for clean Markdown.",
-            }
-        )
-        repair_prompt = (
-            prompt
-            + "\n\nYour prior response was rejected because it contained pseudo-tool "
-            "or XML invocation markup. Do not describe or simulate any tool use. "
-            "Return only the final mathematical Markdown write-up now."
-        )
-        try:
-            repaired = api_chat(api_system, repair_prompt, model=model)
-        except APIBackendError as exc:
-            emit_item({"type": "error", "message": str(exc)})
-            return 1
-        result = type(result)(
-            text=repaired.text,
-            usage={
-                "input_tokens": int(result.usage.get("input_tokens") or 0)
-                + int(repaired.usage.get("input_tokens") or 0),
-                "output_tokens": int(result.usage.get("output_tokens") or 0)
-                + int(repaired.usage.get("output_tokens") or 0),
-            },
-            model=repaired.model,
-            provider=repaired.provider,
-        )
-        if _api_artifact_issues(result.text):
+        if guest_output_limit is not None:
+            # Guest Plain is intentionally one billable model call. Normalize
+            # the harmless heading omission locally, but never replay or save
+            # pseudo-tool markup from the first response.
+            prohibited = [issue for issue in issues if issue != "missing level-one final heading"]
+            if prohibited:
+                emit_item(
+                    {
+                        "type": "error",
+                        "message": "API model returned prohibited pseudo-tool markup; no proof artifact was saved",
+                    }
+                )
+                return 1
+            result = type(result)(
+                text="# Result\n\n" + text.lstrip(),
+                usage=result.usage,
+                model=result.model,
+                provider=result.provider,
+                observed_model=getattr(result, "observed_model", None),
+            )
+        else:
             emit_item(
                 {
-                    "type": "error",
-                    "message": "API model repeated prohibited pseudo-tool markup; no proof artifact was saved",
+                    "type": "agent_message",
+                    "text": "Rejected pseudo-tool markup; retrying once for clean Markdown.",
                 }
             )
-            return 1
-    text = result.text
+            repair_prompt = (
+                prompt
+                + "\n\nYour prior response was rejected because it contained pseudo-tool "
+                "or XML invocation markup. Do not describe or simulate any tool use. "
+                "Return only the final mathematical Markdown write-up now."
+            )
+            try:
+                repaired = _api_chat_with_output_limit(
+                    api_system,
+                    repair_prompt,
+                    model=model,
+                    max_output_tokens=None,
+                )
+            except APIBackendError as exc:
+                emit_item({"type": "error", "message": str(exc)})
+                return 1
+            result = type(result)(
+                text=normalize_proof_markdown(repaired.text),
+                usage={
+                    "input_tokens": int(result.usage.get("input_tokens") or 0)
+                    + int(repaired.usage.get("input_tokens") or 0),
+                    "output_tokens": int(result.usage.get("output_tokens") or 0)
+                    + int(repaired.usage.get("output_tokens") or 0),
+                },
+                model=repaired.model,
+                provider=repaired.provider,
+                observed_model=getattr(repaired, "observed_model", None),
+            )
+            if _api_artifact_issues(result.text):
+                emit_item(
+                    {
+                        "type": "error",
+                        "message": "API model repeated prohibited pseudo-tool markup; no proof artifact was saved",
+                    }
+                )
+                return 1
+    text = normalize_proof_markdown(result.text)
     _save_result(prompt, text)
-    emit_item({"type": "agent_message", "text": text[:6000]})
+    observed = getattr(result, "observed_model", None)
+    emit_item({"type": "agent_message", "text": text[:6000],
+               "model": observed, "model_source": "response" if observed else None})
     emit({"type": "turn.completed", "usage": result.usage})
     return 0
 

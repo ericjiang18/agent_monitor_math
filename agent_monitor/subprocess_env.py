@@ -15,6 +15,7 @@ _CONTROL_PLANE_ENV_NAMES = frozenset(
         "AGENT_MONITOR_DATA_ENCRYPTION_KEY",
         "AGENT_MONITOR_DATA_KEY_FILE",
         "AGENT_MONITOR_ENV_PATH",
+        "AGENT_MONITOR_GUEST_KIMI_API_KEY",
         "AGENT_MONITOR_REQUIRE_DATA_KEY",
         "AGENT_MONITOR_SECRET_KEY",
         "AGENT_MONITOR_SERVER_SETTINGS_READ_ONLY",
@@ -146,7 +147,7 @@ def _provider_for_model(model: str | None) -> str | None:
         return "together"
     if value.startswith(("grok-", "xai/", "xai:")):
         return "xai"
-    if value.startswith(("gpt-", "chatgpt-", "o1", "o3", "o4", "codex-", "openai:")):
+    if value.startswith(("gpt-", "chatgpt-", "chat-latest", "o1", "o3", "o4", "codex-", "openai:")):
         return "openai"
     return None
 

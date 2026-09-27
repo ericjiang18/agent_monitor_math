@@ -280,6 +280,20 @@ def _run_record(run_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _run_user(
+    owner_id: int | None, run_record: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Keep the persisted guest role when background work rebuilds its owner.
+
+    The guest account may already have been removed by logout or expiry. The
+    run's role still applies: deriving its views must never gain an account's
+    provider permissions merely because only its numeric owner was retained.
+    """
+    if (run_record or {}).get("guest"):
+        return {"id": owner_id, "guest": True}
+    return {"id": owner_id} if owner_id is not None else None
+
+
 def _source_signature(workspace: Path, run_record: dict[str, Any] | None) -> str:
     from agent_monitor import proof_graph
 
@@ -318,9 +332,14 @@ def _wait_for_source(
         if sig != last_sig:
             last_sig = sig
             stable_since = time.monotonic()
-        if sig and time.monotonic() - stable_since >= stable_for:
+        terminal = str((record or {}).get("status") or "") in _TERMINAL
+        # Guest Kimi writes drafts during its proof stages. Derive the final
+        # artifact once, after the proof run ends, to bound sponsored work and
+        # avoid competing with its in-flight provider request.
+        ready = terminal or not bool((record or {}).get("guest"))
+        if ready and sig and time.monotonic() - stable_since >= stable_for:
             return sig, record
-        if str((record or {}).get("status") or "") in _TERMINAL and not sig:
+        if terminal and not sig:
             return "", record
         time.sleep(0.5)
     return "", _run_record(run_id)
@@ -453,7 +472,7 @@ def _lean_and_formal_worker(
             run_record=run_record,
             user=user,
             model=_api_model(model),
-            max_repairs=2,
+            max_repairs=1 if (user or {}).get("guest") else 2,
             guidance=guidance,
         )
     except Exception as exc:
@@ -620,7 +639,7 @@ def _run_batch(
         (run_record or {}).get("credential_source") or ""
     ).strip().lower() == "sponsored_kimi"
     claude_subscription = _route_from_record(run_record) == "claude_subscription"
-    if sponsored_kimi or claude_subscription:
+    if (user or {}).get("guest") or sponsored_kimi or claude_subscription:
         # The sponsored gateway is a shared, cost-bounded service, while two
         # Claude Code processes for one run share the same per-user OAuth
         # account directory. Starting informal DAG and Lean translation
@@ -745,7 +764,7 @@ def _refresh_formal_once(
 
     run_record = _run_record(run_id)
     selected = _selected_harness(run_record, engine)
-    user = {"id": owner_id} if owner_id is not None else None
+    user = _run_user(owner_id, run_record)
     lean_result = lean_verify.load_cached(workspace) or {}
     lean_status = str(lean_result.get("status") or "none")
 
@@ -1004,7 +1023,6 @@ def _run(
     timeout = max(
         60.0, float(os.environ.get("AGENT_MONITOR_AUTO_PIPELINE_TIMEOUT") or 7200)
     )
-    user = {"id": owner_id} if owner_id is not None else None
     processed_sig = ""
     try:
         sig, record = _wait_for_source(run_id, workspace, timeout=timeout)
@@ -1016,8 +1034,12 @@ def _run(
             _finish(workspace)
             return
         _mutate(workspace, lambda state: state.update({"source_signature": sig}))
+        user = _run_user(owner_id, record)
         _run_batch(workspace, record, user, model, engine)
         processed_sig = sig
+        if (user or {}).get("guest"):
+            _finish(workspace)
+            return
 
         deadline = time.monotonic() + timeout
         record = _run_record(run_id)

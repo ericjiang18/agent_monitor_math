@@ -8,6 +8,8 @@ import subprocess
 import threading
 import time
 
+from agent_monitor.process_control import terminate_descendants
+
 
 def stream_subprocess(
     cmd: list[str],
@@ -83,6 +85,7 @@ def stream_subprocess(
                 pass
             last_cb = now
         if now - started > timeout:
+            terminate_descendants(proc.pid)
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
             except (OSError, ProcessLookupError):
@@ -95,11 +98,17 @@ def stream_subprocess(
     try:
         proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
+        terminate_descendants(proc.pid)
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except (OSError, ProcessLookupError):
             proc.kill()
         proc.wait(timeout=10)
+    terminate_descendants(proc.pid)
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        pass
     reader.join(timeout=1)
     proc.stdout.close()
     while not output_queue.empty():

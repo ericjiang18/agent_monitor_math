@@ -41,6 +41,7 @@ class CLIEventParser:
         # Structured CLIs can report a useful terminal subtype even when the
         # process itself only exposes a generic non-zero exit code.
         self.terminal_error: str | None = None
+        self.terminal_status: str | None = None
 
     def _new_turn(self) -> dict[str, Any]:
         return {"items": [], "kinds": set(), "detail": [], "thinking": [], "tools": []}
@@ -99,7 +100,11 @@ class CLIEventParser:
             if it == "agent_message":
                 self._log(f"assistant · {_clip(item.get('text'))}")
                 self._item("message", str(item.get("text") or ""))
-                self._close_turn()
+                observed = item.get("model") if item.get("model_source") == "response" else None
+                self._close_turn(
+                    model=observed,
+                    model_source="response" if isinstance(observed, str) and observed.strip() else None,
+                )
             elif it == "reasoning":
                 self._log(f"thinking · {_clip(item.get('text'))}")
                 self._item("reasoning", str(item.get("text") or ""))
@@ -130,6 +135,8 @@ class CLIEventParser:
                     self.terminal_error = message.strip()[-1200:]
                 self._close_turn()
         elif t == "turn.completed":
+            self.terminal_status = "completed"
+            self.terminal_error = None
             u = ev.get("usage") or {}
             self.usage["input_tokens"] += int(u.get("input_tokens") or 0)
             self.usage["cache_read_tokens"] += int(u.get("cached_input_tokens") or 0)
@@ -144,6 +151,13 @@ class CLIEventParser:
                 cache_read=int(u.get("cached_input_tokens") or 0),
                 reasoning=int(u.get("reasoning_output_tokens") or 0),
             )
+        elif t in {"turn.failed", "turn.cancelled"}:
+            detail = ev.get("error") or ev.get("message") or t
+            if isinstance(detail, dict):
+                detail = detail.get("message") or str(detail)
+            self.terminal_status = "failed"
+            self.terminal_error = str(detail)[-1200:]
+            self._log(f"error · {_clip(self.terminal_error)}")
         elif t == "error":
             self._log(f"error · {_clip(ev.get('message'))}")
 
@@ -178,6 +192,7 @@ class CLIEventParser:
                 cache_read=int(u.get("cache_read_input_tokens") or 0),
                 cache_write=int(u.get("cache_creation_input_tokens") or 0),
                 model=msg.get("model"),
+                model_source="response" if isinstance(msg.get("model"), str) and msg["model"].strip() else None,
             )
         elif t == "result":
             u = ev.get("usage") or {}
@@ -189,13 +204,16 @@ class CLIEventParser:
                 self.usage["cost_usd"] = float(ev["total_cost_usd"])
             result_text = str(ev.get("result") or "").strip()
             subtype = str(ev.get("subtype") or "").strip()
-            if ev.get("is_error"):
+            if ev.get("is_error") or subtype != "success":
+                self.terminal_status = "failed"
                 self.terminal_error = result_text or subtype or "OpenClaude reported an error"
                 self._log(
                     f"✗ result · {ev.get('num_turns', '?')} turns · "
                     f"{_clip(self.terminal_error, 160)}"
                 )
             else:
+                self.terminal_status = "completed"
+                self.terminal_error = None
                 self._log(
                     f"✓ result · {ev.get('num_turns', '?')} turns · "
                     f"${ev.get('total_cost_usd', 0):.4f} · {_clip(result_text, 120)}"
@@ -391,7 +409,8 @@ class CLIEventParser:
 
     def _close_turn(self, *, input_tokens: int = 0, output_tokens: int = 0,
                     cache_read: int = 0, cache_write: int = 0,
-                    reasoning: int = 0, model: str | None = None) -> None:
+                    reasoning: int = 0, model: str | None = None,
+                    model_source: str | None = None) -> None:
         cur = self._cur
         if not cur["detail"] and not cur["thinking"]:
             # Usage-only close (codex reports usage once per turn, after the
@@ -416,6 +435,7 @@ class CLIEventParser:
                 "cache_write_tokens": cache_write,
                 "reasoning_tokens": reasoning,
                 "model": model or self.usage.get("model"),
+                "model_source": model_source,
             }
         )
         self._cur = self._new_turn()
@@ -450,6 +470,7 @@ class CLIEventParser:
                     "status": "finished",
                     "tools": t.get("tools") or [],
                     "model": t.get("model"),
+                    "model_source": t.get("model_source"),
                     "input_tokens": t["input_tokens"] or None,
                     "output_tokens": t["output_tokens"] or None,
                     "cache_read_tokens": t["cache_read_tokens"] or 0,

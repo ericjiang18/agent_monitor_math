@@ -42,7 +42,8 @@ LEGACY_ENGINE_IDS = frozenset({"ucla"})
 
 # ── External CLI harnesses ────────────────────────────────────────────────
 # Each defines: availability check + default command template.
-# Prompts instruct the agent to write proof.tex inside the workspace (cwd).
+# Tool-enabled agents write proof.md inside the workspace (cwd); text-only
+# runners receive a response contract and save the returned write-up themselves.
 
 _PROOF_INSTRUCTION = (
     "You are solving an informal mathematics proof problem. "
@@ -50,6 +51,18 @@ _PROOF_INSTRUCTION = (
     "./proof.md as a Markdown document (use $...$ / $$...$$ for math, headings "
     "for structure); update it as the proof develops. "
     "The problem statement is in ./problem.txt.\n\nPROBLEM:\n{problem}"
+)
+
+_RESPONSE_PROOF_INSTRUCTION = (
+    "You are solving an informal mathematics proof problem. "
+    "Return the mathematical write-up directly as Markdown, beginning with "
+    "a level-one heading. Use $...$ / $$...$$ for math and headings for structure. "
+    "Do not wrap the document in a code fence or add delivery instructions. "
+    "The application automatically saves your response as the proof artifact. "
+    "No filesystem action is requested; omit file-access commentary and do not "
+    "ask the reader to save or copy the response. Preserve all mathematical "
+    "qualifications, unresolved gaps, and uncertainty. "
+    "The complete problem statement follows.\n\nPROBLEM:\n{problem}"
 )
 
 # Shared by every engine so a run's references are auditable and the console can
@@ -77,27 +90,50 @@ def proof_prompt(
     problem_text: str,
     workspace: Path | None = None,
     preamble: str = "",
+    *,
+    response_only: bool = False,
 ) -> str:
     """Task prompt for CLI engines.
 
     ``preamble`` carries the operator's persona (identity / skills / memory) for
     engines that cannot read the agent home themselves.
+    ``response_only`` supplies the problem inline and lets the runner persist
+    the returned Markdown instead of asking the model to operate on files.
     """
-    text = _PROOF_INSTRUCTION.format(problem=problem_text)
-    if workspace is not None:
+    instruction = _RESPONSE_PROOF_INSTRUCTION if response_only else _PROOF_INSTRUCTION
+    text = instruction.format(problem=problem_text)
+    if workspace is not None and not response_only:
         # Embedded agents (e.g. openclaw) may run tools from their own home
         # workspace — pin the absolute path so proof.md lands in the run dir.
         text = (
             f"Your working directory for this task is: {workspace} "
             f"(absolute path — write proof.md THERE).\n" + text
         )
-    text = f"{text}\n\n{CITATION_REQUIREMENTS}"
+    citations = (
+        CITATION_REQUIREMENTS.replace("End proof.md", "End the write-up")
+        if response_only else CITATION_REQUIREMENTS
+    )
+    text = f"{text}\n\n{citations}"
     if preamble.strip():
         text = f"{preamble.strip()}\n\n{text}"
     return text
 
 
 CLI_ENGINES: dict[str, dict[str, Any]] = {
+    "kimi": {
+        "id": "kimi",
+        "label": "Kimi Proof",
+        "vendor": "Moonshot AI",
+        "description": "Draft, critique, and refine a proof with Kimi",
+        "kind": "cli",
+        "url": "https://platform.moonshot.ai",
+        "check_file": "agent_monitor/runners/kimi_runner.py",
+        "cmd_env": "KIMI_PROOF_CMD",
+        "default_cmd": "{python} -u {root}/agent_monitor/runners/kimi_runner.py {prompt}",
+        "install_hint": "Add a Kimi API key in Settings",
+        "parser_style": "codex",
+        "supported_models": ["kimi-k3"],
+    },
     # Keep the replacement in the former UCLA card position: built-ins render
     # first, then CLI engines in insertion order.  The runner is a bounded,
     # response-only adapter around the supplied Danus/Exploring-Graph system;
@@ -132,7 +168,7 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         # --json emits JSONL events (incl. per-turn token usage) instead of TTY text.
         # Landlock (workspace-write) denies all writes on this kernel, so run
         # unsandboxed — each run already gets its own workspace directory.
-        "default_cmd": 'codex exec --json --cd {workspace} --sandbox danger-full-access --skip-git-repo-check {prompt}',
+        "default_cmd": 'codex exec --json --cd {workspace} --sandbox danger-full-access --skip-git-repo-check {model_args} {prompt}',
         "install_hint": "npm install -g @openai/codex  (or: brew install --cask codex)",
     },
     "claude": {
@@ -328,6 +364,7 @@ FORMAL_LEAN_ENGINES = frozenset(
     {"codex", "claude", "openclaude", "openclaw", "deepagents"}
 )
 ENGINE_AUTH_MODES: dict[str, list[str]] = {
+    "kimi": ["api_key"],
     "hermes": ["codex_subscription", "api_key"],
     "improof": ["codex_subscription", "claude_subscription", "api_key"],
     "math_harness": ["codex_subscription", "claude_subscription", "api_key"],
@@ -469,7 +506,7 @@ def supported_models(engine_id: str) -> list[str]:
     return list((CLI_ENGINES.get(engine_id) or {}).get("supported_models") or [])
 
 
-def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_file: Path) -> list[str] | None:
+def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_file: Path, model: str | None = None) -> list[str] | None:
     """Resolve a CLI engine's command as argv list, or None if unavailable."""
     spec = CLI_ENGINES.get(engine_id)
     if not spec:
@@ -479,6 +516,10 @@ def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_f
         return None
     argv: list[str] = []
     for token in shlex.split(template):
+        if token == "{model_args}":
+            if model:
+                argv.extend(["--model", model])
+            continue
         token = token.replace("{root}", str(_ROOT))
         token = token.replace("{python}", sys.executable)
         token = token.replace("{home}", str(Path.home()))

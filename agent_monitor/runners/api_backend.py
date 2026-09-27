@@ -20,6 +20,8 @@ class APIResult:
     usage: dict[str, int]
     model: str
     provider: str
+    # The provider response, never the requested/routing model.
+    observed_model: str | None = None
 
 
 def _safe_error(detail: object, secret: str) -> str:
@@ -245,5 +247,6 @@ def api_chat(
     if not text.strip():
         raise APIBackendError(f"{provider.title()} returned an empty response for {chosen}")
     return APIResult(
-        text=text.strip(), usage=usage, model=chosen, provider=provider
+        text=text.strip(), usage=usage, model=chosen, provider=provider,
+        observed_model=(body["model"].strip() or None) if isinstance(body.get("model"), str) else None
     )

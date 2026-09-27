@@ -37,6 +37,7 @@ MODEL_ID = "kimi-k3"
 PUBLIC_ENGINES = ("plain",)
 SPONSORED_ENGINES = frozenset(
     {
+        "plain",
         "codex",
         "deepagents",
         "deepseek_harness",

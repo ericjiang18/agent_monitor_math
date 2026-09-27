@@ -206,6 +206,9 @@ class CodexAppServerSession:
         cwd: Optional[str] = None,
         codex_bin: str = "codex",
         codex_home: Optional[str] = None,
+        model: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
+        service_tier: Optional[str] = None,
         permission_profile: Optional[str] = None,
         network_domains: Optional[list[str]] = None,
         approval_callback: Optional[Callable[..., str]] = None,
@@ -216,6 +219,9 @@ class CodexAppServerSession:
         self._cwd = cwd or os.getcwd()
         self._codex_bin = codex_bin
         self._codex_home = codex_home
+        self._model = model
+        self._reasoning_effort = reasoning_effort
+        self._service_tier = service_tier
         self._permission_profile = (
             permission_profile or _HERMES_TO_CODEX_PERMISSION_PROFILE.get(
                 os.environ.get("HERMES_TERMINAL_SECURITY_MODE", "auto"),
@@ -301,6 +307,10 @@ class CodexAppServerSession:
                     "sandbox_workspace_write.writable_roots="
                     + json.dumps([self._cwd]),
                 ] + network_args
+            if self._reasoning_effort:
+                extra_args += ["-c", "model_reasoning_effort=" + json.dumps(self._reasoning_effort)]
+            if self._service_tier:
+                extra_args += ["-c", "service_tier=" + json.dumps(self._service_tier)]
             kwargs = {
                 "codex_bin": self._codex_bin,
                 "codex_home": self._codex_home,
@@ -334,6 +344,8 @@ class CodexAppServerSession:
         # scope the writable root to this run's cwd. Permission profiles are
         # still not sent through the experimental thread/start API.
         params: dict[str, Any] = {"cwd": self._cwd}
+        if self._model:
+            params["model"] = self._model
         result = self._client.request("thread/start", params, timeout=15)
         # Cross-fill thread.id/sessionId — different codex versions have
         # serialized this under either key. Mirrors openclaw beta.8's
