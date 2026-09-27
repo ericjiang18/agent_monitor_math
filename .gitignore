@@ -5,7 +5,9 @@ data/logs/*
 data/hermes/*
 data/users.db*
 data/codex_home/
+data/claude_home/
 data/library/*
+data/calls.jsonl
 !data/runs/.gitkeep
 !data/cache/.gitkeep
 !data/logs/.gitkeep
@@ -14,6 +16,7 @@ data/library/*
 
 # Python
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 *.egg-info/
@@ -39,9 +42,36 @@ engines/**/.cache/
 .idea/
 .vscode/
 *.swp
+/console.log
+/server.log
 
 # Hermes / Node leftovers if any
 **/node_modules/
 **/.cache/
 **/web_dist/
 **/tui_dist/
+
+# Lean binary files
+*.olean
+*.ilean
+
+# Locally archived cleanup material and generated documentation cache
+/deleted/
+/docs/.vitepress/cache/
+
+# Private sharing and project state
+/data/run_shares.sqlite3*
+/data/projects.sqlite3*
+
+# Local deploy/debug snapshots and generated graph dump
+/artifacts/
+/graph.json
+/data/deployment_backups/
+/data/research.sqlite3*
+/data/usage.db*
+
+# Separate repository checked out in-tree (kyleyuzheng/math-readability)
+/humanunderstandableexperiments/
+
+# VitePress build snapshots
+/docs/.vitepress/.dist-*/

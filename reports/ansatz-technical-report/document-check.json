@@ -1,0 +1,37 @@
+{
+  "checked_at_utc": "2026-09-20T23:04:13.902246+00:00",
+  "main_tex_sha256": "b866e3a24465bc0a9087037be3a30d1dccd65575b0eb9b9cb0f58c11f8a6d854",
+  "main_pdf_sha256": "c643309a2bd1827fdda6a23aec316f725bdb8b3296b9bbedd25d77eb8e8a318a",
+  "compiler": "Tectonic 0.15.0; standard pdfLaTeX-compatible source",
+  "pages": 14,
+  "paper": "US letter, 612 by 792 PDF points",
+  "layout_log_warnings": [],
+  "expected_engine_notices": [
+    "Package inputenc Warning: inputenc package ignored with utf8 based engines.",
+    "Package shellesc Warning: Shell escape disabled on input line 73."
+  ],
+  "bash_syntax_checks": [
+    {
+      "syntax_exit_code": 0
+    },
+    {
+      "syntax_exit_code": 0
+    },
+    {
+      "syntax_exit_code": 0
+    },
+    {
+      "syntax_exit_code": 0
+    },
+    {
+      "syntax_exit_code": 0
+    }
+  ],
+  "standalone_overleaf_zip_compile": {
+    "exit_code": 0,
+    "pages": 14,
+    "stdout": "note: Running TeX ...\nnote: Rerunning TeX because \"main.aux\" changed ...\nnote: Running xdvipdfmx ...\nnote: Writing `main.pdf` (93.10 KiB)\nnote: Writing `main.log` (30.25 KiB)\nnote: Skipped writing 2 intermediate files (use --keep-intermediates to keep them)\n",
+    "stderr": ""
+  },
+  "visual_review": "Title page, architecture, solved example, and collaboration tables rendered and inspected."
+}

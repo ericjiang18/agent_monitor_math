@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-09-16T00:50:33.125221+00:00",
+  "requested_repetitions": 10,
+  "protocol": "Ten sequential fresh processes; each runs 8 then 16 clients for 40 rounds. No repetitions discarded as warmup. Existing benchmark unmodified.",
+  "scope": "Temporary loopback HTTP servers, synthetic identities, isolated SQLite databases. No model calls or production requests.",
+  "source_sha256": {
+    "agent_monitor/projects.py": "187addf2deca5a0ecf9381f9e5a36bfc7eb34df938165f4f1f9db6ce992dce6a",
+    "scripts/check_collaboration_reliability.py": "fc0a71073e57eb3d0fcc0b034a150cc118fd6d32ff862b6c5d15a9e6aafc9610"
+  },
+  "runs": [
+    {
+      "repetition": 1,
+      "started_at": "2026-09-16T00:50:33.125508+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-01.json"
+      ],
+      "output": "run-01.json",
+      "log": "run-01.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:50:59.808665+00:00",
+      "whole_process_seconds": 26.683,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 2,
+      "started_at": "2026-09-16T00:50:59.810228+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-02.json"
+      ],
+      "output": "run-02.json",
+      "log": "run-02.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:51:28.890532+00:00",
+      "whole_process_seconds": 29.08,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 3,
+      "started_at": "2026-09-16T00:51:28.891406+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-03.json"
+      ],
+      "output": "run-03.json",
+      "log": "run-03.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:51:55.385919+00:00",
+      "whole_process_seconds": 26.495,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 4,
+      "started_at": "2026-09-16T00:51:55.386773+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-04.json"
+      ],
+      "output": "run-04.json",
+      "log": "run-04.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:52:22.382406+00:00",
+      "whole_process_seconds": 26.996,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 5,
+      "started_at": "2026-09-16T00:52:22.383582+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-05.json"
+      ],
+      "output": "run-05.json",
+      "log": "run-05.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:52:48.996295+00:00",
+      "whole_process_seconds": 26.613,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 6,
+      "started_at": "2026-09-16T00:52:48.997188+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-06.json"
+      ],
+      "output": "run-06.json",
+      "log": "run-06.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:53:17.037515+00:00",
+      "whole_process_seconds": 28.04,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 7,
+      "started_at": "2026-09-16T00:53:17.038404+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-07.json"
+      ],
+      "output": "run-07.json",
+      "log": "run-07.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:53:43.928273+00:00",
+      "whole_process_seconds": 26.89,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 8,
+      "started_at": "2026-09-16T00:53:43.929172+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-08.json"
+      ],
+      "output": "run-08.json",
+      "log": "run-08.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:54:10.528273+00:00",
+      "whole_process_seconds": 26.599,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 9,
+      "started_at": "2026-09-16T00:54:10.529542+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-09.json"
+      ],
+      "output": "run-09.json",
+      "log": "run-09.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:54:37.735279+00:00",
+      "whole_process_seconds": 27.206,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    },
+    {
+      "repetition": 10,
+      "started_at": "2026-09-16T00:54:37.736403+00:00",
+      "command": [
+        "/home/repo/agent_monitor_math/.venv/bin/python",
+        "/home/repo/agent_monitor_math/scripts/check_collaboration_reliability.py",
+        "--output",
+        "/home/repo/agent_monitor_math/reports/ansatz-technical-report/experiments/2026-09-16-ten-runs/run-10.json"
+      ],
+      "output": "run-10.json",
+      "log": "run-10.log",
+      "exit_code": 0,
+      "finished_at": "2026-09-16T00:55:05.714782+00:00",
+      "whole_process_seconds": 27.978,
+      "source_unchanged_after": true,
+      "passed": true,
+      "source_matches": true
+    }
+  ],
+  "finished_at": "2026-09-16T00:55:05.715592+00:00",
+  "whole_experiment_seconds": 272.59,
+  "all_passed": true
+}

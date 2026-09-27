@@ -4,7 +4,7 @@ External harnesses (Codex CLI, OpenClaude, OpenHands) run as
 subprocesses inside the per-run workspace. Command templates can be overridden
 via environment variables so users can adapt to their local install.
 
-Template placeholders: {prompt} {workspace} {problem_file}
+Template placeholders: {prompt} {workspace} {problem_file} {model_args}
 """
 from __future__ import annotations
 
@@ -99,6 +99,33 @@ def proof_prompt(
 
 
 CLI_ENGINES: dict[str, dict[str, Any]] = {
+    "kimi": {
+        "id": "kimi",
+        "label": "Kimi Proof",
+        "vendor": "Moonshot AI",
+        "description": "Draft, critique, and refine a proof with Kimi",
+        "kind": "cli",
+        "url": "https://platform.moonshot.ai",
+        "check_file": "agent_monitor/runners/kimi_runner.py",
+        "cmd_env": "KIMI_PROOF_CMD",
+        "default_cmd": "{root}/.venv/bin/python -u {root}/agent_monitor/runners/kimi_runner.py {prompt}",
+        "install_hint": "Add a Kimi API key in Settings",
+        "parser_style": "codex",
+        "supported_models": ["kimi-k3"],
+    },
+    "claude": {
+        "id": "claude",
+        "label": "Claude Code",
+        "vendor": "Anthropic",
+        "description": "Claude Code proof workspace · sign in and connect an Anthropic key",
+        "kind": "cli",
+        "url": "https://code.claude.com/docs",
+        "binary": "claude",
+        "cmd_env": "CLAUDE_CODE_CMD",
+        "default_cmd": "claude --bare -p --verbose --output-format stream-json --permission-mode acceptEdits --tools Read,Write,Edit {model_args} {prompt}",
+        "install_hint": "Install Claude Code and add an Anthropic API key",
+        "parser_style": "openclaude",
+    },
     "codex": {
         "id": "codex",
         "label": "Codex CLI",
@@ -107,11 +134,12 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         "kind": "cli",
         "url": "https://github.com/openai/codex",
         "binary": "codex",
+        "binary_candidates": ["~/.npm-global/bin/codex"],
         "cmd_env": "CODEX_CMD",
         # --json emits JSONL events (incl. per-turn token usage) instead of TTY text.
         # Landlock (workspace-write) denies all writes on this kernel, so run
         # unsandboxed — each run already gets its own workspace directory.
-        "default_cmd": 'codex exec --json --cd {workspace} --sandbox danger-full-access --skip-git-repo-check {prompt}',
+        "default_cmd": 'codex exec --json --cd {workspace} --sandbox danger-full-access --skip-git-repo-check {model_args} {prompt}',
         "install_hint": "npm install -g @openai/codex  (or: brew install --cask codex)",
     },
     "openclaude": {
@@ -122,14 +150,13 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         "kind": "cli",
         "url": "https://github.com/Gitlawb/openclaude",
         "binary": "openclaude",
+        "binary_candidates": ["~/.npm-global/bin/openclaude"],
         "cmd_env": "OPENCLAUDE_CMD",
-        # Saved provider profiles may point at Opengateway (needs its own key),
-        # so pin the provider to OpenAI which reads OPENAI_API_KEY from env.
-        # stream-json --verbose emits JSONL events with usage + total_cost_usd.
+        # The wrapper selects Codex subscription auth when CODEX_HOME is
+        # present, otherwise preserving the OpenAI API-key path.
         "default_cmd": (
-            "openclaude --print --provider openai --model gpt-5.2 "
-            "--output-format stream-json --verbose "
-            "--dangerously-skip-permissions {prompt}"
+            "{root}/.venv/bin/python -u "
+            "{root}/agent_monitor/runners/openclaude_runner.py {prompt}"
         ),
         "install_hint": "npm install -g @gitlawb/openclaude@latest",
     },
@@ -141,12 +168,13 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         "kind": "cli",
         "url": "https://github.com/OpenHands/openhands",
         "binary": "openhands",
+        "binary_candidates": ["~/.local/bin/openhands"],
         "cmd_env": "OPENHANDS_CMD",
-        # --override-with-envs lets headless mode boot from LLM_MODEL/LLM_API_KEY
-        # (injected by the job runner) instead of interactive settings.
+        # Wrapper uses OpenHands Codex ACP for subscription users and execs the
+        # original headless API-key CLI otherwise.
         "default_cmd": (
-            "openhands --headless --always-approve --exit-without-confirmation "
-            "--override-with-envs -t {prompt}"
+            "{root}/.venv/bin/python -u "
+            "{root}/agent_monitor/runners/openhands_subscription_runner.py {prompt}"
         ),
         "install_hint": "uv tool install openhands   (openhands.dev)",
     },
@@ -160,13 +188,11 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         "binary": "openclaw",
         "binary_candidates": ["~/.npm-global/bin/openclaw"],
         "cmd_env": "OPENCLAW_CMD",
-        # Embedded local agent (no gateway daemon needed); reads OPENAI_API_KEY
-        # etc. from env. Session JSONL (parsed post-run) carries per-message
-        # usage + cost. {ws_name} keeps sessions isolated per run.
+        # Wrapper chooses OpenClaw's Codex app-server route for subscription
+        # users and keeps the prior API-key route as fallback.
         "default_cmd": (
-            "{home}/.npm-global/bin/openclaw agent --local --json --agent main "
-            "--session-key agent:main:{ws_name} "
-            "--model openai/gpt-5.5 --timeout 3000 -m {prompt}"
+            "{root}/.venv/bin/python -u "
+            "{root}/agent_monitor/runners/openclaw_runner.py {prompt} {ws_name}"
         ),
         # openclaw needs node >=24.15; setup.sh installs one to ~/.local/node24.
         "extra_path": ["~/.local/node24/bin", "~/.npm-global/bin"],
@@ -225,6 +251,52 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
 
 _ROOT = Path(__file__).resolve().parent.parent
 
+CODEX_SUBSCRIPTION_ENGINES = frozenset(
+    {
+        "hermes",
+        "improof",
+        "codex",
+        "openclaude",
+        "openhands",
+        "openclaw",
+        "deepagents",
+        "plain",
+        "metaharness",
+    }
+)
+ENGINE_AUTH_MODES: dict[str, list[str]] = {
+    "kimi": ["api_key"],
+    "claude": ["api_key"],
+    "hermes": ["codex_subscription", "api_key"],
+    "improof": ["codex_subscription", "api_key"],
+    "ucla": ["api_key"],
+    "codex": ["codex_subscription", "api_key"],
+    "openclaude": ["codex_subscription", "api_key"],
+    "openhands": ["codex_subscription", "api_key"],
+    "openclaw": ["codex_subscription", "api_key"],
+    "deepagents": ["codex_subscription", "api_key"],
+    "plain": ["codex_subscription", "api_key"],
+    "metaharness": ["codex_subscription", "api_key"],
+}
+
+_DEFAULT_EXTRA_PATHS = [
+    "~/.local/node24/bin",
+    "~/.npm-global/bin",
+    "~/.local/bin",
+    "~/.cargo/bin",
+]
+
+
+def tool_search_path() -> str:
+    """PATH that includes user-level Node / npm / uv tool installs."""
+    extras = [str(Path(p).expanduser()) for p in _DEFAULT_EXTRA_PATHS if Path(p).expanduser().is_dir()]
+    extras.append(os.environ.get("PATH", ""))
+    return os.pathsep.join(extras)
+
+
+def which_tool(binary: str) -> str | None:
+    return shutil.which(binary, path=tool_search_path())
+
 
 def _cli_available(spec: dict[str, Any]) -> tuple[bool, str | None]:
     """Return (available, resolved_command_template)."""
@@ -243,7 +315,7 @@ def _cli_available(spec: dict[str, Any]) -> tuple[bool, str | None]:
             return True, spec.get("default_cmd")
         return False, None
     binary = spec.get("binary")
-    if binary and shutil.which(binary):
+    if binary and which_tool(binary):
         return True, spec.get("default_cmd")
     for cand in spec.get("binary_candidates") or []:
         if Path(cand).expanduser().exists():
@@ -252,10 +324,18 @@ def _cli_available(spec: dict[str, Any]) -> tuple[bool, str | None]:
 
 
 def list_engines() -> list[dict[str, Any]]:
-    """All engines with availability info for the UI."""
+    """All engines with availability and authentication info for the UI."""
     out: list[dict[str, Any]] = []
     for e in BUILTIN_ENGINES:
-        out.append({**e, "available": True, "hint": None})
+        out.append(
+            {
+                **e,
+                "available": True,
+                "hint": None,
+                "auth_modes": ENGINE_AUTH_MODES.get(e["id"], []),
+                "subscription_supported": e["id"] in CODEX_SUBSCRIPTION_ENGINES,
+            }
+        )
     for spec in CLI_ENGINES.values():
         ok, _cmd = _cli_available(spec)
         out.append(
@@ -268,6 +348,9 @@ def list_engines() -> list[dict[str, Any]]:
                 "url": spec["url"],
                 "available": ok,
                 "hint": None if ok else spec.get("install_hint"),
+                "auth_modes": ENGINE_AUTH_MODES.get(spec["id"], []),
+                "subscription_supported": spec["id"] in CODEX_SUBSCRIPTION_ENGINES,
+                "supported_models": list(spec.get("supported_models") or []),
             }
         )
     return out
@@ -277,7 +360,19 @@ def all_engine_ids() -> set[str]:
     return {e["id"] for e in BUILTIN_ENGINES} | set(CLI_ENGINES.keys())
 
 
-def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_file: Path) -> list[str] | None:
+def supported_models(engine_id: str) -> list[str]:
+    """Engine-specific allowlist; empty means the account catalog applies."""
+    return list((CLI_ENGINES.get(engine_id) or {}).get("supported_models") or [])
+
+
+def build_cli_command(
+    engine_id: str,
+    *,
+    prompt: str,
+    workspace: Path,
+    problem_file: Path,
+    model: str | None = None,
+) -> list[str] | None:
     """Resolve a CLI engine's command as argv list, or None if unavailable."""
     spec = CLI_ENGINES.get(engine_id)
     if not spec:
@@ -287,6 +382,10 @@ def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_f
         return None
     argv: list[str] = []
     for token in shlex.split(template):
+        if token == "{model_args}":
+            if model:
+                argv.extend(["--model", model])
+            continue
         token = token.replace("{root}", str(_ROOT))
         token = token.replace("{home}", str(Path.home()))
         token = token.replace("{workspace}", str(workspace))
@@ -301,4 +400,11 @@ def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_f
 def engine_extra_path(engine_id: str) -> list[str]:
     """Expanded PATH prefixes an engine's subprocess needs (e.g. newer node)."""
     spec = CLI_ENGINES.get(engine_id) or {}
-    return [str(Path(p).expanduser()) for p in spec.get("extra_path") or []]
+    extras = [str(Path(p).expanduser()) for p in spec.get("extra_path") or []]
+    seen = set(extras)
+    for p in _DEFAULT_EXTRA_PATHS:
+        d = str(Path(p).expanduser())
+        if d not in seen:
+            extras.append(d)
+            seen.add(d)
+    return extras

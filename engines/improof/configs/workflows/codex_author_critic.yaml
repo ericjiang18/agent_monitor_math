@@ -1,0 +1,178 @@
+workflow: proofstack.agents.dag_workflow.DAGWorkflow
+description: >
+  Fixed-round Author/Critic proof workflow using codex exec for both roles.
+  Authentication comes from the host CODEX_HOME ChatGPT login; API keys are
+  intentionally excluded from both subprocess environments.
+
+inputs:
+  problem: ''
+  problem_id: ''
+  max_iterations: 3
+
+budget:
+  max_usd: 20.0
+  max_wallclock_s: 7200
+
+components:
+  cfg_codex_author:
+    cmd:
+      - codex
+      - exec
+      - --ignore-user-config
+      - --ephemeral
+      - --skip-git-repo-check
+      - --json
+      - --output-last-message
+      - answer.tex
+    model: gpt-5.6-sol
+    model_reasoning_effort: high
+    codex_sandbox: auto
+    sandbox:
+      backend: subprocess
+      timeout_s: 1200
+      cpu_limit: 2
+      memory_gb: 4
+      env_allowlist:
+        - PATH
+        - USER
+        - LANG
+        - LC_ALL
+        - TERM
+        - TMPDIR
+        - PYTHONPATH
+        - CODEX_HOME
+      provider_keys: []
+    prompt: |
+      You are the Author in an iterative mathematical proof workflow.
+      Write a complete, rigorous solution to the problem below, using the
+      previous draft and the Critic's report when they are useful.
+
+      Return only the LaTeX body of the solution. Do not include Markdown
+      fences, a document preamble, commentary about the task, or a referee
+      report.
+
+      Problem:
+      {problem}
+
+      Previous draft:
+      {previous_solution}
+
+      Critic's previous report:
+      {previous_critique}
+    input_schema:
+      problem: string
+      previous_solution: string
+      previous_critique: string
+    output_schema:
+      answer_tex: string
+      status: string
+      workspace: string
+    output_files:
+      answer_tex: answer.tex
+    done_outputs:
+      status: status
+    usage:
+      type: codex_jsonl
+      model: gpt-5.6-sol
+
+  cfg_codex_critic:
+    cmd:
+      - codex
+      - exec
+      - --ignore-user-config
+      - --ephemeral
+      - --skip-git-repo-check
+      - --json
+      - --output-last-message
+      - critique.md
+    model: gpt-5.6-sol
+    model_reasoning_effort: high
+    codex_sandbox: auto
+    sandbox:
+      backend: subprocess
+      timeout_s: 1200
+      cpu_limit: 2
+      memory_gb: 4
+      env_allowlist:
+        - PATH
+        - USER
+        - LANG
+        - LC_ALL
+        - TERM
+        - TMPDIR
+        - PYTHONPATH
+        - CODEX_HOME
+      provider_keys: []
+    prompt: |
+      You are the Critic in an iterative mathematical proof workflow.
+      Audit the proposed solution against the original problem. Identify
+      incorrect claims, hidden assumptions, missing cases, circular reasoning,
+      and gaps in rigor. Give concrete repair instructions for the next Author.
+      If the proof is correct, say so explicitly, but still look for ways to
+      make the argument clearer and more self-contained.
+
+      Return only a concise Markdown referee report.
+
+      Problem:
+      {problem}
+
+      Proposed solution:
+      {solution}
+    input_schema:
+      problem: string
+      solution: string
+    output_schema:
+      critique: string
+      status: string
+      workspace: string
+    output_files:
+      critique: critique.md
+    done_outputs:
+      status: status
+    usage:
+      type: codex_jsonl
+      model: gpt-5.6-sol
+
+dag:
+  nodes:
+    - id: author_critic_loop
+      kind: repeat
+      max_iterations: $input.max_iterations
+      condition: true
+      initial_state:
+        solution: ''
+        critique: ''
+      body:
+        nodes:
+          - id: author
+            kind: agent
+            agent: proofstack.agents.configurable_cli.ConfigurableCLIAgent
+            name: cfg_codex_author
+            inputs:
+              problem: $input.problem
+              previous_solution: $state.solution
+              previous_critique: $state.critique
+            best_tex: $output.answer_tex
+          - id: critic
+            kind: agent
+            needs:
+              - author
+            agent: proofstack.agents.configurable_cli.ConfigurableCLIAgent
+            name: cfg_codex_critic
+            inputs:
+              problem: $input.problem
+              solution: $node.author.answer_tex
+        state_updates:
+          solution: $node.author.answer_tex
+          critique: $node.critic.critique
+      outputs:
+        solution: $state.solution
+        critique: $state.critique
+      best_tex: $output.solution
+  outputs:
+    solution: $node.author_critic_loop.solution
+    critique: $node.author_critic_loop.critique
+    solution_tex:
+      stash_solution:
+        problem_id: $input.problem_id
+        tex: $node.author_critic_loop.solution

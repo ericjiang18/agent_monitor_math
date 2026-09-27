@@ -96,7 +96,11 @@ class CLIEventParser:
             if it == "agent_message":
                 self._log(f"assistant · {_clip(item.get('text'))}")
                 self._item("message", str(item.get("text") or ""))
-                self._close_turn()
+                observed = item.get("model") if item.get("model_source") == "response" else None
+                self._close_turn(
+                    model=observed,
+                    model_source="response" if isinstance(observed, str) and observed.strip() else None,
+                )
             elif it == "reasoning":
                 self._log(f"thinking · {_clip(item.get('text'))}")
                 self._item("reasoning", str(item.get("text") or ""))
@@ -169,6 +173,7 @@ class CLIEventParser:
                 cache_read=int(u.get("cache_read_input_tokens") or 0),
                 cache_write=int(u.get("cache_creation_input_tokens") or 0),
                 model=msg.get("model"),
+                model_source="response" if isinstance(msg.get("model"), str) and msg["model"].strip() else None,
             )
         elif t == "result":
             u = ev.get("usage") or {}
@@ -366,7 +371,8 @@ class CLIEventParser:
 
     def _close_turn(self, *, input_tokens: int = 0, output_tokens: int = 0,
                     cache_read: int = 0, cache_write: int = 0,
-                    reasoning: int = 0, model: str | None = None) -> None:
+                    reasoning: int = 0, model: str | None = None,
+                    model_source: str | None = None) -> None:
         cur = self._cur
         if not cur["detail"] and not cur["thinking"]:
             # Usage-only close (codex reports usage once per turn, after the
@@ -391,6 +397,7 @@ class CLIEventParser:
                 "cache_write_tokens": cache_write,
                 "reasoning_tokens": reasoning,
                 "model": model or self.usage.get("model"),
+                "model_source": model_source,
             }
         )
         self._cur = self._new_turn()
@@ -425,6 +432,7 @@ class CLIEventParser:
                     "status": "finished",
                     "tools": t.get("tools") or [],
                     "model": t.get("model"),
+                    "model_source": t.get("model_source"),
                     "input_tokens": t["input_tokens"] or None,
                     "output_tokens": t["output_tokens"] or None,
                     "cache_read_tokens": t["cache_read_tokens"] or 0,

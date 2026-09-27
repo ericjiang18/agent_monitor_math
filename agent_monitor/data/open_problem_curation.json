@@ -1,0 +1,981 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-16",
+  "editorial_note": "Original short statements and selected literature; claims retain their reported status. A missing claim record does not assert that no attempted proofs exist.",
+  "sources": [
+    {
+      "id": "smale",
+      "name": "Smale’s problems",
+      "url": "https://www.fim.uni-passau.de/fileadmin/dokumente/fakultaeten/fim/lehrstuhl/muller/SmaleProblems1998.pdf",
+      "attribution": "Steve Smale; partial-result authors credited on individual records",
+      "license": "Original editorial summaries and bibliographic references",
+      "revision": "1998 list; selected status sources through 2026",
+      "abbreviation": "SP"
+    },
+    {
+      "id": "hilbert",
+      "name": "Hilbert’s problems and open extensions",
+      "url": "https://doi.org/10.1090/S0002-9904-1902-00923-3",
+      "attribution": "David Hilbert; later extensions and partial results credited individually",
+      "license": "Original editorial summaries and bibliographic references",
+      "revision": "Selected 1900 problems and clearly labelled extensions; status sources through 2025",
+      "abbreviation": "HP"
+    },
+    {
+      "id": "ramanujan",
+      "name": "Ramanujan’s legacy",
+      "abbreviation": "RL",
+      "url": "https://doi.org/10.1023/A:1009873805276",
+      "attribution": "Srinivasa Ramanujan; Brocard, Lehmer and later researchers credited on each problem",
+      "license": "Original editorial summaries and bibliographic references",
+      "revision": "Selected source and status reviews through 2026-09-16"
+    }
+  ],
+  "problems": [
+    {
+      "id": "smale-06",
+      "number": "6",
+      "title": "Smale 6: Finiteness of planar central configurations",
+      "source": "smale",
+      "source_name": "Smale’s problems",
+      "source_url": "https://arxiv.org/html/2507.13865v4",
+      "source_locator": "Smale problem 6",
+      "kind": "research-question",
+      "topics": [
+        "celestial mechanics",
+        "dynamical systems",
+        "algebraic geometry"
+      ],
+      "status": "source-open",
+      "status_as_of": "2026-09-16",
+      "source_status": "open",
+      "source_status_updated": "2026-03-05",
+      "source_status_note": "The March 2026 author manuscript explicitly identifies this general finiteness question as unsolved. The July 2026 preprint settles selected exceptional mass tuples only.",
+      "statement": {
+        "text": "For each $n\\ge2$ and fixed positive masses $m_1,\\ldots,m_n$, prove that there are only finitely many planar Newtonian central configurations up to translation, rotation and positive scaling. With centre of mass at zero, these are collision-free points $q_i\\in\\mathbb{R}^2$ satisfying $$\\sum_{j\\ne i}\\frac{m_j(q_j-q_i)}{\\lVert q_j-q_i\\rVert^3}=-\\lambda q_i$$ for some $\\lambda>0$.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Leandro, Moments, Equilibrium Equations and Mutual Distances, v4 (5 March 2026), introduction",
+            "url": "https://arxiv.org/html/2507.13865v4"
+          },
+          {
+            "label": "Steve Smale, Mathematical Problems for the Next Century (1998), original list",
+            "url": "https://www.fim.uni-passau.de/fileadmin/dokumente/fakultaeten/fim/lehrstuhl/muller/SmaleProblems1998.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Generic five-body masses (2012)",
+          "text": "Albouy and Kaloshin prove planar finiteness for five positive masses outside a specified closed algebraic subset of codimension two. This does not cover every five-tuple of positive masses.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Albouy–Kaloshin, Annals of Mathematics 176 (2012), Theorem 6",
+              "url": "https://annals.math.princeton.edu/wp-content/uploads/annals-v176-n1-p10-p.pdf"
+            }
+          ]
+        },
+        {
+          "title": "Selected exceptional five-body cases (2026 preprint)",
+          "text": "Moczurad and Zgliczyński give computer-assisted exact counts for several five-body mass choices outside the scope of earlier generic finiteness results. Their result concerns listed mass choices, not arbitrary masses or arbitrary n.",
+          "status": "Preprint partial result",
+          "sources": [
+            {
+              "label": "Moczurad–Zgliczyński, exceptional five-body mass cases, v2 (23 July 2026)",
+              "url": "https://arxiv.org/abs/2601.01165v2"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "summary": "Can a fixed collection of positive masses form only finitely many planar central configurations, up to symmetry?",
+      "source_revision": "Primary source review 2026-09-16; publication dates recorded in citations",
+      "details_as_of": "2026-09-16",
+      "detail_note": "The positions must be real and planar and all masses positive. Translation, rotation and scaling are factored out."
+    },
+    {
+      "id": "smale-07",
+      "number": "7",
+      "title": "Smale 7: Near-optimal logarithmic energy on the sphere",
+      "source": "smale",
+      "source_name": "Smale’s problems",
+      "source_url": "https://arxiv.org/html/2502.10152v3",
+      "source_locator": "Smale problem 7",
+      "kind": "research-question",
+      "topics": [
+        "discrete geometry",
+        "potential theory",
+        "optimization"
+      ],
+      "status": "source-open",
+      "status_as_of": "2026-09-16",
+      "source_status": "open",
+      "source_status_updated": "2026-03-22",
+      "source_status_note": "The March 2026 revision explicitly states Smale’s algorithmic question and says the optimal energy remains unknown to logarithmic precision. Small-N classifications do not supply the requested all-N algorithm.",
+      "statement": {
+        "text": "For $N\\ge2$, let $E_N(x_1,\\ldots,x_N)=\\sum_{i<j}\\log(1/\\lVert x_i-x_j\\rVert)$ for distinct points on the unit sphere $S^2\\subset\\mathbb{R}^3$, and let $E_N^*$ be its minimum. Construct an algorithm, polynomial in $N$, producing points with $E_N-E_N^*\\le C\\log N$ for a universal constant $C$.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Armentano et al., Logarithmic Fekete critical configurations, v3 (22 March 2026)",
+            "url": "https://arxiv.org/html/2502.10152v3"
+          },
+          {
+            "label": "Steve Smale, Mathematical Problems for the Next Century (1998), original list",
+            "url": "https://www.fim.uni-passau.de/fileadmin/dokumente/fakultaeten/fim/lehrstuhl/muller/SmaleProblems1998.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Critical configurations through six points (2026)",
+          "text": "Armentano and coauthors classify all logarithmic Fekete critical configurations with at most six points in every dimension. The arXiv record lists the paper as accepted in the Journal of Symbolic Computation.",
+          "status": "Accepted result",
+          "sources": [
+            {
+              "label": "Armentano et al., Logarithmic Fekete critical configurations, v3 (22 March 2026)",
+              "url": "https://arxiv.org/html/2502.10152v3"
+            },
+            {
+              "label": "Publication status and version history",
+              "url": "https://arxiv.org/abs/2502.10152v3"
+            }
+          ]
+        },
+        {
+          "title": "A restricted seven-point result (2026)",
+          "text": "For seven points on S² they identify the minimizer among critical configurations containing an antipodal pair. The unrestricted seven-point minimizer is supported by numerical evidence in this paper, not proved there.",
+          "status": "Proved special case",
+          "sources": [
+            {
+              "label": "Armentano et al., Logarithmic Fekete critical configurations, v3 (22 March 2026)",
+              "url": "https://arxiv.org/html/2502.10152v3"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "summary": "Construct near-minimal logarithmic-energy configurations on the sphere in polynomial time.",
+      "source_revision": "Primary source review 2026-09-16; publication dates recorded in citations",
+      "details_as_of": "2026-09-16",
+      "detail_note": "Use the real-number model of computation in Smale’s original list. A finite-precision implementation must specify representations and error guarantees. This is logarithmic energy."
+    },
+    {
+      "id": "smale-09",
+      "number": "9",
+      "title": "Smale 9: A strongly polynomial algorithm for linear programming",
+      "source": "smale",
+      "source_name": "Smale’s problems",
+      "source_url": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.STACS.2025.2",
+      "source_locator": "Smale problem 9",
+      "kind": "research-question",
+      "topics": [
+        "optimization",
+        "algorithms",
+        "computational complexity"
+      ],
+      "status": "source-open",
+      "status_as_of": "2026-09-16",
+      "source_status": "open",
+      "source_status_updated": "2025-02-24",
+      "source_status_note": "The STACS 2025 authors describe their sparse-matrix theorem as progress toward the unresolved general problem, explicitly identified as Smale’s ninth problem.",
+      "statement": {
+        "text": "Find a strongly polynomial algorithm for general linear programming. For an input with m constraints and n variables, its number of arithmetic operations must be bounded by a polynomial in m and n, independently of coefficient bit lengths; on rational input, intermediate representations must have polynomially bounded bit length. It must optimize the objective or correctly report infeasibility or unboundedness.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Dadush–Koh–Natura–Olver–Végh, STACS 2025 invited talk (24 February 2025)",
+            "url": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.STACS.2025.2"
+          },
+          {
+            "label": "Steve Smale, Mathematical Problems for the Next Century (1998), original list",
+            "url": "https://www.fim.uni-passau.de/fileadmin/dokumente/fakultaeten/fim/lehrstuhl/muller/SmaleProblems1998.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "At most two nonzeros per row or column (2025)",
+          "text": "Dadush, Koh, Natura, Olver and Végh give a strongly polynomial minimum-cost generalized-flow algorithm and thereby solve linear programs having at most two nonzero entries in each row, or at most two in each column. Their bound does not apply to unrestricted matrices.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Dadush–Koh–Natura–Olver–Végh, STACS 2025 invited talk (24 February 2025)",
+              "url": "https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.STACS.2025.2"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "summary": "Can general linear programming be solved with polynomially many arithmetic operations independent of coefficient size?",
+      "source_revision": "Primary source review 2026-09-16; publication dates recorded in citations",
+      "details_as_of": "2026-09-16",
+      "detail_note": "This is the standard strongly polynomial formulation associated with Smale 9. Ordinary polynomial time in the total input bit length does not meet this requirement."
+    },
+    {
+      "id": "smale-11",
+      "number": "11",
+      "title": "Smale 11: Density of hyperbolicity for complex polynomials",
+      "source": "smale",
+      "source_name": "Smale’s problems",
+      "source_url": "https://www.fim.uni-passau.de/fileadmin/dokumente/fakultaeten/fim/lehrstuhl/muller/SmaleProblems1998.pdf",
+      "source_locator": "Smale problem 11",
+      "kind": "research-question",
+      "topics": [
+        "complex dynamics",
+        "dynamical systems"
+      ],
+      "status": "source-open",
+      "status_as_of": "2026-09-16",
+      "source_status": "open",
+      "source_status_updated": "2025",
+      "source_status_note": "The complex problem remains open already in the quadratic family. Section 5 of the MFCS 2025 paper uses the quadratic hyperbolicity conjecture as an explicit assumption; it does not prove it.",
+      "statement": {
+        "text": "For every degree $d\\ge2$, prove that hyperbolic complex polynomials are dense among complex polynomials of degree $d$ in the coefficient topology. Here hyperbolic means that every finite critical point tends under iteration to an attracting periodic orbit or to infinity.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Steve Smale, Mathematical Problems for the Next Century (1998), original list",
+            "url": "https://www.fim.uni-passau.de/fileadmin/dokumente/fakultaeten/fim/lehrstuhl/muller/SmaleProblems1998.pdf"
+          },
+          {
+            "label": "Deciding Robust Instances of an Escape Problem, MFCS 2025, section 5",
+            "url": "https://drops.dagstuhl.de/storage/00lipics/lipics-vol345-mfcs2025/html/LIPIcs.MFCS.2025.79/LIPIcs.MFCS.2025.79.html"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "The real one-dimensional version is solved (2007)",
+          "text": "Kozlovski, Shen and van Strien prove density of hyperbolicity for real polynomials and for smooth interval and circle maps. They identify this as solving the second, real part of Smale 11. Their real-dynamics theorem does not settle the complex-polynomial statement above.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Kozlovski–Shen–van Strien, Density of hyperbolicity in dimension one, Annals 166 (2007), Theorems 1–2",
+              "url": "https://annals.math.princeton.edu/wp-content/uploads/annals-v166-n1-p04.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "summary": "Are hyperbolic complex polynomials dense among all polynomials of a fixed degree?",
+      "source_revision": "Primary source review 2026-09-16; publication dates recorded in citations",
+      "details_as_of": "2026-09-16",
+      "detail_note": "This entry concerns the complex part of Smale 11; the real part is solved."
+    },
+    {
+      "id": "hilbert-16-ii",
+      "number": "16, part II",
+      "title": "Hilbert 16, part II: A uniform bound on limit cycles",
+      "source": "hilbert",
+      "source_name": "Hilbert’s problems and open extensions",
+      "source_url": "https://arxiv.org/html/2411.09594v1",
+      "source_locator": "Hilbert problem 16, part II",
+      "kind": "research-question",
+      "topics": [
+        "differential equations",
+        "dynamical systems",
+        "real algebraic geometry"
+      ],
+      "status": "source-open",
+      "status_as_of": "2026-09-16",
+      "source_status": "open",
+      "source_status_updated": "2024-11-14",
+      "source_status_note": "The specialist November 2024 note formulates the unresolved uniform-bound problem and refutes a claimed quadratic formula. Its lower bounds leave uniform finiteness open.",
+      "statement": {
+        "text": "For every integer $d\\ge2$, prove that there is a finite $H(d)$ bounding the number of limit cycles of every real planar polynomial differential system $\\dot{x}=P(x,y)$, $\\dot{y}=Q(x,y)$ with $\\max(\\deg P,\\deg Q)\\le d$. A limit cycle is a nonconstant periodic orbit isolated from other periodic orbits. The bound must depend only on $d$, not on the coefficients.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Buzzi–Novaes, A note on a recent attempt to solve the second part of Hilbert’s 16th Problem (14 November 2024)",
+            "url": "https://arxiv.org/html/2411.09594v1"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Established lower growth",
+          "text": "Known constructions force H(d) to grow at least on the order of d² log d; consequently no quadratic polynomial can bound H(d) for all d. Buzzi and Novaes review the Christopher–Lloyd construction and later refinements.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Buzzi–Novaes, A note on a recent attempt to solve the second part of Hilbert’s 16th Problem (14 November 2024)",
+              "url": "https://arxiv.org/html/2411.09594v1"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [
+        {
+          "title": "A 2024 claimed quadratic formula is refuted",
+          "text": "A 2024 Entropy article claimed H(d)=2(d−1)(4(d−1)−2). Buzzi and Novaes explain that this contradicts established lower growth and give counterexamples. The formula is explicitly refuted in this note.",
+          "status": "Refuted proof claim",
+          "sources": [
+            {
+              "label": "Buzzi–Novaes, A note on a recent attempt to solve the second part of Hilbert’s 16th Problem (14 November 2024)",
+              "url": "https://arxiv.org/html/2411.09594v1"
+            }
+          ]
+        }
+      ],
+      "summary": "Can the degree alone bound the number of isolated periodic orbits in a planar polynomial system?",
+      "source_revision": "Primary source review 2026-09-16; publication dates recorded in citations",
+      "details_as_of": "2026-09-16",
+      "detail_note": "Finiteness for each individual vector field does not give a uniform bound over all fields of a fixed degree. Smale 13 asks for the stronger polynomial upper bound.",
+      "additional_sources": [
+        {
+          "label": "Smale 13 · stronger polynomial bound",
+          "url": "https://www.fim.uni-passau.de/fileadmin/dokumente/fakultaeten/fim/lehrstuhl/muller/SmaleProblems1998.pdf",
+          "relation": "related-stronger-formulation"
+        }
+      ]
+    },
+    {
+      "id": "hilbert-10-q",
+      "number": "10 over ℚ (extension)",
+      "title": "Hilbert’s tenth problem over ℚ (open extension)",
+      "source": "hilbert",
+      "source_name": "Hilbert’s problems and open extensions",
+      "source_url": "https://www.sciencedirect.com/science/article/pii/S0022314X25001180",
+      "source_locator": "Hilbert problem 10 over ℚ (extension)",
+      "kind": "research-question",
+      "topics": [
+        "number theory",
+        "logic",
+        "Diophantine equations"
+      ],
+      "status": "source-open",
+      "status_as_of": "2026-09-16",
+      "source_status": "open",
+      "source_status_updated": "2025-11",
+      "source_status_note": "The November 2025 journal article explicitly identifies rational solvability as an open problem. Its undecidability theorem adds height-comparison relations and does not settle the unaugmented rational problem.",
+      "statement": {
+        "text": "Determine whether there is an algorithm deciding, for every polynomial $f\\in\\mathbb{Z}[x_1,\\ldots,x_n]$ with arbitrary finite $n$, whether $f(q_1,\\ldots,q_n)=0$ has a solution in $\\mathbb{Q}^n$. The usual conjecture is that no such decision algorithm exists.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Garcia-Fritz–Pasten–Vidaux, Effectivity for existence of rational points is undecidable, Journal of Number Theory 276 (November 2025)",
+            "url": "https://www.sciencedirect.com/science/article/pii/S0022314X25001180"
+          },
+          {
+            "label": "Garcia-Fritz–Pasten–Vidaux, author preprint v2 (6 November 2023)",
+            "url": "https://arxiv.org/abs/2311.01958v2"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "The original integer problem is solved",
+          "text": "The Davis–Putnam–Robinson–Matiyasevich theorem establishes undecidability over the integers. It does not decide the corresponding question over the rational numbers.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Garcia-Fritz–Pasten–Vidaux, Effectivity for existence of rational points is undecidable, Journal of Number Theory 276 (November 2025)",
+              "url": "https://www.sciencedirect.com/science/article/pii/S0022314X25001180"
+            }
+          ]
+        },
+        {
+          "title": "Rational equations with height comparisons (2025)",
+          "text": "Garcia-Fritz, Pasten and Vidaux prove undecidability when rational equations are supplemented by finitely many height-comparison conditions. Those extra relations are essential to the theorem’s stated scope.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Garcia-Fritz–Pasten–Vidaux, Effectivity for existence of rational points is undecidable, Journal of Number Theory 276 (November 2025)",
+              "url": "https://www.sciencedirect.com/science/article/pii/S0022314X25001180"
+            },
+            {
+              "label": "Garcia-Fritz–Pasten–Vidaux, author preprint v2 (6 November 2023)",
+              "url": "https://arxiv.org/abs/2311.01958v2"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "summary": "Is there an algorithm deciding whether a polynomial equation has a rational solution? The original integer problem is solved.",
+      "source_revision": "Primary source review 2026-09-16; publication dates recorded in citations",
+      "details_as_of": "2026-09-16",
+      "detail_note": "This is an open extension of Hilbert 10 to rational numbers. The original integer question was resolved."
+    },
+    {
+      "id": "ramanujan-brocard",
+      "title": "Brocard–Ramanujan factorial squares",
+      "status": "source-open",
+      "statement": {
+        "text": "Prove or disprove that the only positive integer solutions of $n!+1=m^2$ are $(n,m)=(4,5),(5,11),(7,71)$. Here $n!=1\\cdot2\\cdots n$.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Berndt–Galway, On the Brocard–Ramanujan Diophantine Equation (2000)",
+            "url": "https://doi.org/10.1023/A:1009873805276"
+          },
+          {
+            "label": "On Brocard’s problem with Padovan and Perrin numbers (2026), introduction",
+            "url": "https://arxiv.org/html/2606.28577v1"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Published finite search",
+          "text": "The three displayed pairs are solutions. Berndt and Galway’s published computation ruled out additional solutions through n = 10⁹.",
+          "status": "Computational evidence",
+          "sources": [
+            {
+              "label": "Berndt–Galway (2000), institutional publication record",
+              "url": "https://experts.illinois.edu/en/publications/on-the-brocard-ramanujan-diophantine-equation-n-1-msup2sup/"
+            }
+          ]
+        },
+        {
+          "title": "Computation through 10¹⁵",
+          "text": "Epstein and Glickman report a search of the first 10¹⁵ values in January–May 2020 with no new solutions. This is computational evidence, not an infinite proof.",
+          "status": "Computational evidence",
+          "sources": [
+            {
+              "label": "Epstein–Glickman, computation source and report (2020)",
+              "url": "https://github.com/jhg023/brocard"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [
+        {
+          "title": "Unverified preprint claim",
+          "text": "Somnath Maiti’s February 2026 revision claims that there are no further solutions. A June 2026 paper by other researchers still explicitly describes the unrestricted equation as unsolved. The claim is recorded here as unverified.",
+          "status": "Unverified preprint claim",
+          "sources": [
+            {
+              "label": "Maiti, revised proof-claim preprint (2026)",
+              "url": "https://arxiv.org/abs/2004.09256v2"
+            },
+            {
+              "label": "On Brocard’s problem with Padovan and Perrin numbers (2026)",
+              "url": "https://arxiv.org/html/2606.28577v1"
+            }
+          ]
+        }
+      ],
+      "source": "ramanujan",
+      "source_name": "Ramanujan’s legacy",
+      "status_as_of": "2026-09-16",
+      "details_as_of": "2026-09-16",
+      "source_status": "Open in the cited research; proof claims labelled separately",
+      "source_revision": "Primary source review 2026-09-16",
+      "kind": "research-question",
+      "number": "Brocard–Ramanujan",
+      "source_locator": "Brocard–Ramanujan factorial squares",
+      "source_url": "https://doi.org/10.1023/A:1009873805276",
+      "summary": "Are 4! + 1, 5! + 1 and 7! + 1 the only factorials plus one that are perfect squares?",
+      "topics": [
+        "number theory",
+        "Diophantine equations"
+      ],
+      "detail_note": "Brocard posed the problem in 1876; Ramanujan independently asked for further values in 1913. The assertion that no others exist was subsequently advanced by Erdős."
+    },
+    {
+      "id": "ramanujan-lehmer",
+      "title": "Lehmer’s conjecture for Ramanujan’s tau function",
+      "status": "source-open",
+      "statement": {
+        "text": "Define the integers $\\tau(n)$ by $q\\prod_{r\\ge1}(1-q^r)^{24}=\\sum_{n\\ge1}\\tau(n)q^n$. Prove that $\\tau(n)\\ne0$ for every positive integer $n$.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Johan Bosman, On the computation of Galois representations associated to level one modular forms (2007)",
+            "url": "https://arxiv.org/abs/0710.1237"
+          },
+          {
+            "label": "Balakrishnan–Craig–Ono, Variations of Lehmer’s Conjecture (2022)",
+            "url": "https://doi.org/10.1016/j.jnt.2020.04.009"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Verified finite range",
+          "text": "Bosman proved nonvanishing for every n < 22,798,241,520,242,687,999 using verified modular Galois representations. This is an established 2007 bound, not a claim to the latest computational record.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Bosman (2007), Corollary 1",
+              "url": "https://arxiv.org/pdf/0710.1237"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [
+        {
+          "title": "Withdrawn proof claim",
+          "text": "Will Y. Lee’s 2015 elementary-proof manuscript was withdrawn on 17 June 2016. The author’s arXiv note reports that the proofs of Lemmas 2 and 4 were false.",
+          "status": "Withdrawn proof claim",
+          "sources": [
+            {
+              "label": "Lee, author’s withdrawal notice (2016)",
+              "url": "https://arxiv.org/abs/1506.02098"
+            }
+          ]
+        },
+        {
+          "title": "A second withdrawn claim (2025)",
+          "text": "Minjia Shi, Lu Wang and Patrick Solé announced a proof in March 2025 and withdrew it on April 1. Their arXiv notice identifies an incorrect use of the Venkov criterion that invalidates the conclusion.",
+          "status": "Withdrawn proof claim",
+          "sources": [
+            {
+              "label": "Shi–Wang–Solé · author withdrawal notice (2025)",
+              "url": "https://arxiv.org/abs/2503.23498v2"
+            }
+          ]
+        }
+      ],
+      "source": "ramanujan",
+      "source_name": "Ramanujan’s legacy",
+      "status_as_of": "2026-09-16",
+      "details_as_of": "2026-09-16",
+      "source_status": "Open in the cited research; proof claims labelled separately",
+      "source_revision": "Primary source review 2026-09-16",
+      "kind": "research-question",
+      "number": "Lehmer",
+      "source_locator": "Lehmer’s conjecture for Ramanujan’s tau function",
+      "source_url": "https://arxiv.org/abs/0710.1237",
+      "summary": "Can any coefficient of Ramanujan’s tau function vanish?",
+      "topics": [
+        "number theory",
+        "modular forms"
+      ],
+      "detail_note": "The function is Ramanujan’s; the nonvanishing conjecture is due to D. H. Lehmer (1947), not to Ramanujan."
+    },
+    {
+      "id": "ramanujan-maass",
+      "title": "The Ramanujan bound for Maass forms",
+      "status": "source-open",
+      "statement": {
+        "text": "For every primitive weight-zero Hecke–Maass cusp form $\\varphi$ of level $N$, use the unitary normalization of its Hecke eigenvalues $\\lambda_\\varphi(n)$, with $\\lambda_\\varphi(1)=1$. Prove $|\\lambda_\\varphi(p)|\\le2$ for every prime $p\\nmid N$.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Peter Sarnak, Notes on the Generalized Ramanujan Conjectures (2005)",
+            "url": "https://publications.ias.edu/sites/default/files/FieldNotesCurrent.pdf"
+          },
+          {
+            "label": "Huang–Zhao, On Ramanujan Primes for Hecke–Maass Cusp Forms (2026)",
+            "url": "https://arxiv.org/abs/2605.09807"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Kim–Sarnak bound",
+          "text": "Kim and Sarnak proved $|\\lambda_\\varphi(p)|\\le p^{7/64}+p^{-7/64}$, a weaker bound valid at every unramified prime.",
+          "status": "Proved partial result",
+          "sources": [
+            {
+              "label": "Sarnak, Notes on Generalized Ramanujan Conjectures (2005)",
+              "url": "https://publications.ias.edu/sites/default/files/FieldNotesCurrent.pdf"
+            }
+          ]
+        },
+        {
+          "title": "Simultaneous Ramanujan primes",
+          "text": "Huang and Zhao’s May 2026 preprint proves simultaneous Ramanujan-prime results for several forms while explicitly retaining the all-primes conjecture as unsolved.",
+          "status": "Preprint partial result",
+          "sources": [
+            {
+              "label": "Huang–Zhao, On Ramanujan Primes (2026)",
+              "url": "https://arxiv.org/html/2605.09807v1"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [
+        {
+          "title": "Unverified preprint claim",
+          "text": "André Unterberger’s preprint, revised February 2026, claims the level-one Maass result and Selberg’s conjecture. Later May 2026 research still calls the Maass conjecture unsolved. The cited material does not establish acceptance of the claim.",
+          "status": "Unverified preprint claim",
+          "sources": [
+            {
+              "label": "Unterberger, revised proof-claim preprint (2026)",
+              "url": "https://arxiv.org/abs/2001.10956v16"
+            },
+            {
+              "label": "Huang–Zhao, On Ramanujan Primes (2026)",
+              "url": "https://arxiv.org/html/2605.09807v1"
+            }
+          ]
+        }
+      ],
+      "source": "ramanujan",
+      "source_name": "Ramanujan’s legacy",
+      "status_as_of": "2026-09-16",
+      "details_as_of": "2026-09-16",
+      "source_status": "Open in the cited research; proof claims labelled separately",
+      "source_revision": "Primary source review 2026-09-16",
+      "kind": "research-question",
+      "number": "Maass",
+      "source_locator": "The Ramanujan bound for Maass forms",
+      "source_url": "https://publications.ias.edu/sites/default/files/FieldNotesCurrent.pdf",
+      "summary": "Prove the sharp Hecke-eigenvalue bound for Maass cusp forms, the unresolved nonholomorphic case.",
+      "topics": [
+        "number theory",
+        "modular forms"
+      ],
+      "detail_note": "This is the nonholomorphic extension of Ramanujan’s coefficient bound. Deligne’s proof for holomorphic cusp forms does not settle this Maass-form case."
+    }
+  ],
+  "overlays": {
+    "clay-birch-and-swinnerton-dyer-conjecture": {
+      "statement": {
+        "text": "For an elliptic curve $E/\\mathbb{Q}$, is $\\operatorname{rank}E(\\mathbb{Q})=\\operatorname{ord}_{s=1}L(E,s)$? The full Birch–Swinnerton-Dyer conjecture also predicts the leading coefficient using the regulator, periods, Tamagawa factors, torsion and the Tate–Shafarevich group. The linked official formulation fixes the complete target.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Andrew Wiles · official problem description",
+            "url": "https://www.claymath.org/wp-content/uploads/2022/05/birchswin.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Analytic rank zero and one",
+          "text": "Gross–Zagier and Kolyvagin establish the rank equality when the analytic rank is $0$ or $1$, together with finiteness of the Tate–Shafarevich group in these cases. These results do not establish the full leading-coefficient formula for all elliptic curves.",
+          "status": "proved",
+          "sources": [
+            {
+              "label": "Andrew Wiles · official problem description",
+              "url": "https://www.claymath.org/wp-content/uploads/2022/05/birchswin.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "details_as_of": "2026-09-16",
+      "status_as_of": "2026-09-16",
+      "source_status": "Listed as unsolved by the Clay Mathematics Institute",
+      "source_revision": "Official CMI problem page checked 2026-09-16"
+    },
+    "clay-hodge-conjecture": {
+      "statement": {
+        "text": "Let $X$ be a smooth complex projective variety. Is every rational cohomology class of type $(p,p)$ in $H^{2p}(X,\\mathbb{Q})$ a rational linear combination of the classes of algebraic subvarieties of codimension $p$?",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Pierre Deligne · official problem description",
+            "url": "https://www.claymath.org/wp-content/uploads/2022/06/hodge.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Divisors and the coefficient distinction",
+          "text": "The codimension-one case follows from the Lefschetz $(1,1)$ theorem: integral $(1,1)$ classes arise from line bundles and divisors. In higher codimension the integral analogue has counterexamples, so the rational coefficients in the open conjecture are essential.",
+          "status": "proved",
+          "sources": [
+            {
+              "label": "Pierre Deligne · official problem description",
+              "url": "https://www.claymath.org/wp-content/uploads/2022/06/hodge.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "details_as_of": "2026-09-16",
+      "status_as_of": "2026-09-16",
+      "source_status": "Listed as unsolved by the Clay Mathematics Institute",
+      "source_revision": "Official CMI problem page checked 2026-09-16"
+    },
+    "clay-navier-stokes-equation": {
+      "status": "resolution-announced",
+      "status_as_of": "2026-09-16",
+      "source_status": "Resolution announced; Clay prize process pending",
+      "source_revision": "Official Clay and author announcements checked September 2026",
+      "statement": {
+        "text": "For the three-dimensional incompressible equations $\\partial_tu+(u\\cdot\\nabla)u=\\nu\\Delta u-\\nabla p+f$, $\\nabla\\cdot u=0$, with viscosity $\\nu>0$, establish one of Fefferman’s alternatives: global smoothness for all admissible unforced initial data on $\\mathbb{R}^3$ or the three-torus, or an admissible smooth-forced example for which global smoothness fails. The source specifies the decay, periodicity and energy hypotheses.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Charles Fefferman · official alternatives A–D",
+            "url": "https://www.claymath.org/wp-content/uploads/2022/06/navierstokes.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Classical existence results",
+          "text": "Global smooth solutions are known in two dimensions. In three dimensions, smooth data give local smooth solutions and Leray’s construction gives global weak solutions; a weak solution need not have the smoothness required in the prize formulation.",
+          "status": "proved",
+          "sources": [
+            {
+              "label": "Charles Fefferman · official alternatives A–D",
+              "url": "https://www.claymath.org/wp-content/uploads/2022/06/navierstokes.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [
+        {
+          "title": "September 2026 announced resolution",
+          "text": "OpenAI published an analytical write-up and Lean formalization claiming finite-time breakdown with smooth forcing, establishing alternatives C and D. Clay subsequently acknowledged an apparent resolution and pointed to its evaluation rules. This catalogue records the announcement separately from established partial results and does not certify the proof or award a prize.",
+          "status": "announced",
+          "sources": [
+            {
+              "label": "OpenAI · announcement, manuscript and Lean source",
+              "url": "https://openai.com/index/navier-stokes-solution/"
+            },
+            {
+              "label": "Clay Mathematics Institute · response",
+              "url": "https://www.claymath.org/news/navier-stokes-announcement/"
+            }
+          ]
+        }
+      ],
+      "detail_note": "The force and the exact Clay alternative matter. An announced smooth-forced breakdown should not be silently restated as an unforced breakdown theorem. Check the linked announcements for updates.",
+      "details_as_of": "2026-09-16"
+    },
+    "clay-p-vs-np": {
+      "statement": {
+        "text": "Is $\\mathrm{P}=\\mathrm{NP}$? Equivalently, can every decision problem whose yes-instances have polynomial-length certificates verifiable in polynomial time be decided by a deterministic polynomial-time algorithm?",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Stephen Cook · official problem description",
+            "url": "https://www.claymath.org/wp-content/uploads/2022/06/pvsnp.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "NP-completeness and proof barriers",
+          "text": "Boolean satisfiability is NP-complete, so a polynomial-time SAT algorithm would imply $\\mathrm{P}=\\mathrm{NP}$. Exponential lower bounds are known for restricted circuit models. Relativization and natural-proofs results explain limitations of broad approaches, without deciding the unrestricted question.",
+          "status": "proved",
+          "sources": [
+            {
+              "label": "Stephen Cook · official problem description",
+              "url": "https://www.claymath.org/wp-content/uploads/2022/06/pvsnp.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "details_as_of": "2026-09-16",
+      "status_as_of": "2026-09-16",
+      "source_status": "Listed as unsolved by the Clay Mathematics Institute",
+      "source_revision": "Official CMI problem page checked 2026-09-16"
+    },
+    "clay-riemann-hypothesis": {
+      "statement": {
+        "text": "For the analytic continuation of the Riemann zeta function, does every nontrivial zero $\\rho$ satisfy $\\operatorname{Re}(\\rho)=\\tfrac12$?",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Clay Mathematics Institute · Riemann hypothesis",
+            "url": "https://www.claymath.org/millennium/riemann-hypothesis/"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "A positive proportion of zeros",
+          "text": "Pratt, Robles, Zaharescu and Zeindler proved that more than five twelfths of the nontrivial zeros, counted asymptotically, lie on the critical line. This is a documented partial result, not a claim that every zero lies there or a claim to the best known proportion.",
+          "status": "proved",
+          "sources": [
+            {
+              "label": "Pratt–Robles–Zaharescu–Zeindler · research paper",
+              "url": "https://arxiv.org/abs/1802.10521"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "details_as_of": "2026-09-16",
+      "status_as_of": "2026-09-16",
+      "source_status": "Listed as unsolved by the Clay Mathematics Institute",
+      "source_revision": "Official CMI problem page checked 2026-09-16"
+    },
+    "clay-yang-mills-the-maths-gap": {
+      "statement": {
+        "text": "For each compact simple gauge group $G$, construct a nontrivial quantum Yang–Mills theory on $\\mathbb{R}^4$ satisfying the axiomatic requirements in the official problem, and prove a positive spectral mass gap $\\Delta>0$ above the vacuum.",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Arthur Jaffe and Edward Witten · official problem description",
+            "url": "https://www.claymath.org/wp-content/uploads/2022/06/yangmills.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Progress in lattice constructions",
+          "text": "Balaban obtained renormalization-group estimates for lattice gauge theories, including four-dimensional ultraviolet analysis. The official description identifies the remaining need for a full continuum construction and a positive mass gap uniform in the infinite-volume limit.",
+          "status": "proved",
+          "sources": [
+            {
+              "label": "Arthur Jaffe and Edward Witten · official problem description",
+              "url": "https://www.claymath.org/wp-content/uploads/2022/06/yangmills.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "details_as_of": "2026-09-16",
+      "status_as_of": "2026-09-16",
+      "source_status": "Listed as unsolved by the Clay Mathematics Institute",
+      "source_revision": "Official CMI problem page checked 2026-09-16"
+    },
+    "erdos-0003": {
+      "title": "Erdős #3 · divergent reciprocal sums and arithmetic progressions",
+      "summary": "Must every set of positive integers with divergent reciprocal sum contain arithmetic progressions of every finite length?",
+      "statement": {
+        "text": "If $A\\subseteq\\mathbb{N}_{>0}$ and $\\sum_{a\\in A}1/a$ diverges, must $A$ contain nonconstant arithmetic progressions of every finite length?",
+        "kind": "editorial",
+        "sources": [
+          {
+            "label": "Erdős Problems · original problem and discussion",
+            "url": "https://www.erdosproblems.com/3"
+          },
+          {
+            "label": "Formal Conjectures · statement of Erdős #3",
+            "url": "https://github.com/google-deepmind/formal-conjectures/blob/main/FormalConjectures/ErdosProblems/3.lean"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Three-term progressions",
+          "text": "Bloom and Sisask proved that the divergent-reciprocal-sum hypothesis forces a nontrivial three-term arithmetic progression. This settles that length, not the conjecture for arbitrary finite lengths.",
+          "status": "proved",
+          "sources": [
+            {
+              "label": "Bloom–Sisask · Breaking the logarithmic barrier in Roth’s theorem",
+              "url": "https://arxiv.org/abs/2007.03528"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "details_as_of": "2026-09-16"
+    },
+    "kourovka-01-003": {
+      "statement": {
+        "kind": "editorial",
+        "text": "Let $G$ be a torsion-free group: no element other than its identity has finite order. Must $\\alpha\\beta\\ne0$ hold whenever $\\alpha$ and $\\beta$ are nonzero elements of the integral group ring $\\mathbb{Z}[G]$? Elements of $\\mathbb{Z}[G]$ are finite integer linear combinations of group elements, multiplied using the group law.",
+        "sources": [
+          {
+            "label": "Kourovka Notebook, 21st edition, September 2026",
+            "url": "https://kourovkanotebookorg.wordpress.com/wp-content/uploads/2026/09/21tkt.pdf"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "Ordered groups",
+          "text": "The answer is yes for right-orderable groups, hence for locally indicable groups. The group-algebra theorem over a field also gives the integral case by embedding ℤ[G] in ℚ[G].",
+          "status": "Proved special case",
+          "sources": [
+            {
+              "label": "Linnell, Analytic versions of the zero divisor conjecture, Theorems 4.1 and 4.6",
+              "url": "https://personal.math.vt.edu/linnell/research/durham.pdf"
+            }
+          ]
+        },
+        {
+          "title": "Elementary amenable groups",
+          "text": "Kropholler, Linnell and Moody established the zero-divisor conclusion for torsion-free elementary amenable groups, a class containing all solvable groups. Linnell’s Theorem 4.6 includes integer coefficients directly.",
+          "status": "Proved special case",
+          "sources": [
+            {
+              "label": "Linnell, Analytic versions of the zero divisor conjecture, Theorems 4.1 and 4.6",
+              "url": "https://personal.math.vt.edu/linnell/research/durham.pdf"
+            }
+          ]
+        },
+        {
+          "title": "The related unit conjecture is different",
+          "text": "Gardam disproved the unit conjecture over the two-element field. His example still satisfies the zero-divisor conjecture; it does not answer Kourovka 1.3 negatively.",
+          "status": "Established distinction",
+          "sources": [
+            {
+              "label": "Gardam, A counterexample to the unit conjecture for group rings",
+              "url": "https://www.gilesgardam.com/papers/unit-conjecture-counterexamplev3.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [],
+      "title": "Kourovka 1.3 · Zero divisors in integral group rings",
+      "summary": "Can two nonzero elements of an integral group ring multiply to zero when the group is torsion-free?",
+      "detail_note": "Listed in the first Kourovka issue (1965), submitted as a well-known problem by L. A. Bokut’. This is the integral-coefficient form of the zero-divisor conjecture.",
+      "details_as_of": "2026-09-16",
+      "status_as_of": "2026-09-16",
+      "source_status": "Listed as unresolved in the September 2026 Kourovka Notebook"
+    },
+    "kourovka-12-020": {
+      "statement": {
+        "kind": "editorial",
+        "text": "Let $F$ be the group of increasing piecewise-linear homeomorphisms of $[0,1]$ with finitely many breakpoints, all dyadic rationals, and slopes that are integer powers of $2$. Is $F$ amenable? Equivalently, for every finite $S\\subset F$ and $\\varepsilon>0$, is there a nonempty finite $A\\subset F$ with $|SA|<(1+\\varepsilon)|A|$?",
+        "sources": [
+          {
+            "label": "Kourovka Notebook, 21st edition, September 2026",
+            "url": "https://kourovkanotebookorg.wordpress.com/wp-content/uploads/2026/09/21tkt.pdf"
+          },
+          {
+            "label": "Cannon–Floyd–Parry, Introductory notes on Richard Thompson’s groups (1996), §1",
+            "url": "https://www.imo.universite-paris-saclay.fr/~emmanuel.breuillard/Cannon.pdf"
+          },
+          {
+            "label": "Kielak, Appendix A to Bartholdi (2016), Theorem A.1",
+            "url": "https://arxiv.org/pdf/1605.09133v2"
+          }
+        ]
+      },
+      "partial_results": [
+        {
+          "title": "No nonabelian free subgroup",
+          "text": "Brin and Squier proved that F contains no free subgroup on two generators. This removes one familiar obstruction to amenability but does not prove amenability.",
+          "status": "Proved structural result",
+          "sources": [
+            {
+              "label": "Brin–Squier, Groups of piecewise linear homeomorphisms of the real line (1985), Theorem 3.1",
+              "url": "https://pi.math.cornell.edu/~justin/Limited2Cornell/PLoI.pdf"
+            }
+          ]
+        },
+        {
+          "title": "Equivalent group-ring question",
+          "text": "Kielak proved that a group algebra without zero divisors satisfies the Ore condition exactly when its group is amenable. Since F satisfies the zero-divisor condition, Kourovka 15.42 is equivalent to 12.20.",
+          "status": "Proved reduction",
+          "sources": [
+            {
+              "label": "Kielak, Appendix A to Bartholdi (2016), Theorem A.1",
+              "url": "https://arxiv.org/pdf/1605.09133v2"
+            },
+            {
+              "label": "Kourovka Notebook, 21st edition, September 2026",
+              "url": "https://kourovkanotebookorg.wordpress.com/wp-content/uploads/2026/09/21tkt.pdf"
+            }
+          ]
+        }
+      ],
+      "proof_claims": [
+        {
+          "title": "Withdrawn non-amenability claim",
+          "text": "Wajnryb and Witowicz’s 2014 preprint claimed non-amenability. The current arXiv record marks it withdrawn by Wajnryb, with the final revision dated 8 March 2015.",
+          "status": "Withdrawn proof claim",
+          "sources": [
+            {
+              "label": "Wajnryb–Witowicz, arXiv withdrawal record",
+              "url": "https://arxiv.org/abs/1408.2188"
+            }
+          ]
+        }
+      ],
+      "title": "Kourovka 12.20 · Is Thompson’s group F amenable?",
+      "summary": "Does Thompson’s group F satisfy the Følner criterion for amenability?",
+      "detail_note": "Recorded by R. I. Grigorchuk as a well-known problem. The September 2026 notebook retains it among unresolved questions.",
+      "details_as_of": "2026-09-16",
+      "status_as_of": "2026-09-16",
+      "source_status": "Listed as unresolved in the September 2026 Kourovka Notebook"
+    }
+  }
+}

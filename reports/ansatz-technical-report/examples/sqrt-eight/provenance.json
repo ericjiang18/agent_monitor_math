@@ -1,0 +1,29 @@
+{
+  "example": "The real square root of eight is irrational",
+  "formal_statement": "Irrational (Real.sqrt 8)",
+  "provenance_kind": "Saved application run; fresh independent compilation is recorded separately",
+  "run_id": "kimi_adhoc_026cb7ed_a1118f831d",
+  "registered_engine": "kimi",
+  "recorded_model": "kimi-k3",
+  "run_created_at": "2026-09-15T22:22:49.015573+00:00",
+  "run_updated_at": "2026-09-15T22:26:27.409685+00:00",
+  "original_verification_at": "2026-09-15T22:29:50Z",
+  "historical_verification": {
+    "status": "verified",
+    "sorry_count": 0,
+    "source_sha256": "05e19732c1e40b2cc4515971eb30ff48ce35cd56899dbff2a8c5994509307100",
+    "exit_code": 0,
+    "toolchain": "Lean (version 4.14.0, x86_64-unknown-linux-gnu, commit 410fab728470, Release)",
+    "fidelity_severity": "ok"
+  },
+  "original_artifacts": {
+    "data/runs/kimi_adhoc_026cb7ed_a1118f831d.json": "04431907b36179e7f8e3bf3b42c88c470e43965d509b744f60ea0275aa2decb5",
+    "data/runs/workspaces/kimi_adhoc_026cb7ed_a1118f831d/proof.md": "98a92fba0841915b67edc06a470167278ea1f3049f8280917e7faf85ce870e70",
+    "data/runs/workspaces/kimi_adhoc_026cb7ed_a1118f831d/lean/Proof.lean": "05e19732c1e40b2cc4515971eb30ff48ce35cd56899dbff2a8c5994509307100",
+    "data/runs/workspaces/kimi_adhoc_026cb7ed_a1118f831d/lean_verify.json": "dd63cbbeb8262aaeebb98165528a444a9b1d423b378bc0beaa9b42128ea14c23"
+  },
+  "copied_source_sha256": "05e19732c1e40b2cc4515971eb30ff48ce35cd56899dbff2a8c5994509307100",
+  "informal_proof_note": "The report proof is a concise editorial restatement of the saved parity argument. The saved proof text ends with a Partial Progress label; that label is not used as a correctness criterion.",
+  "formal_proof_note": "The saved Lean proof derives sqrt(8)=2*sqrt(2) and reuses Mathlib irrational_sqrt_two; it is not a Lean translation of every parity step in the informal argument.",
+  "scope": "One elementary solved example, not evidence of new discovery, success rate, or comparative engine performance."
+}

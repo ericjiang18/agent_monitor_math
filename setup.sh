@@ -2,6 +2,7 @@
 # One-shot setup for Agent Monitor. Run from the repo root:  ./setup.sh
 set -euo pipefail
 cd "$(dirname "$0")"
+export PATH="${HOME}/.local/node24/bin:${HOME}/.npm-global/bin:${HOME}/.local/bin:${PATH}"
 
 say() { printf '\n\033[1;36m▸ %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m! %s\033[0m\n' "$*"; }

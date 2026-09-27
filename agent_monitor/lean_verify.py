@@ -18,11 +18,13 @@ it.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -37,6 +39,9 @@ from agent_monitor.proof_graph import (  # reuse LLM plumbing
 RESULT_FILENAME = "lean_verify.json"
 LEAN_DIRNAME = "lean"
 PROOF_FILENAME = "Proof.lean"
+
+_INTERVENTION_LOCKS: dict[str, threading.Lock] = {}
+_INTERVENTION_LOCKS_GUARD = threading.Lock()
 
 # Prefer a recent stable Lean 4. Mathlib pins matter only when the generated
 # file imports Mathlib — the scaffold omits that dependency by default.
@@ -182,6 +187,29 @@ HUMAN FEEDBACK:
 {feedback}
 """
 
+QUESTION_PROMPT = """You are the Lean assistant for a human-in-the-loop proof session.
+Answer the user's question in clear, concise prose. Do not rewrite or weaken the
+theorem, do not claim the original mathematical problem is proved merely because
+Lean compiled a possibly different statement, and do not output JSON. Distinguish:
+1. kernel acceptance of Proof.lean,
+2. absence of sorry/admit,
+3. statement fidelity to the original problem.
+
+VERIFICATION STATUS:
+{status}
+
+STATEMENT FIDELITY:
+{fidelity}
+
+CURRENT SOURCE:
+```lean
+{lean}
+```
+
+USER QUESTION:
+{question}
+"""
+
 AUDIT_PROMPT = """You are a strict Lean 4 formalisation auditor. The file below COMPILES. That
 only means it is well-typed — it does NOT mean it formalises the PROBLEM. Your job
 is to catch a Lean file that passes the compiler while proving the wrong thing.
@@ -304,6 +332,17 @@ def lean_dir(workspace: Path) -> Path:
     return workspace / LEAN_DIRNAME
 
 
+def _mathlib_project() -> Path | None:
+    raw = os.environ.get("AGENT_MONITOR_MATHLIB_PROJECT", "").strip()
+    if not raw:
+        return None
+    project = Path(raw).expanduser().resolve()
+    required = (project / "lakefile.lean", project / "lake-manifest.json")
+    if all(candidate.is_file() for candidate in required):
+        return project
+    return None
+
+
 def toolchain_status() -> dict[str, Any]:
     """Report which Lean tools are on PATH / under ~/.elan."""
     lean = shutil.which("lean") or _elan_bin("lean")
@@ -327,8 +366,10 @@ def toolchain_status() -> dict[str, Any]:
         "lean": lean,
         "lake": lake,
         "elan": elan,
+        "mathlib_project": str(mathlib) if (mathlib := _mathlib_project()) else None,
         "version": version,
         "available": bool(lean),
+        "mathlib_available": bool(mathlib),
     }
 
 
@@ -346,6 +387,264 @@ def load_cached(workspace: Path) -> dict[str, Any] | None:
         return json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def _harness_conversation(workspace: Path, cached: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a Codex-style JSONL harness log into bounded UI events.
+
+    Started items are replaced by their completed form, so a command appears
+    once with its command, full captured output and exit state. Non-JSON stderr
+    is kept as runtime output instead of being silently discarded.
+    """
+    log_path = lean_dir(workspace) / "harness.log"
+    try:
+        raw_log = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        raw_log = str(cached.get("log") or "")
+    # A pathological command can print megabytes. Keep the complete normal
+    # interaction while protecting the run API from unbounded payloads.
+    raw_truncated = len(raw_log) > 1_000_000
+    raw_log = raw_log[-1_000_000:]
+
+    order: list[str] = []
+    items: dict[str, dict[str, Any]] = {}
+    runtime_lines: list[str] = []
+    usage: dict[str, int] = {}
+    serial = 0
+    for line in raw_log.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            if line.strip():
+                runtime_lines.append(line[:4000])
+            continue
+        if not isinstance(event, dict):
+            continue
+        etype = str(event.get("type") or "")
+        if etype in {"item.started", "item.completed"} and isinstance(event.get("item"), dict):
+            item = dict(event["item"])
+            item_id = str(item.get("id") or f"event_{serial}")
+            serial += 1
+            if item_id not in items:
+                order.append(item_id)
+            items[item_id] = item
+        elif etype == "turn.completed" and isinstance(event.get("usage"), dict):
+            for key, value in event["usage"].items():
+                try:
+                    usage[str(key)] = int(value or 0)
+                except (TypeError, ValueError):
+                    continue
+
+    conversation: list[dict[str, Any]] = []
+    if runtime_lines:
+        conversation.append(
+            {
+                "id": "runtime-output",
+                "kind": "runtime",
+                "role": "system",
+                "title": "Harness runtime",
+                "content": "\n".join(runtime_lines)[-12000:],
+                "status": "completed",
+            }
+        )
+    for item_id in order[-240:]:
+        item = items[item_id]
+        kind = str(item.get("type") or "event")[:80]
+        status = str(item.get("status") or "completed")[:40]
+        title = kind.replace("_", " ").title()
+        role = "assistant"
+        content = ""
+        command = ""
+        if kind == "agent_message":
+            title = "Assistant message"
+            content = str(item.get("text") or item.get("content") or "")
+        elif kind == "reasoning":
+            title = "Reasoning"
+            role = "reasoning"
+            content = str(item.get("text") or item.get("summary") or item.get("content") or "")
+        elif kind == "command_execution":
+            role = "tool"
+            command = str(item.get("command") or "")
+            title = command.strip().splitlines()[0][:180] or "Shell command"
+            content = str(item.get("aggregated_output") or item.get("output") or "")
+        elif kind in {"file_change", "file_edit"}:
+            role = "tool"
+            title = "Workspace edit"
+            content = str(item.get("text") or item.get("diff") or item.get("output") or "")
+            if not content:
+                content = json.dumps(item.get("changes") or item, ensure_ascii=False, indent=2)
+        else:
+            role = "tool" if "tool" in kind or "search" in kind else "assistant"
+            content = str(item.get("text") or item.get("output") or item.get("content") or "")
+            if not content:
+                content = json.dumps(item, ensure_ascii=False, indent=2)
+        conversation.append(
+            {
+                "id": item_id[:160],
+                "kind": kind,
+                "role": role,
+                "title": title,
+                "content": content[-12000:],
+                "command": command[:4000],
+                "status": status,
+                "exit_code": item.get("exit_code"),
+            }
+        )
+    return {
+        "events": conversation,
+        "event_count": len(order) + (1 if runtime_lines else 0),
+        "truncated": raw_truncated or len(order) > 240,
+        "usage": usage,
+    }
+
+
+def monitor_summary(workspace: Path) -> dict[str, Any]:
+    """Compact, UI-safe Lean telemetry for a run payload.
+
+    The full cache includes the complete Lean source and compiler transcript.
+    Monitor and Conversation only need the formalisation timeline, so keep this
+    payload bounded while preserving the latest checker, fidelity, harness and
+    human-intervention state.
+    """
+    cached = load_cached(workspace) or {}
+    live_job = harness_job(workspace)
+    if not cached and not live_job:
+        return {
+            "status": "none",
+            "has_result": False,
+            "attempt_count": 0,
+            "attempts": [],
+            "chat": [],
+            "harness_running": False,
+        }
+
+    status = str(cached.get("status") or ("running" if live_job else "none"))
+    if status == "running" and not live_job:
+        status = "failed"
+
+    attempts: list[dict[str, Any]] = []
+    for index, raw in enumerate((cached.get("attempts") or [])[-24:]):
+        attempt = raw if isinstance(raw, dict) else {}
+        check = attempt.get("check") if isinstance(attempt.get("check"), dict) else {}
+        sorry_count = int(attempt.get("sorry_count") or 0)
+        action = str(attempt.get("action") or "check")
+        attempt_status = str(check.get("status") or "")
+        if check.get("ok"):
+            if sorry_count:
+                attempt_status = "incomplete"
+            elif action == "compile":
+                attempt_status = "compiled"
+            else:
+                attempt_status = "verified"
+        elif not attempt_status:
+            attempt_status = "failed"
+        log = "\n".join(
+            part.strip()
+            for part in (
+                str(attempt.get("stderr_tail") or ""),
+                str(attempt.get("stdout_tail") or ""),
+            )
+            if part.strip()
+        )
+        attempts.append(
+            {
+                "index": index,
+                "round": attempt.get("round", index),
+                "action": action[:80],
+                "status": attempt_status[:40],
+                "ok": bool(check.get("ok")),
+                "exit_code": check.get("exit_code"),
+                "duration_s": float(check.get("duration_s") or 0),
+                "sorry_count": sorry_count,
+                "uses_mathlib": bool(attempt.get("uses_mathlib")),
+                "toolchain": str(check.get("toolchain") or "")[:200],
+                "log": log[-2400:],
+            }
+        )
+
+    fidelity_raw = cached.get("fidelity") if isinstance(cached.get("fidelity"), dict) else {}
+    audit_raw = fidelity_raw.get("audit") if isinstance(fidelity_raw.get("audit"), dict) else {}
+    flags = []
+    for raw in (fidelity_raw.get("flags") or [])[:16]:
+        if not isinstance(raw, dict):
+            continue
+        flags.append(
+            {
+                "id": str(raw.get("id") or "")[:80],
+                "severity": str(raw.get("severity") or "minor")[:20],
+                "message": str(raw.get("message") or "")[:500],
+                "lines": list(raw.get("lines") or [])[:8],
+            }
+        )
+
+    chat = []
+    for raw in (cached.get("chat") or [])[-40:]:
+        if not isinstance(raw, dict):
+            continue
+        chat.append(
+            {
+                "role": str(raw.get("role") or "system")[:40],
+                "content": str(raw.get("content") or "")[:4000],
+                "ts": str(raw.get("ts") or "")[:80],
+            }
+        )
+
+    harness = dict(cached.get("harness") or {})
+    if live_job:
+        harness.update(live_job)
+    try:
+        harness_prompt = (lean_dir(workspace) / "TASK.md").read_text(
+            encoding="utf-8", errors="replace"
+        )[:50000]
+    except OSError:
+        harness_prompt = ""
+    lean_src = str(cached.get("lean") or "")
+    toolchain = cached.get("toolchain") if isinstance(cached.get("toolchain"), dict) else {}
+    audit_issues = [str(item)[:500] for item in (audit_raw.get("issues") or [])[:12]]
+    transcript = _harness_conversation(workspace, cached)
+    return {
+        "status": status,
+        "has_result": status != "none" or bool(lean_src) or bool(live_job),
+        "generated_at": str(cached.get("generated_at") or "")[:80],
+        "action": str(cached.get("action") or "")[:80],
+        "title": str(cached.get("title") or "")[:240],
+        "notes": str(cached.get("notes") or "")[:1200],
+        "model": str(cached.get("model") or "")[:160],
+        "source": str(cached.get("source") or "")[:160],
+        "lean_path": str(cached.get("lean_path") or f"{LEAN_DIRNAME}/{PROOF_FILENAME}")[:240],
+        "lean_lines": len(lean_src.splitlines()),
+        "uses_mathlib": bool(cached.get("uses_mathlib")),
+        "sorry_count": int(cached.get("sorry_count") or 0),
+        "sorry_lines": list(cached.get("sorry_lines") or [])[:20],
+        "attempt_count": len(cached.get("attempts") or []),
+        "attempts": attempts,
+        "duration_s": round(sum(float(item.get("duration_s") or 0) for item in attempts), 2),
+        "citation_count": len(cached.get("citations") or []),
+        "declaration_count": len(fidelity_raw.get("declarations") or []),
+        "fidelity": {
+            "severity": str(fidelity_raw.get("severity") or "ok")[:20],
+            "flags": flags,
+            "flag_count": len(fidelity_raw.get("flags") or []),
+            "audit_ok": bool(audit_raw.get("ok")),
+            "faithful": audit_raw.get("faithful"),
+            "verdict": str(audit_raw.get("verdict") or "")[:800],
+            "issues": audit_issues,
+            "main_decl": str(audit_raw.get("main_decl") or "")[:120],
+        },
+        "toolchain": {
+            "available": bool(toolchain.get("available")),
+            "version": str(toolchain.get("version") or "")[:200],
+            "mathlib_available": bool(toolchain.get("mathlib_available")),
+        },
+        "chat": chat,
+        "conversation": transcript["events"],
+        "conversation_event_count": transcript["event_count"],
+        "conversation_truncated": transcript["truncated"],
+        "harness_usage": transcript["usage"],
+        "harness_prompt": harness_prompt,
+        "harness_running": bool(live_job),
+        "harness": harness,
+    }
 
 
 def _write_scaffold(ldir: Path, *, uses_mathlib: bool) -> None:
@@ -704,6 +1003,14 @@ def _count_sorry(lean: str) -> int:
     return len(re.findall(r"\b(sorry|admit)\b", lean))
 
 
+class _ObservedModel(str):
+    """Keep the requested routing ID and provider-reported identity separate."""
+    def __new__(cls, requested: str, observed: object = None):
+        value = super().__new__(cls, requested)
+        value.observed_model = observed.strip() if isinstance(observed, str) else ""
+        return value
+
+
 def _chat(env: dict[str, str], model: str | None, prompt: str, timeout: int = 240) -> tuple[str, str]:
     from agent_monitor.settings import _http_json
 
@@ -725,7 +1032,7 @@ def _chat(env: dict[str, str], model: str | None, prompt: str, timeout: int = 24
         content = body["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise ValueError("Lean model returned an unexpected response shape") from exc
-    return chosen, str(content)
+    return _ObservedModel(chosen, body.get("model")), str(content)
 
 
 def _run_lean_check(ldir: Path, uses_mathlib: bool) -> dict[str, Any]:
@@ -746,16 +1053,25 @@ def _run_lean_check(ldir: Path, uses_mathlib: bool) -> dict[str, Any]:
             "duration_s": 0.0,
         }
 
-    env = os.environ.copy()
+    from agent_monitor.subprocess_env import child_process_env
+
+    env = child_process_env()
     elan_bin = Path(tools["elan"]).parent if tools.get("elan") else None
     if elan_bin:
         env["PATH"] = f"{elan_bin}:{env.get('PATH', '')}"
 
     started = time.time()
     cmd: list[str]
-    # Mathlib projects need `lake build`. Core-only files can use `lean` directly,
-    # which avoids a lake bootstrap on first run.
-    if uses_mathlib and tools.get("lake"):
+    mathlib_project = _mathlib_project()
+
+    # A prewarmed project avoids cloning and unpacking Mathlib for every proof.
+    # Fall back to the per-workspace Lake project when no shared cache is set.
+    if uses_mathlib and mathlib_project and tools.get("lake") and tools.get("lean"):
+        cmd = [
+            tools["lake"], "env", tools["lean"], str((ldir / PROOF_FILENAME).resolve())
+        ]
+        cwd = str(mathlib_project)
+    elif uses_mathlib and tools.get("lake"):
         cmd = [tools["lake"], "build"]
         cwd = str(ldir)
     elif tools.get("lean"):
@@ -1120,6 +1436,9 @@ def _persist(
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     prev = load_cached(workspace) or {}
+    # _write_and_run emits this canonical text to Proof.lean. Bind cached
+    # verification and authorship to the same bytes, including its final LF.
+    lean_src = lean_src.rstrip() + "\n"
     log = ""
     if attempts:
         log = (attempts[-1].get("stderr_tail") or "") + (
@@ -1146,7 +1465,18 @@ def _persist(
             {k: d[k] for k in ("kind", "name", "line")} for d in _decls_with_docs(lean_src)
         ][:60],
     }
+    # Keep authorship tied to the exact generated source. Checking or auditing
+    # a hand-edited file must not inherit the previous model's authorship.
+    source_digest = hashlib.sha256(lean_src.encode()).hexdigest()
+    provenance = prev.get("source_provenance") or {}
+    if action in {"verify", "revise"}:
+        observed = getattr(model, "observed_model", "")
+        provenance = ({"model": observed, "sha256": source_digest,
+                       "evidence": "provider_response"} if observed else {})
+    elif provenance.get("sha256") != source_digest or action == "harness":
+        provenance = {}
     result = {
+        "source_provenance": provenance,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "model": model or prev.get("model"),
         "source": source or prev.get("source") or "",
@@ -1242,7 +1572,192 @@ def compile_or_check(
     )
 
 
-def revise_with_feedback(
+_EDIT_REQUEST_RE = re.compile(
+    r"\b(change|replace|fix|revise|rewrite|switch|remove|add|modify|edit|"
+    r"discharge|refactor|simplify|generalize|generalise|use|try|make|prove)\b",
+    re.I,
+)
+_QUESTION_RE = re.compile(
+    r"\b(what|why|how|when|where|which|who|is|are|was|were|do|does|did|"
+    r"can|could|would|should|has|have|explain|status|proved|verified|complete)\b",
+    re.I,
+)
+
+
+def _feedback_is_question(feedback: str) -> bool:
+    text = (feedback or "").strip()
+    if not text:
+        return False
+    if _EDIT_REQUEST_RE.search(text):
+        return False
+    return text == "?" or "?" in text or bool(_QUESTION_RE.search(text))
+
+
+def _status_question(feedback: str) -> bool:
+    text = (feedback or "").strip().lower()
+    return text in {"?", "status", "done?"} or bool(
+        re.search(r"\b(all|fully|complete|completed|done|proved|proven|verified|pass|sorry|admit)\b", text)
+    )
+
+
+def _verification_status_answer(cached: dict[str, Any], *, source_changed: bool = False) -> str:
+    status = str(cached.get("status") or "none")
+    sorry_count = int(cached.get("sorry_count") or 0)
+    fidelity = cached.get("fidelity") if isinstance(cached.get("fidelity"), dict) else {}
+    audit = fidelity.get("audit") if isinstance(fidelity.get("audit"), dict) else {}
+    severity = str(fidelity.get("severity") or "ok")
+    if source_changed:
+        return (
+            "Not yet. The current editor/source differs from the last checked Proof.lean, so the "
+            f"cached `{status}` result applies only to the previous version. Run Check, then Audit, "
+            "before treating the edited proof as verified."
+        )
+    if status == "unfaithful" or severity == "major" or (audit.get("ok") and audit.get("faithful") is False):
+        issues = audit.get("issues") or [flag.get("message") for flag in fidelity.get("flags") or []]
+        detail = "; ".join(str(item) for item in issues[:3] if item)
+        return (
+            "No—not yet. Lean may accept the file, but the statement-fidelity check found that "
+            "the encoded theorem does not faithfully establish the original problem."
+            + (f" Main issue: {detail}" if detail else "")
+        )
+    if status == "verified" and sorry_count == 0:
+        if audit.get("ok") and audit.get("faithful") is True:
+            return (
+                "Yes, with the usual formal-verification scope: Lean's kernel accepted Proof.lean "
+                "with no sorry/admit, and the statement-fidelity audit judged its main declaration "
+                "faithful to the original problem."
+            )
+        return (
+            "Lean's kernel accepted Proof.lean with no sorry/admit, so the theorem currently written "
+            "in that file is proved. However, the statement-fidelity audit has not successfully "
+            "confirmed that this theorem exactly matches the original mathematical problem. Run "
+            "Audit before treating the original problem as fully formalized; a compiling theorem can "
+            "still be weaker, specialized, or vacuous."
+        )
+    if status == "incomplete" or sorry_count:
+        return f"No. The Lean file still contains {sorry_count} sorry/admit gap(s), so it is not a complete proof."
+    if status in {"failed", "toolchain_missing"}:
+        return "No. The current Lean source has not passed the kernel checker; inspect the latest checker log first."
+    if status == "running":
+        return "Not yet—the Lean harness is still running. I can assess completeness after the checker finishes."
+    return "There is no completed Lean verification for this run yet. Run Verify or Harness first."
+
+
+def _intervention_lock(workspace: Path) -> threading.Lock:
+    key = str(workspace.resolve())
+    with _INTERVENTION_LOCKS_GUARD:
+        return _INTERVENTION_LOCKS.setdefault(key, threading.Lock())
+
+
+def _codex_subscription_interaction(
+    *,
+    workspace: Path,
+    user: dict[str, Any] | None,
+    prompt: str,
+    lean_source: str,
+    edit: bool,
+) -> dict[str, Any]:
+    """Run the user's OAuth Codex in a disposable copy of lean/.
+
+    The real workspace is never exposed to an unsandboxed intervention call;
+    edited source is copied back only after this function returns and the
+    normal checker path validates it.
+    """
+    from agent_monitor import codex_login
+    from agent_monitor.cli_events import CLIEventParser
+    from agent_monitor.engines_registry import build_cli_command
+
+    owner_id = (user or {}).get("id")
+    if owner_id is None or not codex_login.account_login_ready(codex_login.account_home(int(owner_id))):
+        raise ValueError("No API key is configured and this account's Codex subscription is not connected")
+
+    timeout_s = int(os.environ.get("AGENT_MONITOR_LEAN_INTERVENTION_TIMEOUT", "300"))
+    with tempfile.TemporaryDirectory(prefix="lean-intervention-") as tmp:
+        isolated = Path(tmp)
+        source_dir = lean_dir(workspace)
+        for name in ("lean-toolchain", "lakefile.lean", "lake-manifest.json"):
+            src = source_dir / name
+            if src.is_file():
+                shutil.copy2(src, isolated / name)
+        (isolated / PROOF_FILENAME).write_text(lean_source.rstrip() + "\n", encoding="utf-8")
+        problem, informal = _problem_and_proof(workspace)
+        _write_task_file(isolated, problem=problem, proof=informal, existing=lean_source)
+        task_prompt = prompt + (
+            "\n\nWork only in this disposable directory. Revise Proof.lean directly, run Lean to "
+            "check it, and finish with a concise summary of what changed."
+            if edit
+            else "\n\nRead TASK.md and Proof.lean, answer in plain text, and do not edit any files."
+        )
+        argv = build_cli_command(
+            "codex", prompt=task_prompt, workspace=isolated, problem_file=isolated / "TASK.md"
+        )
+        if not argv:
+            raise ValueError("Codex CLI is not installed on this server")
+        try:
+            proc = subprocess.run(
+                argv,
+                cwd=str(isolated),
+                env=_harness_env("codex", user),
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=timeout_s,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(f"Codex intervention timed out after {timeout_s}s") from exc
+        parser = CLIEventParser("codex")
+        parser.feed((proc.stdout or "") + "\n" + (proc.stderr or ""))
+        answer = parser.final_message().strip()
+        if proc.returncode != 0:
+            detail = (parser.output() or proc.stderr or proc.stdout or "Codex failed")[-1200:]
+            raise ValueError(f"Codex intervention failed (exit {proc.returncode}): {detail}")
+        revised = (isolated / PROOF_FILENAME).read_text(encoding="utf-8", errors="replace").strip()
+        if edit and (not revised or revised == lean_source.strip()):
+            raise ValueError("Codex completed without updating Proof.lean")
+        if not answer:
+            answer = "Codex completed the requested Lean intervention."
+        return {
+            "answer": answer[:6000],
+            "lean": revised,
+            "model": str(parser.usage.get("model") or "Codex subscription"),
+        }
+
+
+def _answer_lean_question(
+    *,
+    workspace: Path,
+    user: dict[str, Any] | None,
+    question: str,
+    model: str | None,
+    lean_src: str,
+    cached: dict[str, Any],
+    source_changed: bool = False,
+) -> tuple[str, str]:
+    if _status_question(question):
+        return "verification status", _verification_status_answer(cached, source_changed=source_changed)
+    from agent_monitor.settings import resolved_user_env
+
+    fidelity = cached.get("fidelity") if isinstance(cached.get("fidelity"), dict) else {}
+    prompt = (
+        QUESTION_PROMPT.replace("{status}", str(cached.get("status") or "none") + (" (current source differs from the checked snapshot)" if source_changed else ""))
+        .replace("{fidelity}", json.dumps(fidelity, ensure_ascii=False)[:6000])
+        .replace("{lean}", lean_src[:40000])
+        .replace("{question}", question[:4000])
+    )
+    try:
+        chosen, answer = _chat(resolved_user_env(user), model or cached.get("model"), prompt)
+        if not answer.strip():
+            raise ValueError("Lean assistant returned an empty answer")
+        return chosen, answer.strip()[:6000]
+    except ValueError:
+        result = _codex_subscription_interaction(
+            workspace=workspace, user=user, prompt=prompt, lean_source=lean_src, edit=False
+        )
+        return str(result["model"]), str(result["answer"])
+
+
+def _revise_with_feedback_impl(
     *,
     workspace: Path,
     user: dict[str, Any] | None,
@@ -1263,6 +1778,24 @@ def revise_with_feedback(
 
     _append_chat(workspace, "user", feedback)
     prev = load_cached(workspace) or {}
+    checked_source = str(prev.get("lean") or "").strip()
+    source_changed = bool(checked_source and checked_source != lean_src)
+    if _feedback_is_question(feedback):
+        chosen_model, answer = _answer_lean_question(
+            workspace=workspace,
+            user=user,
+            question=feedback,
+            model=model,
+            lean_src=lean_src,
+            cached=prev,
+            source_changed=source_changed,
+        )
+        chat = _append_chat(workspace, "assistant", answer)
+        result = load_cached(workspace) or prev
+        result["chat"] = chat
+        result["interaction"] = {"kind": "question", "model": chosen_model}
+        return result
+
     err_blob = str(prev.get("log") or "")[-6000:]
     env = resolved_user_env(user)
     prompt = (
@@ -1270,12 +1803,30 @@ def revise_with_feedback(
         .replace("{errors}", err_blob or "(no prior compiler log)")
         .replace("{feedback}", feedback[:4000])
     )
-    chosen_model, content = _chat(env, model or prev.get("model"), prompt)
-    payload = _parse_model_payload(content)
-    lean_src = payload["lean"]
-    uses_mathlib = bool(payload["uses_mathlib"]) or _detect_mathlib(lean_src)
-    notes = payload.get("notes") or ""
-    citations = list(payload.get("citations") or [])
+    codex_mode = False
+    try:
+        chosen_model, content = _chat(env, model or prev.get("model"), prompt)
+        payload = _parse_model_payload(content)
+        lean_src = payload["lean"]
+        uses_mathlib = bool(payload["uses_mathlib"]) or _detect_mathlib(lean_src)
+        notes = payload.get("notes") or ""
+        citations = list(payload.get("citations") or [])
+    except ValueError:
+        codex_result = _codex_subscription_interaction(
+            workspace=workspace,
+            user=user,
+            prompt=prompt,
+            lean_source=lean_src,
+            edit=True,
+        )
+        codex_mode = True
+        runtime_model = str(codex_result["model"])
+        chosen_model = _ObservedModel(runtime_model,
+            runtime_model if runtime_model != "Codex subscription" else None)
+        lean_src = str(codex_result["lean"])
+        uses_mathlib = _detect_mathlib(lean_src)
+        notes = str(codex_result["answer"])
+        citations = _citations_from_lean(lean_src)
 
     attempts: list[dict[str, Any]] = list(prev.get("attempts") or [])
     for round_i in range(max_repairs + 1):
@@ -1305,14 +1856,30 @@ def revise_with_feedback(
         repair_prompt = REPAIR_PROMPT.replace("{lean}", lean_src[:40000]).replace(
             "{errors}", err_blob
         )
-        _, repair_content = _chat(env, chosen_model, repair_prompt)
-        repaired = _parse_model_payload(repair_content)
-        lean_src = repaired["lean"]
-        uses_mathlib = bool(repaired["uses_mathlib"]) or uses_mathlib
-        if repaired.get("notes"):
-            notes = repaired["notes"]
-        if repaired.get("citations"):
-            citations = list(repaired["citations"])
+        if codex_mode:
+            codex_result = _codex_subscription_interaction(
+                workspace=workspace,
+                user=user,
+                prompt=repair_prompt,
+                lean_source=lean_src,
+                edit=True,
+            )
+            lean_src = str(codex_result["lean"])
+            runtime_model = str(codex_result["model"])
+            chosen_model = _ObservedModel(runtime_model,
+                runtime_model if runtime_model != "Codex subscription" else None)
+            uses_mathlib = _detect_mathlib(lean_src)
+            notes = str(codex_result["answer"] or notes)
+            citations = _citations_from_lean(lean_src)
+        else:
+            chosen_model, repair_content = _chat(env, chosen_model, repair_prompt)
+            repaired = _parse_model_payload(repair_content)
+            lean_src = repaired["lean"]
+            uses_mathlib = bool(repaired["uses_mathlib"]) or uses_mathlib
+            if repaired.get("notes"):
+                notes = repaired["notes"]
+            if repaired.get("citations"):
+                citations = list(repaired["citations"])
 
     audit_result: dict[str, Any] | None = None
     if status == "verified":
@@ -1343,6 +1910,48 @@ def revise_with_feedback(
         citations=citations,
         audit=audit_result,
     )
+
+
+def revise_with_feedback(
+    *,
+    workspace: Path,
+    user: dict[str, Any] | None,
+    message: str,
+    model: str | None = None,
+    lean: str | None = None,
+    max_repairs: int = 1,
+) -> dict[str, Any]:
+    """Serialize a run's interventions and guarantee visible failure feedback."""
+    lock = _intervention_lock(workspace)
+    if not lock.acquire(blocking=False):
+        raise ValueError("Another Lean intervention is already running for this proof")
+    try:
+        if harness_job(workspace):
+            raise ValueError("The Lean harness is still running; wait for it to finish or stop it first")
+        try:
+            return _revise_with_feedback_impl(
+                workspace=workspace,
+                user=user,
+                message=message,
+                model=model,
+                lean=lean,
+                max_repairs=max_repairs,
+            )
+        except Exception as exc:
+            cached = load_cached(workspace) or {}
+            chat = list(cached.get("chat") or [])
+            if chat and chat[-1].get("role") == "user":
+                reason = str(exc).strip() or exc.__class__.__name__
+                _append_chat(
+                    workspace,
+                    "assistant",
+                    "I couldn't complete that Lean intervention. "
+                    + reason[:1200]
+                    + " The current Proof.lean remains available; review it before retrying.",
+                )
+            raise
+    finally:
+        lock.release()
 
 
 def generate(
@@ -1416,7 +2025,7 @@ def generate(
         repair_prompt = REPAIR_PROMPT.replace("{lean}", lean_src[:40000]).replace(
             "{errors}", err_blob
         )
-        _, repair_content = _chat(env, chosen_model, repair_prompt)
+        chosen_model, repair_content = _chat(env, chosen_model, repair_prompt)
         repaired = _parse_model_payload(repair_content)
         lean_src = repaired["lean"]
         uses_mathlib = bool(repaired["uses_mathlib"]) or uses_mathlib
@@ -1441,6 +2050,7 @@ def generate(
                 flags=_fidelity_flags(lean_src),
             )
             if fixed:
+                chosen_model = fixed.pop("_source_model", str(chosen_model))
                 lean_src = fixed["lean"]
                 uses_mathlib = bool(fixed["uses_mathlib"]) or uses_mathlib
                 if fixed.get("notes"):
@@ -1534,8 +2144,8 @@ def _repair_statement(
         .replace("{lean}", lean[:40000])
     )
     try:
-        _, content = _chat(env, model, prompt)
-        return _parse_model_payload(content)
+        source_model, content = _chat(env, model, prompt)
+        return {**_parse_model_payload(content), "_source_model": source_model}
     except ValueError:
         # The statement stays as-is; the audit findings still reach the UI.
         return None
@@ -1566,7 +2176,7 @@ def audit_current(
     flags = _fidelity_flags(lean_src)
     status = str(prev.get("status") or "none")
     # Re-derive the verdict only when the source on disk is what was last checked.
-    if (prev.get("lean") or "") == lean_src and status in {"verified", "unfaithful"}:
+    if (prev.get("lean") or "").strip() == lean_src and status in {"verified", "unfaithful"}:
         status = _apply_fidelity("verified", flags, audit)
     notes = _fidelity_summary(flags, audit) or "Audit found no fidelity issues."
     return _persist(
@@ -1681,10 +2291,10 @@ def _harness_env(engine: str, user: dict[str, Any] | None) -> dict[str, str]:
     from agent_monitor.engines_registry import engine_extra_path
     from agent_monitor.settings import resolved_user_env
 
-    env = os.environ.copy()
-    for k, v in (resolved_user_env(user) or {}).items():
-        if v:
-            env[k] = v
+    from agent_monitor.subprocess_env import child_process_env, project_provider_env
+
+    env = child_process_env(extra=resolved_user_env(user) or {})
+    project_provider_env(env, (env.get("AGENT_MONITOR_MODEL"),))
     env.setdefault("NO_COLOR", "1")
     prefixes = list(engine_extra_path(engine))
     tools = toolchain_status()
@@ -1742,6 +2352,13 @@ def _running_record(
     }
 
 
+def _reset_harness_log(ldir: Path) -> Path:
+    """Start each harness with a fresh transcript, never a prior run's log."""
+    log_path = ldir / "harness.log"
+    log_path.write_text("", encoding="utf-8")
+    return log_path
+
+
 def start_harness(
     *,
     workspace: Path,
@@ -1777,6 +2394,7 @@ def start_harness(
     lean_src = (lean if lean is not None else read_source(workspace)) or ""
     uses_mathlib = _detect_mathlib(lean_src)
     _write_scaffold(ldir, uses_mathlib=uses_mathlib)
+    _reset_harness_log(ldir)
     if lean_src.strip():
         (ldir / PROOF_FILENAME).write_text(lean_src.rstrip() + "\n", encoding="utf-8")
     problem, informal = _problem_and_proof(workspace, run_record)

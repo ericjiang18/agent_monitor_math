@@ -9,7 +9,9 @@ premise to consequence. The result is cached in the run workspace as
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -215,21 +217,20 @@ def _run_codex_prompt(
     ChatGPT/OpenAI account (or their API key) instead of a direct chat-completions
     HTTP call — lets graph generation work without a metered API key.
     """
-    import os
-    import shutil
-    import subprocess
+    from agent_monitor.engines_registry import which_tool
 
-    codex = shutil.which("codex")
+    codex = which_tool("codex")
     if not codex:
         raise ValueError("Codex CLI not installed on this server")
 
     from agent_monitor.jobs import _ensure_codex_auth
     from agent_monitor.settings import resolved_user_env
 
-    env = os.environ.copy()
-    for k, v in (resolved_user_env(user) or {}).items():
-        if v:
-            env[k] = v
+    from agent_monitor.subprocess_env import child_process_env, project_provider_env
+
+    user_env = resolved_user_env(user) or {}
+    env = child_process_env(extra=user_env)
+    project_provider_env(env, (user_env.get("AGENT_MONITOR_MODEL"),))
     env.setdefault("NO_COLOR", "1")
     _ensure_codex_auth(env, (user or {}).get("id"))
 

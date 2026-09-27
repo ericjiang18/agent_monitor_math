@@ -13,6 +13,7 @@ Codex emits items with a discriminator field `type`:
   - fileChange          → assistant tool_call(name="apply_patch") + tool result
   - mcpToolCall         → assistant tool_call(name=f"mcp.{server}.{tool}") + tool result
   - dynamicToolCall     → assistant tool_call(name=tool) + tool result
+  - webSearch           → assistant tool_call(name="web_search") + tool result
   - plan/hookPrompt/collabAgentToolCall → recorded as opaque assistant notes
 
 Each item maps to AT MOST one assistant entry + one tool entry, preserving
@@ -106,6 +107,8 @@ class CodexEventProjector:
             return self._project_mcp_tool_call(item, item_id)
         if item_type == "dynamicToolCall":
             return self._project_dynamic_tool_call(item, item_id)
+        if item_type == "webSearch":
+            return self._project_web_search(item, item_id)
         if item_type == "userMessage":
             return self._project_user_message(item)
 
@@ -288,6 +291,49 @@ class CodexEventProjector:
         else:
             success = item.get("success")
             content = f"success={success}"
+        tool_msg = {
+            "role": "tool",
+            "tool_call_id": call_id,
+            "content": content,
+        }
+        return ProjectionResult(
+            messages=[assistant_msg, tool_msg], is_tool_iteration=True
+        )
+
+    def _project_web_search(self, item: dict, item_id: str) -> ProjectionResult:
+        call_id = _deterministic_call_id("web_search", item_id)
+        action = item.get("action") or {}
+        if not isinstance(action, dict):
+            action = {"action": action}
+        query = item.get("query") or action.get("query") or ""
+        if not query and isinstance(action.get("queries"), list):
+            query = "; ".join(str(q) for q in action["queries"][:4])
+        if not query:
+            query = action.get("url") or action.get("pattern") or "web search"
+        args = {"query": str(query), "action": action}
+        assistant_msg = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "arguments": _format_tool_args(args),
+                    },
+                }
+            ],
+        }
+        if self._pending_reasoning:
+            assistant_msg["reasoning"] = "\n".join(self._pending_reasoning)
+            self._pending_reasoning = []
+        results = item.get("results")
+        content = (
+            json.dumps(results, ensure_ascii=False)[:4000]
+            if results is not None
+            else f"action={action.get('type') or 'search'}"
+        )
         tool_msg = {
             "role": "tool",
             "tool_call_id": call_id,

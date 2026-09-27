@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "url": "https://openai.com/news/",
+      "feed_url": "https://openai.com/news/rss.xml",
+      "allowed_hosts": [
+        "openai.com"
+      ],
+      "category": "models",
+      "status": "Published",
+      "include_keywords": [
+        "mathematics",
+        "mathematical",
+        "math",
+        "theorem",
+        "proof",
+        "navier",
+        "reasoning",
+        "introducing gpt",
+        "a new generation of intelligence"
+      ],
+      "exclude_keywords": [
+        "prototyping games",
+        "financial statement"
+      ]
+    },
+    {
+      "id": "deepmind",
+      "name": "Google DeepMind",
+      "url": "https://deepmind.google/blog/",
+      "feed_url": "https://deepmind.google/blog/rss.xml",
+      "allowed_hosts": [
+        "deepmind.google",
+        "blog.google"
+      ],
+      "category": "models",
+      "status": "Published",
+      "include_keywords": [
+        "mathematics",
+        "mathematical",
+        "math",
+        "theorem",
+        "proof",
+        "introducing gemini",
+        "reasoning",
+        "alphaevolve"
+      ],
+      "exclude_keywords": []
+    },
+    {
+      "id": "clay",
+      "name": "Clay Mathematics Institute",
+      "url": "https://www.claymath.org/news/",
+      "feed_url": "https://www.claymath.org/feed/?post_type=news",
+      "allowed_hosts": [
+        "www.claymath.org",
+        "claymath.org"
+      ],
+      "category": "mathematics",
+      "status": "Published",
+      "include_keywords": [],
+      "exclude_keywords": []
+    },
+    {
+      "id": "quanta",
+      "name": "Quanta Magazine · mathematics journalism",
+      "url": "https://www.quantamagazine.org/mathematics/",
+      "feed_url": "https://www.quantamagazine.org/mathematics/feed/",
+      "allowed_hosts": [
+        "www.quantamagazine.org"
+      ],
+      "category": "mathematics",
+      "status": "Published",
+      "include_keywords": [],
+      "exclude_keywords": []
+    },
+    {
+      "id": "microsoft-research",
+      "name": "Microsoft Research",
+      "url": "https://www.microsoft.com/en-us/research/blog/",
+      "feed_url": "https://www.microsoft.com/en-us/research/feed/",
+      "allowed_hosts": [
+        "www.microsoft.com"
+      ],
+      "category": "research",
+      "status": "Published",
+      "include_keywords": [
+        "mathematics",
+        "mathematical",
+        "math",
+        "reasoning",
+        "theorem",
+        "proof",
+        "optimization",
+        "mindtopo"
+      ],
+      "exclude_keywords": []
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face · publisher and research-team blogs",
+      "url": "https://huggingface.co/blog",
+      "feed_url": "https://huggingface.co/blog/feed.xml",
+      "allowed_hosts": [
+        "huggingface.co"
+      ],
+      "category": "research",
+      "status": "Published",
+      "include_keywords": [
+        "math",
+        "mathematics",
+        "reasoning",
+        "model release",
+        "foundation model",
+        "grpo",
+        "reinforcement learning"
+      ],
+      "exclude_keywords": []
+    },
+    {
+      "id": "arxiv-ai",
+      "name": "arXiv · artificial intelligence preprints",
+      "url": "https://arxiv.org/list/cs.AI/recent",
+      "feed_url": "https://rss.arxiv.org/rss/cs.AI",
+      "allowed_hosts": [
+        "rss.arxiv.org",
+        "arxiv.org",
+        "export.arxiv.org"
+      ],
+      "category": "research",
+      "status": "Preprint",
+      "include_keywords": [
+        "mathematical reasoning",
+        "theorem proving",
+        "formal proof",
+        "formal verification",
+        "math",
+        "proof assistant"
+      ],
+      "exclude_keywords": []
+    },
+    {
+      "id": "arxiv-math-nt",
+      "name": "arXiv · number theory preprints",
+      "url": "https://arxiv.org/list/math.NT/recent",
+      "feed_url": "https://rss.arxiv.org/rss/math.NT",
+      "allowed_hosts": [
+        "rss.arxiv.org",
+        "arxiv.org",
+        "export.arxiv.org"
+      ],
+      "category": "mathematics",
+      "status": "Preprint",
+      "include_keywords": [
+        "conjecture",
+        "counterexample",
+        "proof",
+        "breakthrough",
+        "riemann",
+        "ramanujan"
+      ],
+      "exclude_keywords": []
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "url": "https://www.anthropic.com/news",
+      "feed_url": null,
+      "manual": true,
+      "allowed_hosts": [
+        "www.anthropic.com",
+        "anthropic.com"
+      ],
+      "category": "models",
+      "status": "Published",
+      "include_keywords": [],
+      "exclude_keywords": []
+    }
+  ]
+}

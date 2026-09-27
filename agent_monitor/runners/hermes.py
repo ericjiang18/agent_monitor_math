@@ -91,6 +91,8 @@ def create_agent(
     model: str | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
+    codex_home: str | Path | None = None,
+    use_codex_subscription: bool = False,
     max_iterations: int = 60,
     enable_subagents: bool = True,
     subagent_model: str | None = None,
@@ -119,7 +121,7 @@ def create_agent(
     if not base_url and os.environ.get("OPENAI_API_KEY"):
         base_url = "https://api.openai.com/v1"
 
-    toolsets = ["terminal", "file", "code_execution", "skills"]
+    toolsets = ["terminal", "file", "code_execution", "skills", "vision"]
     if enable_subagents:
         toolsets.append("delegation")
     kwargs: dict[str, Any] = {
@@ -133,6 +135,12 @@ def create_agent(
         "max_iterations": max_iterations,
         "platform": "embedded",
     }
+    if use_codex_subscription:
+        # Keep OAuth ownership in Codex CLI. Hermes' app-server runtime reads
+        # the user's CODEX_HOME directly, so no refresh token is copied into
+        # Hermes' own auth store (which would create token-rotation races).
+        kwargs["provider"] = "openai-codex"
+        kwargs["api_mode"] = "codex_app_server"
     if api_key:
         kwargs["api_key"] = api_key
     if base_url:
@@ -163,6 +171,8 @@ def create_agent(
             agent._monitor_subagent_model = subagent_model
         except Exception as exc:  # noqa: BLE001
             print(f"[agent-monitor] subagent model hook failed: {exc}")
+    if use_codex_subscription and codex_home:
+        agent._monitor_codex_home = str(Path(codex_home))
     return agent
 
 

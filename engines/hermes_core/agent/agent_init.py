@@ -862,6 +862,13 @@ def init_agent(
         agent.base_url = "moa://local"
         if not agent.quiet_mode:
             print(f"🤖 AI Agent initialized with MoA preset: {agent.model}")
+    elif agent.api_mode == "codex_app_server":
+        # The Codex subprocess owns authentication through CODEX_HOME. Do not
+        # force Hermes to resolve or duplicate an OAuth bearer token merely to
+        # initialize a client that this runtime never uses.
+        agent.client = None
+        agent._client_kwargs = {}
+        agent.api_key = ""
     elif agent.api_mode == "bedrock_converse":
         # AWS Bedrock — uses boto3 directly, no OpenAI client needed.
         # Region is extracted from the base_url or defaults to us-east-1.

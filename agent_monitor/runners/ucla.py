@@ -47,9 +47,9 @@ def run_problem(
     cmd = [sys.executable, "-u", str(script), str(problem_path), *(extra_args or [])]
     # Many UCLA harnesses are module-driven; try a conservative invocation and
     # capture output for the operator to inspect.
-    env = os.environ.copy()
-    if extra_env:
-        env.update({k: v for k, v in extra_env.items() if v})
+    from agent_monitor.subprocess_env import child_process_env
+
+    env = child_process_env(extra=extra_env)
     # The harness resolves its problem via PROBLEM_FILE (it does not read argv)
     # and writes artifacts (solution.tex etc.) under OUTPUT_ROOT_DIR.
     env["PROBLEM_FILE"] = str(problem_path.resolve())

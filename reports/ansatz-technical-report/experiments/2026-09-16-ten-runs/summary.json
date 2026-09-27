@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "title": "Ten sequential collaboration reliability checks",
+  "scope": "Loopback HTTP, real ProjectsMixin and SQLite, synthetic identities; no model runs or production traffic.",
+  "protocol": {
+    "requested_runs": 10,
+    "reported_runs": 10,
+    "total_trials": 20,
+    "execution": "Sequential invocations; each invocation runs 8 clients then 16 clients.",
+    "rounds_per_trial": 40,
+    "warmup_runs_excluded": 0,
+    "run_selection": "All ten numbered runs are included; no timing-based filtering.",
+    "fresh_storage": "Each invocation creates disposable databases; each client count uses its own database.",
+    "timing": "Request latency includes a new loopback HTTP connection, request/response processing, JSON decoding, and connection close. Trial duration covers concurrent edit/read rounds; setup and later correctness, rejection, and restart checks are excluded.",
+    "aggregation": "Median, minimum, and maximum across ten per-run reported p95 values or durations. Request p95 values are nearest-rank quantiles rounded to 0.01 ms by the original script; durations are rounded to 0.001 s. These are not pooled request percentiles. The saved reports contain no request-level timing arrays, so a pooled p95 cannot be recomputed from them.",
+    "run_start_timestamps_strictly_increasing": true,
+    "sequentiality_evidence": "All ten nonoverlapping start/end intervals are verified from experiment.json; each raw report start lies within its corresponding interval."
+  },
+  "environment": {
+    "python": "3.13.15",
+    "sqlite": "3.53.1",
+    "os": "Linux",
+    "architecture": "x86_64",
+    "logical_cpus": 8
+  },
+  "source_sha256": {
+    "agent_monitor/projects.py": "187addf2deca5a0ecf9381f9e5a36bfc7eb34df938165f4f1f9db6ce992dce6a",
+    "scripts/check_collaboration_reliability.py": "fc0a71073e57eb3d0fcc0b034a150cc118fd6d32ff862b6c5d15a9e6aafc9610"
+  },
+  "working_tree_source_hash_matches": {
+    "agent_monitor/projects.py": true,
+    "scripts/check_collaboration_reliability.py": true
+  },
+  "preserved_source_snapshot_hash_matches": {
+    "agent_monitor/projects.py": true,
+    "scripts/check_collaboration_reliability.py": true
+  },
+  "experiment_manifest": {
+    "file": "experiment.json",
+    "sha256": "fd99c3d897cf257e4318760dc1377e3b920d5291100df2ff05f761a747e138bb",
+    "started_at": "2026-09-16T00:50:33.125221+00:00",
+    "finished_at": "2026-09-16T00:55:05.715592+00:00",
+    "whole_experiment_seconds": 272.59,
+    "sequential_nonoverlap_verified": true
+  },
+  "historical_comparison": {
+    "file": "docs/public/reliability/2026-09-09.json",
+    "sha256": "96212b09b914343a64f761f4bf8a12a55770333c618a94d1fab5b5ffe05b13c4",
+    "recorded_at": "2026-09-09T19:54:11.614016+00:00",
+    "historical_environment": {
+      "python": "3.13.15",
+      "sqlite": "3.53.1",
+      "os": "Linux",
+      "architecture": "x86_64",
+      "logical_cpus": 2
+    },
+    "environment_matches": false,
+    "environment_differences": {
+      "logical_cpus": {
+        "historical": 2,
+        "current": 8
+      }
+    },
+    "historical_source_sha256": {
+      "agent_monitor/projects.py": "187addf2deca5a0ecf9381f9e5a36bfc7eb34df938165f4f1f9db6ce992dce6a",
+      "scripts/check_collaboration_reliability.py": "fc0a71073e57eb3d0fcc0b034a150cc118fd6d32ff862b6c5d15a9e6aafc9610"
+    },
+    "source_hash_matches": {
+      "agent_monitor/projects.py": true,
+      "scripts/check_collaboration_reliability.py": true
+    }
+  },
+  "raw_reports": [
+    {
+      "run": 1,
+      "file": "run-01.json",
+      "sha256": "737e792356104c575b258220b38370164cdb79148f76c5350f9fec629d58edba",
+      "recorded_at": "2026-09-16T00:50:33.204540+00:00",
+      "passed": true
+    },
+    {
+      "run": 2,
+      "file": "run-02.json",
+      "sha256": "3410d7906c55630605f95377bfa5b20336f99796c08a74a1500edc3de6b0e741",
+      "recorded_at": "2026-09-16T00:50:59.891335+00:00",
+      "passed": true
+    },
+    {
+      "run": 3,
+      "file": "run-03.json",
+      "sha256": "b5e87f11d6a50acb3d456a677c2481163085a9ca5212b82c049b379d28a0cfc8",
+      "recorded_at": "2026-09-16T00:51:28.971451+00:00",
+      "passed": true
+    },
+    {
+      "run": 4,
+      "file": "run-04.json",
+      "sha256": "9617a84a3da4f24266231dbada5251eb398932a69539ffbbe4c65c10fb41ecb1",
+      "recorded_at": "2026-09-16T00:51:55.465513+00:00",
+      "passed": true
+    },
+    {
+      "run": 5,
+      "file": "run-05.json",
+      "sha256": "ba2e9351cd4a428bc506ddd87ac0c4e715d9e0ee5948a34140944226967643f1",
+      "recorded_at": "2026-09-16T00:52:22.462034+00:00",
+      "passed": true
+    },
+    {
+      "run": 6,
+      "file": "run-06.json",
+      "sha256": "f78236bd52faf2a9c413b171d8c4b03db21c74a03e90282cc35bb2ea3fa54ef2",
+      "recorded_at": "2026-09-16T00:52:49.076831+00:00",
+      "passed": true
+    },
+    {
+      "run": 7,
+      "file": "run-07.json",
+      "sha256": "84655f7f64cd423513e37903e9756c53219125c62c2ccb89dd559d8da0fd96ec",
+      "recorded_at": "2026-09-16T00:53:17.116085+00:00",
+      "passed": true
+    },
+    {
+      "run": 8,
+      "file": "run-08.json",
+      "sha256": "ce137f935b7228282fb171033016d438f1aae87a0a9da279c3898cd9070e0f82",
+      "recorded_at": "2026-09-16T00:53:44.007244+00:00",
+      "passed": true
+    },
+    {
+      "run": 9,
+      "file": "run-09.json",
+      "sha256": "988e7a5331934e4da7dfb45d63782271388b93ea00f54542bd08f3e1d4648a78",
+      "recorded_at": "2026-09-16T00:54:10.615061+00:00",
+      "passed": true
+    },
+    {
+      "run": 10,
+      "file": "run-10.json",
+      "sha256": "d3d1fb5d9a13d3f87dffce83aee144aabf065f41507e140bbe799372c84ee740",
+      "recorded_at": "2026-09-16T00:54:37.820111+00:00",
+      "passed": true
+    }
+  ],
+  "aggregates_by_clients": {
+    "8": {
+      "trials": 10,
+      "edit_p95_ms": {
+        "median": 136.955,
+        "min": 114.75,
+        "max": 138.56
+      },
+      "read_p95_ms": {
+        "median": 19.27,
+        "min": 11.57,
+        "max": 23.84
+      },
+      "duration_seconds": {
+        "median": 5.1065,
+        "min": 4.794,
+        "max": 5.302
+      }
+    },
+    "16": {
+      "trials": 10,
+      "edit_p95_ms": {
+        "median": 548.255,
+        "min": 546.02,
+        "max": 643.26
+      },
+      "read_p95_ms": {
+        "median": 47.01,
+        "min": 37.84,
+        "max": 74.91
+      },
+      "duration_seconds": {
+        "median": 20.9455,
+        "min": 20.427,
+        "max": 22.715
+      }
+    }
+  },
+  "totals": {
+    "requests_measured": 22800,
+    "inserted_characters": 28800,
+    "replayed_batches": 3360,
+    "unexpected_errors": 0,
+    "lost_characters": 0,
+    "duplicate_characters": 0
+  },
+  "correctness": {
+    "all_twenty_trials_passed": true,
+    "checks_per_trial": [
+      "convergence",
+      "id_collision_rejected",
+      "invalid_batch_rollback",
+      "nonmember_rejected",
+      "removed_member_rejected",
+      "restart_persistence",
+      "retry_idempotence",
+      "revoked_invite_rejected",
+      "sqlite_integrity",
+      "unicode_and_deleted_anchors"
+    ],
+    "all_source_hashes_consistent": true,
+    "all_environments_consistent": true
+  },
+  "summarizer_sha256": "5ec4f3246a0e191077d417bae10131b30db6eb60fef36eca573ad285c33c2708"
+}

@@ -73,7 +73,9 @@ def account_login_ready(home: Path) -> bool:
 
 
 def codex_binary() -> str | None:
-    return shutil.which("codex")
+    from agent_monitor.engines_registry import which_tool
+
+    return which_tool("codex")
 
 
 def _augment(user_id: int, snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -149,7 +151,9 @@ def start_login(user_id: int) -> dict[str, Any]:
             return _augment(user_id, dict(st))
         home = account_home(user_id)
         home.mkdir(parents=True, exist_ok=True)
-        env = os.environ.copy()
+        from agent_monitor.subprocess_env import child_process_env
+
+        env = child_process_env()
         env["CODEX_HOME"] = str(home)
         env.setdefault("NO_COLOR", "1")
         try:

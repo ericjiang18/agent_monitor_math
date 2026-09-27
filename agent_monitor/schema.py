@@ -1,4 +1,4 @@
-"""Unified run / event schema fields shared by UCLA, IMProof, and Hermes."""
+"""Canonical run and event fields used to normalize every engine adapter."""
 
 from __future__ import annotations
 

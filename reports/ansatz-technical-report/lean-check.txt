@@ -1,0 +1,7 @@
+$ lean --version
+Lean (version 4.14.0, x86_64-unknown-linux-gnu, commit 410fab728470, Release)
+
+$ lean agent_monitor/examples/ErdosStraus.lean
+'checked_cases' does not depend on any axioms
+
+Exit code: 0
