@@ -1,3 +1,4 @@
+# OpenAI/Codex-facing metadata for the research-proof-audit starter skill.
 interface:
   display_name: "Research Proof Audit"
   short_description: "Referee-grade audit for candidate proofs"

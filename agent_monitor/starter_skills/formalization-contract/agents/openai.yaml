@@ -1,3 +1,4 @@
+# OpenAI/Codex-facing metadata for the formalization-contract starter skill.
 interface:
   display_name: "Formalization Contract"
   short_description: "Preserve claims across informal proof and Lean"

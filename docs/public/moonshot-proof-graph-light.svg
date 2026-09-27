@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 520" fill="none">
+  <title>An abstract graph connecting mathematical ideas to a verified proof</title>
+  <defs>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M28 0H0V28" stroke="#7FA292" stroke-width="1"/>
+    </pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="10" dy="12" stdDeviation="0" flood-color="#47695A" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+
+  <path d="M74 36H579V472H74z" fill="url(#grid)" opacity=".76"/>
+  <path d="M74 36H579" stroke="#2774AE" stroke-width="4"/>
+  <path d="M74 472H579" stroke="#9B7800" stroke-width="4"/>
+
+  <circle cx="325" cy="257" r="183" stroke="#789D8A" stroke-width="2" stroke-dasharray="7 11"/>
+  <circle cx="325" cy="257" r="139" stroke="#0F5B88" stroke-width="2"/>
+
+  <path d="M156 157L250 218M250 218L341 126M250 218L326 306M341 126L455 194M455 194L421 329M326 306L421 329M326 306L224 395" stroke="#628477" stroke-width="3"/>
+  <path d="M455 194L535 122" stroke="#A9363B" stroke-width="3" stroke-dasharray="6 7"/>
+
+  <g filter="url(#shadow)">
+    <path d="M222 193H430V333H222z" fill="#F3FBF7" stroke="#2774AE" stroke-width="3"/>
+    <path d="M222 193H430V218H222z" fill="#2774AE"/>
+    <circle cx="239" cy="205.5" r="4" fill="#FFD100"/>
+    <circle cx="253" cy="205.5" r="4" fill="#FF6B5E"/>
+    <path d="M252 253H400M252 276H365M252 299H385" stroke="#36564A" stroke-width="7"/>
+    <path d="M252 253H317M252 276H296M252 299H338" stroke="#9B7800" stroke-width="7"/>
+  </g>
+
+  <g>
+    <circle cx="156" cy="157" r="29" fill="#FFD100"/>
+    <path d="M145 157H167M156 146V168" stroke="#10251D" stroke-width="4"/>
+    <path d="M125 122H73V94" stroke="#6B5900" stroke-width="3"/>
+    <text x="72" y="80" fill="#6B5900" font-family="monospace" font-size="15" font-weight="700" letter-spacing="2">WONDER</text>
+  </g>
+
+  <g>
+    <rect x="321" y="106" width="40" height="40" fill="#2774AE" transform="rotate(45 341 126)"/>
+    <circle cx="455" cy="194" r="24" fill="#FF6B5E"/>
+    <circle cx="421" cy="329" r="21" fill="#75CDB5"/>
+    <rect x="311" y="291" width="30" height="30" fill="#7053D6" transform="rotate(12 326 306)"/>
+    <circle cx="224" cy="395" r="15" fill="#2774AE"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <path d="M450 360H570V430H450z" fill="#FFD100"/>
+    <text x="469" y="389" fill="#10251D" font-family="monospace" font-size="12" font-weight="700" letter-spacing="2">VERIFIED</text>
+    <path d="M478 406L490 416L543 382" stroke="#10251D" stroke-width="7"/>
+  </g>
+
+  <path d="M535 122H580V76H535z" fill="#FF6B5E"/>
+  <path d="M91 423H139V471H91z" fill="#2774AE"/>
+  <text x="91" y="452" fill="#FFFFFF" font-family="Georgia, serif" font-size="38" font-weight="600">∴</text>
+
+  <text x="465" y="169" fill="#A9363B" font-family="monospace" font-size="13" font-weight="700" letter-spacing="2">EXPLORE</text>
+  <text x="445" y="347" fill="#0B6B52" font-family="monospace" font-size="13" font-weight="700" letter-spacing="2">CHECK</text>
+</svg>

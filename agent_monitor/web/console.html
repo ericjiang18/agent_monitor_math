@@ -2747,7 +2747,7 @@ function linkifyCitation(s){
   h=h.replace(/arxiv[:\s]*(\d{4}\.\d{4,5}(?:v\d+)?)/gi,(m,id)=>`<a href="https://arxiv.org/abs/${id}" target="_blank" rel="noopener">arXiv:${id}</a>`);
   h=h.replace(/doi[:\s]*(10\.\d{4,9}\/[^\s)\],&;]+)/gi,(m,id)=>`<a href="https://doi.org/${id}" target="_blank" rel="noopener">doi:${id}</a>`);
   h=h.replace(/(?<!["=>])(https?:\/\/[^\s<)\]]+)/g,'<a href="$1" target="_blank" rel="noopener">$1</a>');
-  return h;
+  return sanitizeRenderedHtml(h);
 }
 function renderCitations(text){
   const strip=$('cite-strip'); if(!strip)return;
@@ -2977,6 +2977,42 @@ function stashMath(src){
   s=s.replace(/(^|[^\\$])(\$(?!\$)(?:\\.|[^$\n])+\$)/g,(m,pre,eq)=>pre+hold(eq));
   return {s,slots};
 }
+const SAFE_MARKDOWN_TAGS=new Set([
+  'A','BLOCKQUOTE','BR','CODE','DEL','EM','H1','H2','H3','H4','H5','H6','HR',
+  'LI','OL','P','PRE','STRONG','TABLE','TBODY','TD','TFOOT','TH','THEAD','TR','UL'
+]);
+function safeMarkdownHref(raw){
+  if(!raw)return null;
+  try{
+    const parsed=new URL(raw,window.location.href);
+    return ['http:', 'https:', 'mailto:'].includes(parsed.protocol)?parsed.href:null;
+  }catch(e){ return null; }
+}
+// Run output is untrusted model/tool text. Allow only a markdown-shaped subset
+// of elements and attributes, so nothing rendered can execute or navigate away.
+function sanitizeRenderedHtml(value){
+  const template=document.createElement('template');
+  template.innerHTML=String(value||'');
+  function scrub(el){
+    [...el.children].forEach(scrub);
+    if(!SAFE_MARKDOWN_TAGS.has(el.tagName)){
+      el.replaceWith(document.createTextNode(el.textContent||''));
+      return;
+    }
+    const href=el.tagName==='A'?safeMarkdownHref(el.getAttribute('href')):null;
+    const title=el.tagName==='A'?(el.getAttribute('title')||''):'';
+    const codeClass=el.tagName==='CODE'?(el.getAttribute('class')||''):'';
+    [...el.attributes].forEach(attr=>el.removeAttribute(attr.name));
+    if(href){
+      el.setAttribute('href',href);
+      el.setAttribute('rel','noopener noreferrer');
+    }
+    if(title)el.setAttribute('title',title);
+    if(/^language-[A-Za-z0-9_-]+$/.test(codeClass))el.setAttribute('class',codeClass);
+  }
+  [...template.content.children].forEach(scrub);
+  return template.innerHTML;
+}
 function mdToHtml(text){
   const {s,slots}=stashMath(text);
   let html;
@@ -2985,7 +3021,7 @@ function mdToHtml(text){
   }catch(e){ html=null; }
   if(!html) html='<pre>'+escapeHtml(text)+'</pre>';
   html=html.replace(/@@MATH(\d+)@@/g,(_,i)=>escapeHtml(slots[Number(i)]||''));
-  return html;
+  return sanitizeRenderedHtml(html);
 }
 function applySandboxPreview(run){
   lastSandboxRun=run;

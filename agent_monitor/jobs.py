@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import signal
 import shutil
 import sys
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any  # noqa: F401 — used throughout
 
 from agent_monitor import CACHE_DIR, HERMES_HOME, PROBLEMS_DIR, RUNS_DIR
+from agent_monitor import attachments as research_attachments
 from agent_monitor.research_audit import (
     reconciliation_complete,
     workspace_reconciliation_status,
@@ -31,6 +33,18 @@ _PROCS: dict[str, Any] = {}  # run_id -> subprocess.Popen
 _RECONCILE_LOCK = threading.Lock()
 _RUN_WRITE_LOCK = threading.Lock()
 _HERMES_HEARTBEAT_S = 2.0
+
+# Problem IDs become run-record and cache filenames, so they must never carry a
+# path separator or a traversal segment.
+_PROBLEM_ID_RE = re.compile(r"^[A-Za-z0-9_.()\[\]-]{1,128}$")
+
+# The tool-free Kimi harness speaks the same bounded chat-completions transport
+# as the Plain baseline, so it requests sponsored credentials under that name.
+_SPONSORED_TRANSPORT_ENGINES = {"kimi": "plain"}
+
+
+def _sponsored_transport_engine(engine: str) -> str:
+    return _SPONSORED_TRANSPORT_ENGINES.get(engine, engine)
 
 _RESEARCH_AUDIT_GATE_MARKER = "CANDIDATE AUDIT GATE:"
 _RESEARCH_AUDIT_RUNTIME_MARKER = "STRICT FILE-BACKED AUDIT CONTRACT:"
@@ -83,6 +97,11 @@ conservative outcome unless the exact original claim is independently closed;
 audit acceptance alone is never a solution. Before returning, list the
 artifact paths and both validator results.
 """.strip()
+
+# Guests may start only these two tool-free engines. A command override takes
+# the engine outside that built-in contract, so it disables it for guests.
+_GUEST_ENGINES = {"plain", "kimi"}
+_GUEST_COMMAND_OVERRIDES = {"plain": "PLAIN_CMD", "kimi": "KIMI_PROOF_CMD"}
 
 # Engines that can consume the run owner's Codex/ChatGPT subscription. Some
 # use a native Codex runtime; the small Python harnesses use our codex-exec
@@ -478,12 +497,15 @@ def _write_run_locked(run: dict[str, Any]) -> Path:
             old = {}
     for k in (
         "owner_id", "owner", "created_at", "problem_id",
-        "use_subagents", "subagent_model", "auth_route", "credential_source",
+        "guest", "use_subagents", "subagent_model", "auth_route", "credential_source",
         "model", "requested_model", "reasoning_effort", "speed_mode", "max_iterations",
         "engine_impl", "engine_impl_version", "artifact_schema", "graph_schema",
     ):
         if run.get(k) in (None, "", "continue") and old.get(k) not in (None, "", "continue"):
             run[k] = old[k]
+    if str(run.get("owner") or "").strip().lower().endswith("@public.local"):
+        # Legacy guest runs predate the explicit flag; infer it from the owner.
+        run["guest"] = True
     if not run.get("problems"):
         run["problems"] = list(old.get("problems") or [])
     incoming_text = str(run.get("problem_text") or "")
@@ -639,6 +661,7 @@ def _upsert_manifest(run: dict[str, Any]) -> None:
         "problem_preview": _session_title(run.get("problems"), run.get("problem_text_preview") or run.get("problem_text") or ""),
         "last_ts": run.get("updated_at") or _now(),
         "owner_id": run.get("owner_id"),
+        "guest": bool(run.get("guest")),
     }
     if not entry["problem_preview"]:
         # Runner flushes don't carry problem_text_preview — keep the stored one.
@@ -710,6 +733,36 @@ def list_jobs(owner_id: int | None = None) -> list[dict[str, Any]]:
     return jobs
 
 
+def persisted_run_count(owner_id: int) -> int:
+    """Count retained run records for one owner without double-counting copies."""
+    cache = _cache_dir()
+    with _RUN_WRITE_LOCK:
+        manifest_path = cache / "manifest.json"
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise TypeError("manifest root is not an object")
+            raw_entries = payload.get("runs") or []
+            if not isinstance(raw_entries, list):
+                raise TypeError("manifest runs is not a list")
+            return sum(
+                isinstance(entry, dict) and entry.get("owner_id") == owner_id
+                for entry in raw_entries
+            )
+        except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError):
+            count = 0
+            for path in cache.glob("*.json"):
+                if path.name == "manifest.json":
+                    continue
+                try:
+                    record = json.loads(path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    continue
+                if isinstance(record, dict) and record.get("owner_id") == owner_id:
+                    count += 1
+            return count
+
+
 def run_owner(run_id: str) -> int | None:
     """Owner user id recorded on a run (None for legacy/ownerless runs)."""
     try:
@@ -724,28 +777,59 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         return dict(j) if j else None
 
 
+def _validated_problem_id(problem_id: str) -> str:
+    """Return a filesystem-safe ID suitable for run and cache filenames."""
+    value = str(problem_id or "").strip()
+    if value in {".", ".."} or not _PROBLEM_ID_RE.fullmatch(value):
+        raise ValueError("problem_id contains unsupported characters")
+    return value
+
+
+def _contained_problem_path(relative: object) -> Path:
+    """Resolve a problem statement path without permitting escape."""
+    root = PROBLEMS_DIR.resolve()
+    candidate = (root / str(relative or "")).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        raise ValueError("problem manifest path leaves the problem directory") from None
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Problem statement is missing: {relative}")
+    return candidate
+
+
 def resolve_problem(problem_id: str | None, problem_text: str | None) -> tuple[str, str, Path | None]:
     """Return (problem_id, text, path_or_none)."""
     if problem_text and problem_text.strip():
-        pid = problem_id or f"adhoc_{uuid.uuid4().hex[:8]}"
+        pid = (
+            _validated_problem_id(problem_id)
+            if problem_id
+            else f"adhoc_{uuid.uuid4().hex[:8]}"
+        )
         return pid, problem_text.strip(), None
 
     if not problem_id:
         raise ValueError("Provide problem_id or problem_text")
+    safe_problem_id = _validated_problem_id(problem_id)
 
     man = PROBLEMS_DIR / "manifest.json"
     if man.exists():
         for p in json.loads(man.read_text(encoding="utf-8")).get("problems") or []:
-            if p.get("problem_id") == problem_id:
-                path = PROBLEMS_DIR / p["statement_path"]
-                return problem_id, path.read_text(encoding="utf-8", errors="replace"), path
+            if p.get("problem_id") == safe_problem_id:
+                path = _contained_problem_path(p.get("statement_path"))
+                return (
+                    safe_problem_id,
+                    path.read_text(encoding="utf-8", errors="replace"),
+                    path,
+                )
 
-    # direct path under problems/
-    cand = PROBLEMS_DIR / problem_id
-    if cand.exists():
+    # Direct statement file under problems/. The validated ID cannot contain a
+    # separator or traversal segment, so this stays inside the problem root.
+    cand = PROBLEMS_DIR / safe_problem_id
+    if cand.is_file():
         return cand.stem, cand.read_text(encoding="utf-8", errors="replace"), cand
 
-    raise FileNotFoundError(f"Unknown problem: {problem_id}")
+    raise FileNotFoundError(f"Unknown problem: {safe_problem_id}")
 
 
 def _is_kimi_model(model: str | None) -> bool:
@@ -961,13 +1045,45 @@ def start_job(
     auth_route: str | None = None,
     reasoning_effort: str | None = None,
     speed_mode: str | None = None,
+    max_output_tokens: int | None = None,
+    attachments: object = None,
 ) -> dict[str, Any]:
     from agent_monitor.engines_registry import all_engine_ids, list_engines, supported_models
 
+    is_guest = bool(user and user.get("guest"))
     if engine not in all_engine_ids():
         raise ValueError(f"Unsupported engine: {engine}")
+    # Guests run only the two tool-free engines, never a coding-agent CLI, and
+    # never with subagents or a command override that escapes that contract.
+    if is_guest:
+        if engine not in _GUEST_ENGINES:
+            raise ValueError("That engine requires a signed-in account")
+        use_subagents = False
+        subagent_model = None
+        override = _GUEST_COMMAND_OVERRIDES.get(engine)
+        if override and os.environ.get(override, "").strip():
+            raise ValueError(
+                f"Guest {engine} is unavailable while {override} is overridden"
+            )
+    if engine == "kimi":
+        from agent_monitor.settings import GUEST_DEFAULT_MODEL
+
+        model = model or GUEST_DEFAULT_MODEL
+        if model != GUEST_DEFAULT_MODEL:
+            raise ValueError(f"Kimi Proof uses {GUEST_DEFAULT_MODEL}")
 
     extra_env = _user_extra_env(user, model, subagent_model)
+    if max_output_tokens:
+        extra_env["AGENT_MONITOR_MAX_OUTPUT_TOKENS"] = str(int(max_output_tokens))
+    if is_guest and not extra_env.get("KIMI_API_KEY"):
+        # Guests inherit no operator credentials, so the only key they may use
+        # is the dedicated hosted guest one (when the operator configured it).
+        from agent_monitor.settings import hosted_guest_kimi_key
+
+        hosted_key = hosted_guest_kimi_key()
+        if hosted_key:
+            extra_env["KIMI_API_KEY"] = hosted_key
+            extra_env.setdefault("KIMI_BASE_URL", "https://api.moonshot.ai/v1")
     engine_info = next((item for item in list_engines() if item.get("id") == engine), {})
     if engine_info and not engine_info.get("available"):
         detail = engine_info.get("health_detail") or engine_info.get("hint") or "runtime unavailable"
@@ -1061,6 +1177,12 @@ def start_job(
     else:
         extra_env.pop("AGENT_MONITOR_SUBAGENT_MODEL", None)
 
+    attachment_batch = research_attachments.validate(attachments)
+    if attachment_batch and not (problem_text or "").strip() and not problem_id:
+        problem_text = (
+            "Use the attached research findings to investigate the problem and "
+            "develop a rigorous proof."
+        )
     pid, text, path = resolve_problem(problem_id, problem_text)
     job_id = uuid.uuid4().hex[:10]
     run_id = f"{engine}_{pid}_{job_id}"
@@ -1069,12 +1191,15 @@ def start_job(
 
         extra_env.update(
             sponsored_kimi_client.issue_credentials(
-                engine=engine,
+                engine=_sponsored_transport_engine(engine),
                 client_id=(user or {}).get("id"),
                 cache_key=run_id,
                 minimum_ttl_seconds=_cli_timeout_seconds(engine, extra_env) + _SPONSORED_KIMI_TOKEN_MARGIN,
             )
         )
+        # The harness reads KIMI_BASE_URL; the broker issues KIMI_API_BASE.
+        if str(extra_env.get("KIMI_API_BASE") or "").strip():
+            extra_env["KIMI_BASE_URL"] = str(extra_env["KIMI_API_BASE"]).rstrip("/")
     run_tuning.apply_environment(
         extra_env,
         model=model,
@@ -1083,6 +1208,7 @@ def start_job(
     )
     _stop_event(run_id).clear()
     ws = workspace_dir(run_id)
+    attached = research_attachments.save(ws, attachment_batch)
     (ws / "problem.txt").write_text(text, encoding="utf-8")
     run = normalize_run(
         {
@@ -1116,6 +1242,7 @@ def start_job(
             "model": model,
             "requested_model": model,
             "max_iterations": max_iterations,
+            "guest": is_guest,
             "live": {
                 "model": model,
                 "model_requested": bool(model),
@@ -1131,6 +1258,11 @@ def start_job(
         engine=engine,  # type: ignore[arg-type]
     )
     _write_run(run)
+
+    if attached:
+        # Record the opening turn so the transcript shows which files the run
+        # started from; the worker's own events follow it.
+        _append_chat(run_id, "user", text, attachments=attached)
 
     job = {
         "job_id": job_id,
@@ -1170,6 +1302,7 @@ def start_job(
             "subagent_model": subagent_model,
             **tuning,
             "owner_id": user.get("id") if user else None,
+            "guest": is_guest,
         },
         daemon=True,
         name=f"engine-{engine}-{job_id}",
@@ -1183,6 +1316,7 @@ def start_job(
     # launch background work and therefore have no is_alive method.
     if (
         hasattr(thread, "is_alive")
+        and not is_guest
         and os.environ.get("AGENT_MONITOR_DISABLE_AUTO_PIPELINE", "").strip() != "1"
     ):
         from agent_monitor import auto_pipeline
@@ -1322,7 +1456,7 @@ def _continuation_auth_environment(
 
         configured.update(
             sponsored_kimi_client.issue_credentials(
-                engine=engine,
+                engine=_sponsored_transport_engine(engine),
                 client_id=owner_id,
                 cache_key=str(run_data.get("run_id") or "continuation"),
                 minimum_ttl_seconds=_cli_timeout_seconds(engine, configured) + _SPONSORED_KIMI_TOKEN_MARGIN,
@@ -1353,6 +1487,11 @@ def _apply_kimi_compatible_env(env: dict[str, str], model: str | None) -> None:
     env["OPENAI_BASE_URL"] = base
     env["OPENAI_API_BASE"] = base
     env["AGENT_MONITOR_BASE_URL"] = base
+    # The sponsored broker issues KIMI_API_BASE; the tool-free Kimi harness
+    # reads KIMI_BASE_URL. Mirror the broker route so both agree, and leave an
+    # explicitly configured KIMI_BASE_URL untouched otherwise.
+    if str(env.get("KIMI_API_BASE") or "").strip():
+        env["KIMI_BASE_URL"] = base
     env["LLM_API_KEY"] = key
     env["LLM_BASE_URL"] = base
 
@@ -1362,6 +1501,41 @@ def _update_job(job_id: str, **fields: Any) -> None:
         if job_id in _JOBS:
             _JOBS[job_id].update(fields)
             _JOBS[job_id]["updated_at"] = _now()
+
+
+def _record_run_memory(
+    *,
+    guest: bool,
+    run_id: str,
+    engine: str,
+    problem_id: str,
+    status: str,
+    problem_text: str,
+    outcome: str,
+    final_out: str,
+) -> None:
+    """Best-effort shared-memory update for registered-account runs only.
+
+    Anonymous guest input and output must never mutate the operator's library.
+    """
+    if guest:
+        return
+    try:
+        from agent_monitor import library as user_library
+
+        user_library.record_run_memory(
+            run_id=run_id,
+            engine=engine,
+            problem_id=problem_id,
+            status=status,
+            summary=(
+                f"Problem: {problem_text[:600]}\n\n"
+                f"Outcome: {outcome}\n\n"
+                f"Final answer (excerpt):\n{final_out[:1200]}"
+            ),
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _execute_job(
@@ -1381,6 +1555,7 @@ def _execute_job(
     reasoning_effort: str = "default",
     speed_mode: str = "standard",
     owner_id: int | None = None,
+    guest: bool = False,
 ) -> None:
     started = time.time()
     ws = Path(workspace)
@@ -1403,6 +1578,8 @@ def _execute_job(
         "persistent_skill_mutation": False,
     }
     try:
+        if guest:
+            raise LookupError("user library disabled for anonymous guest runs")
         if public_kimi_runtime or sponsored_kimi_runtime:
             raise LookupError("user library disabled for isolated Kimi service")
         from agent_monitor import library as user_library
@@ -1448,6 +1625,9 @@ def _execute_job(
         except Exception as exc:  # noqa: BLE001
             _append_chat(run_id, "system", f"profile skill materialization unavailable: {exc}")
     engine_problem_text = (lib_ctx + "\n" + problem_text) if lib_ctx else problem_text
+    attachment_context = research_attachments.context(ws)
+    if attachment_context:
+        engine_problem_text += "\n\n" + attachment_context
     engine_problem_text = _augment_research_audit_prompt(engine_problem_text)
     if engine in {"improof", "ucla"}:
         try:
@@ -1492,7 +1672,9 @@ def _execute_job(
             from agent_monitor.runners import improof as improof_runner
 
             path = ws / "problem.txt"
-            if lib_ctx:
+            # Library context and research attachments both augment the prompt;
+            # either one means the engine must read the augmented file.
+            if engine_problem_text != problem_text:
                 path = ws / "problem_with_library.txt"
                 path.write_text(engine_problem_text, encoding="utf-8")
             improof_args = None
@@ -1535,7 +1717,9 @@ def _execute_job(
             from agent_monitor.runners import ucla as ucla_runner
 
             path = ws / "problem.txt"
-            if lib_ctx:
+            # Library context and research attachments both augment the prompt;
+            # either one means the engine must read the augmented file.
+            if engine_problem_text != problem_text:
                 path = ws / "problem_with_library.txt"
                 path.write_text(engine_problem_text, encoding="utf-8")
             result = ucla_runner.run_problem(
@@ -1610,6 +1794,7 @@ def _execute_job(
         if result_run["credential_source"] == "sponsored_kimi":
             result_run["sponsored_kimi_proxy"] = "short_lived_loopback_v1"
         result_run["workspace"] = str(ws)
+        result_run["guest"] = bool(guest)
         result_run["use_subagents"] = bool(use_subagents)
         result_run["subagent_model"] = subagent_model if use_subagents else None
         result_run["reasoning_effort"] = reasoning_effort
@@ -1643,25 +1828,19 @@ def _execute_job(
                 break
         if final_out:
             _append_chat(run_id, "assistant", final_out[:3000])
-        # The standalone public service never imports, reads, or writes the
-        # persistent user library, even when its isolated data dir is polluted.
+        # Neither the standalone public service nor an anonymous guest run
+        # imports, reads, or writes the operator's persistent user library.
         if not public_kimi_runtime:
-            try:
-                from agent_monitor import library as user_library
-
-                user_library.record_run_memory(
-                    run_id=run_id,
-                    engine=engine,
-                    problem_id=problem_id,
-                    status=status,
-                    summary=(
-                        f"Problem: {problem_text[:600]}\n\n"
-                        f"Outcome: {summary}\n\n"
-                        f"Final answer (excerpt):\n{final_out[:1200]}"
-                    ),
-                )
-            except Exception:  # noqa: BLE001
-                pass
+            _record_run_memory(
+                guest=guest,
+                run_id=run_id,
+                engine=engine,
+                problem_id=problem_id,
+                status=status,
+                problem_text=problem_text,
+                outcome=summary,
+                final_out=final_out,
+            )
     except StopRequested:
         stopped_run = _load_run_record(run_id)
         stopped_run["status"] = "stopped"
@@ -3060,7 +3239,11 @@ def _run_cli_engine(
             preamble = ""
     prompt = proof_prompt(problem_text, workspace=workspace, preamble=preamble)
     argv = build_cli_command(
-        engine, prompt=prompt, workspace=workspace, problem_file=workspace / "problem.txt"
+        engine,
+        prompt=prompt,
+        workspace=workspace,
+        problem_file=workspace / "problem.txt",
+        model=requested_model,
     )
     if not argv:
         hint = spec.get("install_hint") or "engine not configured"
@@ -3715,11 +3898,13 @@ def list_chat(run_id: str) -> list[dict[str, Any]]:
     # session problem ledger without first emitting a user chat event. Keep
     # those entries out of Sandbox Problem cards, but recover them here so the
     # guidance remains visible in Human in the loop and exported Conversation.
-    seen_user = {
-        str(message.get("content") or "").strip()
-        for message in msgs
-        if message.get("role") == "user"
-    }
+    seen_user: set[str] = set()
+    for message in msgs:
+        if message.get("role") != "user":
+            continue
+        seen_user.add(str(message.get("content") or "").strip())
+        if message.get("ledger_text"):
+            seen_user.add(str(message["ledger_text"]).strip())
     try:
         run = _load_run_record(run_id)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -3743,10 +3928,23 @@ def list_chat(run_id: str) -> list[dict[str, Any]]:
     return msgs
 
 
-def _append_chat(run_id: str, role: str, content: str) -> dict[str, Any]:
+def _append_chat(
+    run_id: str,
+    role: str,
+    content: str,
+    *,
+    attachments: list[dict] | None = None,
+    ledger_text: str | None = None,
+) -> dict[str, Any]:
     path = _chat_file(run_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     entry = {"role": role, "content": content, "ts": _now()}
+    if attachments:
+        entry["attachments"] = attachments
+    if ledger_text and ledger_text != content:
+        # The session ledger stores the prompt-facing form of this turn. Record
+        # it so ledger recovery below does not re-add the turn as a duplicate.
+        entry["ledger_text"] = ledger_text
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     return entry
@@ -4045,16 +4243,30 @@ def send_human_message(
     model: str | None = None,
     max_iterations: int = 40,
     user: dict[str, Any] | None = None,
+    attachments: object = None,
 ) -> dict[str, Any]:
     """Human-in-the-loop chat: queue feedback or continue a finished run."""
     message = (message or "").strip()
-    if not message:
+    attachment_batch = research_attachments.validate(attachments)
+    if not message and not attachment_batch:
         raise ValueError("empty message")
     ws = RUNS_DIR / "workspaces" / run_id
     if not ws.is_dir():
         raise FileNotFoundError("workspace not found")
 
-    user_entry = _append_chat(run_id, "user", message)
+    attached = research_attachments.save(ws, attachment_batch)
+    display_message = message or (
+        "Use these additional research findings to continue the proof."
+    )
+    if attached:
+        message = display_message + "\n\nAttached research files:\n" + "\n".join(
+            f"- {json.dumps(item['name'], ensure_ascii=False)}" for item in attached
+        )
+    else:
+        message = display_message
+    user_entry = _append_chat(
+        run_id, "user", display_message, attachments=attached, ledger_text=message
+    )
     try:
         run_data = _load_run_record(run_id)
     except FileNotFoundError:
@@ -4235,6 +4447,9 @@ def _execute_continue(
     if proof_excerpt:
         continuation += f"CURRENT {proof_name} (preserve this content, then extend it):\n{proof_excerpt}\n\n"
     continuation += f"HUMAN FEEDBACK — address this now:\n{message}\n"
+    attachment_context = research_attachments.context(ws)
+    if attachment_context:
+        continuation += "\n\n" + attachment_context
 
     run_data["status"] = "running"
     run_data["updated_at"] = _now()

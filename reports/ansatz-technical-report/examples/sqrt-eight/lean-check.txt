@@ -1,0 +1,12 @@
+Checked at: 2026-09-20T22:56:56.698556+00:00
+Lean (version 4.14.0, x86_64-unknown-linux-gnu, commit 410fab728470, Release)
+Mathlib source revision: 4bbdccd9c5f862bf90ff12f0a9e2c8be032b9a84
+Exact source SHA-256: 05e19732c1e40b2cc4515971eb30ff48ce35cd56899dbff2a8c5994509307100
+
+$ lean Proof.lean
+Exit code: 0
+
+$ lean AxiomAudit.lean
+Exit code: 0
+main : Irrational √8
+'main' depends on axioms: [propext, Classical.choice, Quot.sound]

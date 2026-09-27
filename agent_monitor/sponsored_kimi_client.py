@@ -29,11 +29,12 @@ _MAX_RESPONSE_BYTES = 512 * 1024
 _SPONSORED_ENGINES = frozenset(
     {
         "codex", "deepagents", "deepseek_harness", "formal", "improof",
-        "math_harness", "metaharness", "openclaude", "openclaw",
+        "kimi", "math_harness", "metaharness", "openclaude", "openclaw",
         "openhands", "plain",
     }
 )
 _credential_lock = threading.RLock()
+_health_cache: tuple[float, str, bool] = (0.0, "", False)
 _credential_cache: dict[
     tuple[str, str, str], tuple[float, dict[str, str]]
 ] = {}
@@ -48,6 +49,15 @@ def _singleflight_credential_issue(function):
 
 class SponsoredKimiError(RuntimeError):
     """The isolated sponsored service could not complete a Plain run."""
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        return None
+
+
+# A loopback token must never follow an HTTP redirect or an ambient proxy.
+_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
 
 
 def endpoint() -> str:
@@ -119,7 +129,7 @@ def _request(
         method=method,
     )
     try:
-        with urllib.request.urlopen(request, timeout=max(0.2, timeout)) as response:
+        with _opener.open(request, timeout=max(0.2, timeout)) as response:
             value = _decode_response(response)
             set_cookie = str(response.headers.get("Set-Cookie") or "")
     except urllib.error.HTTPError as exc:
@@ -158,11 +168,22 @@ def configured(*, timeout: float = 1.5) -> bool:
 
 
 def available(*, timeout: float = 1.5) -> bool:
+    global _health_cache
+    try:
+        route = endpoint()
+    except SponsoredKimiError:
+        return False
+    now = time.monotonic()
+    if _health_cache[0] > now and _health_cache[1] == route:
+        return _health_cache[2]
     try:
         value, _cookie = _request("/healthz", timeout=timeout)
     except SponsoredKimiError:
+        _health_cache = (now + 5, route, False)
         return False
-    return value.get("ok") is True and value.get("service") == "public-kimi"
+    ok = value.get("ok") is True and value.get("service") == "public-kimi"
+    _health_cache = (now + 5, route, ok)
+    return ok
 
 
 def _client_ip(client_id: int | str | None) -> str:

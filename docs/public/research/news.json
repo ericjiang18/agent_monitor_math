@@ -1,0 +1,439 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-09-16T21:46:08Z",
+  "last_checked_at": "2026-09-16T21:46:08Z",
+  "refresh_interval_minutes": 30,
+  "last_successful_refresh_at": "2026-09-16T21:46:08Z",
+  "items": [
+    {
+      "id": "news-fa54f41973ecb891f8c6fb90",
+      "title": "A Short Proof of a Conjecture Regarding Quadratic Representations of Practical Numbers",
+      "summary": "The authors report a short proof of the second part of a conjecture by Wang and Sun on quadratic representations of practical numbers, showing that for odd b and even c some n between 2 and max(b,c) makes n^2+bn+c practical. Per the abstract, combined with prior work by Somu, Li, and Kukla this settles the conjecture; the result is a preprint claim.",
+      "url": "https://arxiv.org/abs/2608.25591",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-efb97d5f14ac952e2f60c930",
+      "title": "Arithmetic dynamics and Generalized Fermat's conjecture",
+      "summary": "This preprint proposes a generalized form of Fermat's conjecture framed in arithmetic dynamics, offers supporting evidence, and adds a multi-indexed version. The conjecture is a proposal, not an established result.",
+      "url": "https://arxiv.org/abs/2601.08207",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-e44c8dbde93065550581d880",
+      "title": "Improved bounds for Szpiro's conjecture",
+      "summary": "The author claims the unconditional bound log Delta << N log log N for Szpiro's conjecture over Q, improving on a 2013 bound of log Delta << N log N and previously known only under GRH, with log Delta << N for semistable curves. The methods build on the author's approach to the abc conjecture via Shimura curves; this is a preprint claim.",
+      "url": "https://arxiv.org/abs/2609.17390",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-d8de20fbf4dc8a7f2694691a",
+      "title": "Character sums on an oriented singer conic and explicit Ramanujan double covers",
+      "summary": "The paper studies odd multiplicative Fourier coefficients of a lift of the trace conic in F_{q^3} for odd q and claims a bound of 2 sqrt(q). As an application, the author reports constructing explicit Singer-invariant signings of the point-line incidence graph of PG(2,q) that yield connected Ramanujan double covers.",
+      "url": "https://arxiv.org/abs/2609.14332",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-90bd869598f778a59b5aacba",
+      "title": "On Sarnak--Str\\\"{o}mbergsson conjecture",
+      "summary": "The author claims a proof of the Sarnak-Strombergsson conjecture in dimension three, identifying the FCC and BCC lattices as minimizers of the theta function depending on the parameter and the FCC lattice as minimizer of the Epstein zeta function. The result is a preprint announcement, not an independently confirmed proof.",
+      "url": "https://arxiv.org/abs/2609.17356",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-8fb38cb7dabdbadeee837828",
+      "title": "The 1/2-Conjecture for $q$-Binomial Coefficients with Fractional Index",
+      "summary": "The authors study generalized Gaussian binomial coefficients with fractional index r and their integer trace, formulating the 1/2-Conjecture that r=1/2 maximizes this trace coefficientwise. They report proving special cases and providing computational evidence; the conjecture remains unproven in general.",
+      "url": "https://arxiv.org/abs/2606.01919",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-8cf684629af21dd3ae76127e",
+      "title": "The Waring-Goldbach problem in short intervals under the Generalized Riemann Hypothesis",
+      "summary": "Assuming the Generalized Riemann Hypothesis, the author claims results on representing integers as sums of almost equal k-th powers of primes in short intervals, including an asymptotic formula for the number of solutions when m and k are sufficiently large. These are conditional preprint claims.",
+      "url": "https://arxiv.org/abs/2609.16048",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-570b73872448505f18481afd",
+      "title": "On a classical zero-sum invariant II: Disproof of a long-standing conjecture",
+      "summary": "The author reports a disproof of a 2000 conjecture by Gao about the zero-sum invariant nu(G) for finite abelian groups, which stated that nu(G) always equals d(G)-1. The conjecture had been confirmed for many group families before this claimed counterexample.",
+      "url": "https://arxiv.org/abs/2609.17127",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-4d5124e048131bde5944b82a",
+      "title": "ProIQA: A Process-Based Framework for Fine-Grained Math Item Quality Assessment",
+      "summary": "",
+      "url": "https://arxiv.org/abs/2609.15292",
+      "source": "arxiv-ai",
+      "category": "research",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-1bc2c0aaba1a1fbf5a5e255e",
+      "title": "Uniform Mordell-Lang conjecture for semiabelian varieties",
+      "summary": "",
+      "url": "https://arxiv.org/abs/2609.17233",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-044398ff073cc033a68ac365",
+      "title": "A proof of Sylvester's conjecture",
+      "summary": "",
+      "url": "https://arxiv.org/abs/2609.14893",
+      "source": "arxiv-math-nt",
+      "category": "mathematics",
+      "published_at": "2026-09-16T04:00:00Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-947e89eaa83a27aef331dc76",
+      "title": "Introducing Gemini 3.8 Live and 3.8 Live Extended Thinking",
+      "summary": "",
+      "url": "https://deepmind.google/blog/introducing-gemini-3-8-live-and-3-8-live-extended-thinking/",
+      "source": "deepmind",
+      "category": "models",
+      "published_at": "2026-09-15T17:05:57Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-38fae5f8610574ff4fd83168",
+      "title": "ZGCM-1 publishes an open training recipe for math and search",
+      "summary": "Researchers introduced a 7B-parameter model aimed at mathematical reasoning and tool-assisted search, alongside weights and training artifacts. The arXiv preprint reports benchmark comparisons based on the authors’ evaluations.",
+      "url": "https://arxiv.org/abs/2609.13356",
+      "source": "arxiv-ai",
+      "category": "research",
+      "published_at": "2026-09-11T17:18:04Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "news-f805a46f8df62abe6c9eb5bb",
+      "title": "Clay responds to the announced Navier–Stokes proof",
+      "summary": "Clay acknowledged the announcement of an apparent resolution of the Navier–Stokes problem and said it would follow its published process for evaluating the achievement and assigning credit. The linked OpenAI announcement states a smooth-forced breakdown result.",
+      "url": "https://www.claymath.org/news/navier-stokes-announcement/",
+      "source": "clay",
+      "category": "mathematics",
+      "published_at": "2026-09-11T07:08:02Z",
+      "status": "Proof announced",
+      "related_links": [
+        {
+          "label": "OpenAI announcement and proof links",
+          "url": "https://openai.com/index/navier-stokes-solution"
+        },
+        {
+          "label": "Clay prize rules",
+          "url": "https://www.claymath.org/wp-content/uploads/2022/03/millennium_prize_rules_0.pdf"
+        }
+      ]
+    },
+    {
+      "id": "news-8c4c7fc4c8be0489d3800129",
+      "title": "A new four-color proof supports faster planar-graph coloring",
+      "summary": "Quanta reports on a 2026 computer-assisted proof that yields near-linear-time four-coloring. The underlying paper was posted in March; September’s article explains the algorithmic advance beyond earlier quadratic-time methods.",
+      "url": "https://www.quantamagazine.org/the-four-color-theorem-gets-a-rare-new-proof-20260910/",
+      "source": "quanta",
+      "category": "mathematics",
+      "published_at": "2026-09-10T14:27:36Z",
+      "status": "Published",
+      "related_links": [
+        {
+          "label": "Original research paper · March 2026",
+          "url": "https://arxiv.org/abs/2603.24880"
+        }
+      ]
+    },
+    {
+      "id": "news-85052f9befba2c4e17fa41a5",
+      "title": "Async GRPO with LoRA across HF Jobs: a bucket, a proxy, and no NCCL",
+      "summary": "",
+      "url": "https://huggingface.co/blog/asyncgrpo-lora-hfjobs",
+      "source": "huggingface",
+      "category": "research",
+      "published_at": "2026-09-10T00:00:00Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-e4e9bf5452bdf91b06822f53",
+      "title": "What Is Math’s Mysterious Langlands Program Really About?",
+      "summary": "Hidden correspondences hint at a deeper structure to the mathematical universe. Our columnist unpacks one of those connections and asks mathematicians what they might mean. The post What Is Math’s Mysterious Langlands Program Really About? first appeared on Quanta Magazine",
+      "url": "https://www.quantamagazine.org/what-is-maths-mysterious-langlands-program-really-about-20260909/",
+      "source": "quanta",
+      "category": "mathematics",
+      "published_at": "2026-09-09T14:44:13Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-2c827cba158d2f26e6e99088",
+      "title": "Navier–Stokes proof announced; Clay evaluation pending",
+      "summary": "OpenAI released a proposed solution with an analytical write-up and Lean formalization. Clay acknowledged an apparent resolution on September 11 and referred to its evaluation process. The announcement concerns the smooth-forced breakdown alternatives.",
+      "url": "https://openai.com/index/navier-stokes-solution",
+      "source": "openai",
+      "category": "mathematics",
+      "published_at": "2026-09-08T10:00:00Z",
+      "status": "Proof announced",
+      "related_links": [
+        {
+          "label": "Clay response · September 11",
+          "url": "https://www.claymath.org/news/navier-stokes-announcement/"
+        }
+      ]
+    },
+    {
+      "id": "news-23f0f9c47f987f1c790e65d4",
+      "title": "Quanta reports on the announced Navier–Stokes proof",
+      "summary": "Quanta covers OpenAI’s announced smooth-forced Navier–Stokes blowup proof and questions about credit for related work. The report discusses Lean formalization and the need for mathematical scrutiny; Clay’s September 11 response describes its evaluation process.",
+      "url": "https://www.quantamagazine.org/ai-has-solved-one-of-maths-1-million-millennium-prize-problems-20260908/",
+      "source": "quanta",
+      "category": "mathematics",
+      "published_at": "2026-09-08T08:43:52Z",
+      "status": "Proof announced",
+      "related_links": [
+        {
+          "label": "OpenAI announcement and proof links",
+          "url": "https://openai.com/index/navier-stokes-solution"
+        },
+        {
+          "label": "Clay response · September 11",
+          "url": "https://www.claymath.org/news/navier-stokes-announcement/"
+        }
+      ]
+    },
+    {
+      "id": "news-3784d7aba9718af9aa1923cc",
+      "title": "OpenAI reports internal measurements of research-agent use",
+      "summary": "OpenAI shared internal measurements of researchers’ agent usage, coding and experiment activity. The report describes rising use and more complex delegated tasks, while noting that compute growth and other bottlenecks limit causal conclusions.",
+      "url": "https://openai.com/index/research-acceleration-view-inside-openai",
+      "source": "openai",
+      "category": "research",
+      "published_at": "2026-09-06T08:00:00Z",
+      "status": "Research result"
+    },
+    {
+      "id": "news-d5e3b49d0e243eb8d08841bd",
+      "title": "Live from ICM 2026: What Is Math For in the Age of AI?",
+      "summary": "In this special live recording from the International Congress of Mathematicians in Philadelphia, July 2026, the central question discussed was what do mathematicians really value about doing mathematics in the first place? The post Live from ICM 2026: What Is Math For in the Age of AI? first appeared on Quanta Magazine",
+      "url": "https://www.quantamagazine.org/live-from-icm-2026-what-is-math-for-in-the-age-of-ai-20260903/",
+      "source": "quanta",
+      "category": "mathematics",
+      "published_at": "2026-09-03T13:41:48Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-039a4975e102cb538c368495",
+      "title": "GPT-6 Astra starts its rollout",
+      "summary": "OpenAI introduced GPT-6 Astra for coding, scientific reasoning and computer use. Its announcement reports mathematical results and research benchmarks, with staged availability across ChatGPT and the API.",
+      "url": "https://openai.com/index/gpt-6-astra",
+      "source": "openai",
+      "category": "models",
+      "published_at": "2026-09-03T11:00:00Z",
+      "status": "Model release"
+    },
+    {
+      "id": "news-a139f80b159295ada71d0ef0",
+      "title": "Fine-tuning a 350M Model for Better Structured Outputs in 100 GRPO Steps",
+      "summary": "",
+      "url": "https://huggingface.co/blog/grpo-with-trl-ifstruct",
+      "source": "huggingface",
+      "category": "research",
+      "published_at": "2026-09-03T00:00:00Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-63b19b50b4021cb509d5c4a6",
+      "title": "Gemini 3.8 Flash adds stronger reasoning and coding",
+      "summary": "Google introduced Gemini 3.8 Flash with reported improvements in reasoning, coding and extended tool use. A separate Flash Cyber version is intended for trusted cybersecurity defenders.",
+      "url": "https://deepmind.google/blog/introducing-gemini-3-8-flash-and-38-flash-cyber/",
+      "source": "deepmind",
+      "category": "models",
+      "published_at": "2026-09-02T16:18:31Z",
+      "status": "Model release"
+    },
+    {
+      "id": "news-e7232d52f37fd859a2ad6331",
+      "title": "Anthropic introduces Claude Fable 5.1 and Mythos 5.1",
+      "summary": "Anthropic announced two deployments of the same underlying model with different safeguards and access. The company reports improvements in long-running coding and scientific reasoning; Fable is generally available, while Mythos uses a restricted access program.",
+      "url": "https://www.anthropic.com/claude-fable-and-mythos-5-1",
+      "source": "anthropic",
+      "category": "models",
+      "published_at": "2026-09-01T00:00:00Z",
+      "status": "Model release"
+    },
+    {
+      "id": "news-9cc6e313651b74f06deaeff7",
+      "title": "‘Stunning’ Percolation Proof Solves Decades-Old Puzzle About Phase Transitions",
+      "summary": "Mathematicians found that a broad class of networks will abruptly shift behavior past a critical point. The post ‘Stunning’ Percolation Proof Solves Decades-Old Puzzle About Phase Transitions first appeared on Quanta Magazine",
+      "url": "https://www.quantamagazine.org/stunning-percolation-proof-solves-decades-old-puzzle-about-phase-transitions-20260831/",
+      "source": "quanta",
+      "category": "mathematics",
+      "published_at": "2026-08-31T14:24:27Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-43643a3dd841363b8ac91be3",
+      "title": "Introducing Gemini 3.7 Flash",
+      "summary": "",
+      "url": "https://deepmind.google/blog/introducing-gemini-3-7-flash/",
+      "source": "deepmind",
+      "category": "models",
+      "published_at": "2026-08-13T17:04:18Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-1a7704a62ecc3f65b10f9dd0",
+      "title": "MindTopo tests whether AI can preserve topological relationships",
+      "summary": "Microsoft Research introduced a benchmark for reasoning about connectivity, enclosure and related spatial properties. Its tests distinguish recognizing a static diagram from planning changes that preserve topology, where evaluated models showed greater difficulty.",
+      "url": "https://www.microsoft.com/en-us/research/blog/mindtopo-reveals-vlms-spatial-reasoning-abilities/",
+      "source": "microsoft-research",
+      "category": "research",
+      "published_at": "2026-08-12T16:00:00Z",
+      "status": "Research result"
+    },
+    {
+      "id": "news-e299630b866e2d7ebb7f5430",
+      "title": "Ten reported advances in mathematics and theoretical computer science",
+      "summary": "OpenAI published ten results it says resolve or advance longstanding problems, with a paper and reasoning walkthroughs. The announcement covers mathematics and theoretical computer science; each result has its own precise statement and supporting argument.",
+      "url": "https://openai.com/index/ten-advances-in-mathematics",
+      "source": "openai",
+      "category": "mathematics",
+      "published_at": "2026-08-01T00:00:00Z",
+      "status": "Research result"
+    },
+    {
+      "id": "news-79bd715dffc89139800d0470",
+      "title": "2026 Fields Medals recognize advances across mathematics",
+      "summary": "Clay congratulated John Pardon, Yu Deng, Hong Wang and Jacob Tsimerman on their Fields Medals. The awards recognize contributions spanning geometry and topology, partial differential equations, harmonic analysis and arithmetic geometry.",
+      "url": "https://www.claymath.org/news/2026-fields-medals/",
+      "source": "clay",
+      "category": "mathematics",
+      "published_at": "2026-07-23T14:10:17Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-e38a2bc2474832f28ea96744",
+      "title": "Introducing Gemini 3.6 Flash, 3.5 Flash-Lite, and 3.5 Flash Cyber",
+      "summary": "We’re introducing new Gemini models, including Gemini 3.6 Flash, 3.5 Flash-Lite and 3.5 Flash Cyber.",
+      "url": "https://deepmind.google/blog/introducing-gemini-3-6-flash-3-5-flash-lite-and-3-5-flash-cyber/",
+      "source": "deepmind",
+      "category": "models",
+      "published_at": "2026-07-21T15:16:30Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-e1b2acb9dc9a123d0ebc2682",
+      "title": "Frontiers of Science Prize",
+      "summary": "Congratulations to former Clay Research Fellows Dennis Gaitsgory, Ben Green, Sergei Gukov, Adrian Ioana, Elon Lindenstrauss, James Maynard, and Terence Tao, and to CMI president Martin Bridson on being awarded 2026 Frontiers of Science Prizes. The prizes will be presented at the International Congress of Basic Sciences in Beijing on August 9, 2026. The post Frontiers of Science Prize appeared first on Clay Mathematics Institute.",
+      "url": "https://www.claymath.org/news/frontiers-of-science-prize/",
+      "source": "clay",
+      "category": "mathematics",
+      "published_at": "2026-07-20T13:38:27Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-b5de177ccc831b459c55321b",
+      "title": "Introducing Gemini 3.5 Flash Cyber",
+      "summary": "Google introduces Gemini 3.5 Flash Cyber, a lightweight cybersecurity model to find and patch vulnerabilities.",
+      "url": "https://deepmind.google/blog/introducing-gemini-3-5-flash-cyber/",
+      "source": "deepmind",
+      "category": "models",
+      "published_at": "2026-07-17T15:00:11Z",
+      "status": "Published"
+    },
+    {
+      "id": "news-3fb14968493dc68260e4892e",
+      "title": "Introducing GPT-Live",
+      "summary": "A new generation of voice models for natural human-AI interaction, now powering ChatGPT Voice.",
+      "url": "https://openai.com/index/introducing-gpt-live",
+      "source": "openai",
+      "category": "models",
+      "published_at": "2026-07-08T00:00:00Z",
+      "status": "Published"
+    }
+  ],
+  "sources": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "url": "https://openai.com/news/",
+      "automated": true
+    },
+    {
+      "id": "deepmind",
+      "name": "Google DeepMind",
+      "url": "https://deepmind.google/blog/",
+      "automated": true
+    },
+    {
+      "id": "clay",
+      "name": "Clay Mathematics Institute",
+      "url": "https://www.claymath.org/news/",
+      "automated": true
+    },
+    {
+      "id": "quanta",
+      "name": "Quanta Magazine · mathematics journalism",
+      "url": "https://www.quantamagazine.org/mathematics/",
+      "automated": true
+    },
+    {
+      "id": "microsoft-research",
+      "name": "Microsoft Research",
+      "url": "https://www.microsoft.com/en-us/research/blog/",
+      "automated": true
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face · publisher and research-team blogs",
+      "url": "https://huggingface.co/blog",
+      "automated": true
+    },
+    {
+      "id": "arxiv-ai",
+      "name": "arXiv · artificial intelligence preprints",
+      "url": "https://arxiv.org/list/cs.AI/recent",
+      "automated": true
+    },
+    {
+      "id": "arxiv-math-nt",
+      "name": "arXiv · number theory preprints",
+      "url": "https://arxiv.org/list/math.NT/recent",
+      "automated": true
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "url": "https://www.anthropic.com/news",
+      "automated": false
+    }
+  ],
+  "source_errors": [],
+  "summary_errors": []
+}

@@ -1,3 +1,4 @@
+# OpenAI/Codex-facing metadata for the computational-certificates starter skill.
 interface:
   display_name: "Computational Certificates"
   short_description: "Produce exact, bounded, reproducible evidence"

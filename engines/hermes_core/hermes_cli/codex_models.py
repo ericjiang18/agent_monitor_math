@@ -12,6 +12,10 @@ import os
 logger = logging.getLogger(__name__)
 
 DEFAULT_CODEX_MODELS: List[str] = [
+    # Astra may be present in Codex's bundled catalog with visibility=hide
+    # even when direct model invocation is enabled (openai/codex#42853).
+    # Keep it in the fallback so Hermes' /model picker can select it.
+    "gpt-6-astra",
     # GPT-5.6 series (Sol/Terra/Luna + -pro high-effort modes) — GA 2026-07-09
     # (previewed 2026-06-26).
     "gpt-5.6-sol",
@@ -52,6 +56,10 @@ DEFAULT_CODEX_MODELS: List[str] = [
 ]
 
 _FORWARD_COMPAT_TEMPLATE_MODELS: List[tuple[str, tuple[str, ...]]] = [
+    # Codex 0.153+ can invoke Astra directly even when account discovery marks
+    # its catalog entry hidden. A visible 5.6 family entry is enough to expose
+    # the explicit Astra selection while the upstream picker bug is unresolved.
+    ("gpt-6-astra", ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")),
     ("gpt-5.6-sol", ("gpt-5.5", "gpt-5.4")),
     ("gpt-5.6-sol-pro", ("gpt-5.5", "gpt-5.4")),
     ("gpt-5.6-terra", ("gpt-5.5", "gpt-5.4")),

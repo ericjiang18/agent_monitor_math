@@ -1,0 +1,2091 @@
+{
+  "title": "The Langlands research atlas",
+  "description": "An editorial guide to concepts and proposed formalization tasks. Arrows suggest a learning and research order, not a proof dependency claim.",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "fields",
+      "concept_id": "fields",
+      "title": "Number fields",
+      "formula": "K / ℚ",
+      "area": "Arithmetic",
+      "column": 0,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Finite extensions of the rational numbers provide the arithmetic setting. Start with their integers, prime ideals, and completions.",
+      "source": {
+        "label": "mathlib · Number fields and rings of integers",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/NumberField/Basic.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Number fields and rings of integers",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/NumberField/Basic.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "fields-formal",
+      "concept_id": "fields",
+      "title": "Number fields",
+      "formula": "K / ℚ",
+      "area": "Arithmetic",
+      "column": 0,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Specify number fields and their rings of integers; isolate the ideal-theoretic lemmas needed by later statements.",
+      "source": {
+        "label": "mathlib · Number fields and rings of integers",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/NumberField/Basic.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Number fields and rings of integers",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/NumberField/Basic.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "local-fields",
+      "concept_id": "local-fields",
+      "title": "Local fields",
+      "formula": "ℚₚ · ℝ · ℂ",
+      "area": "Arithmetic",
+      "column": 1,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Completions let us study arithmetic one place at a time. The local viewpoint separates ramification and analytic behavior.",
+      "source": {
+        "label": "mathlib · Non-archimedean local fields",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/LocalField/Basic.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Non-archimedean local fields",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/LocalField/Basic.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "local-fields-formal",
+      "concept_id": "local-fields",
+      "title": "Local fields",
+      "formula": "ℚₚ · ℝ · ℂ",
+      "area": "Arithmetic",
+      "column": 1,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Record the completion, valuation, and residue-field hypotheses explicitly. Prove the required continuity lemmas.",
+      "source": {
+        "label": "mathlib · Non-archimedean local fields",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/LocalField/Basic.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Non-archimedean local fields",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/LocalField/Basic.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "adeles",
+      "concept_id": "adeles",
+      "title": "Adeles & ideles",
+      "formula": "𝔸ₖ · 𝔸ₖ×",
+      "area": "Arithmetic",
+      "column": 2,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Restricted products assemble the local pictures into one global object. The idele class group is a natural home for abelian reciprocity.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "adeles-formal",
+      "concept_id": "adeles",
+      "title": "Adeles & ideles",
+      "formula": "𝔸ₖ · 𝔸ₖ×",
+      "area": "Arithmetic",
+      "column": 2,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Choose restricted-product conventions and establish the topological group interface before stating global maps.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "class-field",
+      "concept_id": "class-field",
+      "title": "Class field theory",
+      "formula": "Gal(Kᵃᵇ/K)",
+      "area": "Arithmetic",
+      "column": 3,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Abelian extensions and arithmetic class groups are linked by reciprocity. This is a guiding case for more general correspondences.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "class-field-formal",
+      "concept_id": "class-field",
+      "title": "Class field theory",
+      "formula": "Gal(Kᵃᵇ/K)",
+      "area": "Arithmetic",
+      "column": 3,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "State a precise reciprocity map with its topology and normalization. Separate local and global target statements.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "galois-reps",
+      "concept_id": "galois-reps",
+      "title": "Galois representations",
+      "formula": "ρ : Gₖ → GLₙ",
+      "area": "Arithmetic",
+      "column": 4,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Linear representations encode Galois symmetry. Their local restrictions carry information that can be compared with automorphic data.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "galois-reps-formal",
+      "concept_id": "galois-reps",
+      "title": "Galois representations",
+      "formula": "ρ : Gₖ → GLₙ",
+      "area": "Arithmetic",
+      "column": 4,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Fix coefficient fields, continuity, ramification, and equivalence of representations as explicit data.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "l-functions",
+      "concept_id": "l-functions",
+      "title": "L-functions",
+      "formula": "L(s, ρ) ↔ L(s, π)",
+      "area": "Arithmetic",
+      "column": 5,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Euler factors provide a common language for arithmetic and automorphic objects. Matching factors is one way to test a proposed correspondence.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "l-functions-formal",
+      "concept_id": "l-functions",
+      "title": "L-functions",
+      "formula": "L(s, ρ) ↔ L(s, π)",
+      "area": "Arithmetic",
+      "column": 5,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Define unramified Euler factors first and make all exceptional places explicit. Keep analytic continuation a separate obligation.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "reciprocity",
+      "concept_id": "reciprocity",
+      "title": "Langlands reciprocity",
+      "formula": "Galois ↔ automorphic",
+      "area": "Arithmetic",
+      "column": 6,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Seek precise correspondences between suitable Galois and automorphic data. The hypotheses depend on the field and the objects involved.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "reciprocity-formal",
+      "concept_id": "reciprocity",
+      "title": "Langlands reciprocity",
+      "formula": "Galois ↔ automorphic",
+      "area": "Arithmetic",
+      "column": 6,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Choose a sharply bounded case and state the matching conditions, including normalization of local factors.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "bsd",
+      "concept_id": "bsd",
+      "title": "Birch–Swinnerton-Dyer",
+      "formula": "rank E(K) = ord L(E,s)",
+      "area": "Arithmetic",
+      "column": 7,
+      "row": 0,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "The conjecture relates the rank of rational points on an elliptic curve to the order of vanishing of its L-function. It remains open in general.",
+      "source": {
+        "label": "Clay Mathematics Institute · BSD conjecture",
+        "url": "https://www.claymath.org/millennium/birch-and-swinnerton-dyer-conjecture/"
+      },
+      "reference_source": {
+        "label": "Clay Mathematics Institute · BSD conjecture",
+        "url": "https://www.claymath.org/millennium/birch-and-swinnerton-dyer-conjecture/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "bsd-formal",
+      "concept_id": "bsd",
+      "title": "Birch–Swinnerton-Dyer",
+      "formula": "rank E(K) = ord L(E,s)",
+      "area": "Arithmetic",
+      "column": 7,
+      "row": 0,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Specify the base field and L-function, then separate the rank equality from the stronger leading-coefficient formula.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Clay Mathematics Institute · BSD conjecture",
+        "url": "https://www.claymath.org/millennium/birch-and-swinnerton-dyer-conjecture/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "groups",
+      "concept_id": "groups",
+      "title": "Reductive groups",
+      "formula": "G · T · B",
+      "area": "Representation theory",
+      "column": 0,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Reductive groups supply the symmetry objects of the program. Tori, roots, and parabolic subgroups organize their structure.",
+      "source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "groups-formal",
+      "concept_id": "groups",
+      "title": "Reductive groups",
+      "formula": "G · T · B",
+      "area": "Representation theory",
+      "column": 0,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Agree on algebraic-group and root-datum interfaces, with each finiteness and field hypothesis stated.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "representations",
+      "concept_id": "representations",
+      "title": "Representation theory",
+      "formula": "G → GL(V)",
+      "area": "Representation theory",
+      "column": 1,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Representations turn symmetry into linear algebra. Local harmonic analysis asks how representations decompose and interact.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "representations-formal",
+      "concept_id": "representations",
+      "title": "Representation theory",
+      "formula": "G → GL(V)",
+      "area": "Representation theory",
+      "column": 1,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Distinguish algebraic, smooth, and unitary representations. Build morphisms and equivalence without conflating the categories.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "dual-group",
+      "concept_id": "dual-group",
+      "title": "Dual groups & L-groups",
+      "formula": "ᴸG",
+      "area": "Representation theory",
+      "column": 2,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Dual root data and Galois actions lead to L-groups. They organize parameters and the expected transfers between groups.",
+      "source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "dual-group-formal",
+      "concept_id": "dual-group",
+      "title": "Dual groups & L-groups",
+      "formula": "ᴸG",
+      "area": "Representation theory",
+      "column": 2,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Construct the dual root datum and state the required Galois action before defining the L-group.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "hecke",
+      "concept_id": "hecke",
+      "title": "Hecke operators",
+      "formula": "Tₚ · H(G,K)",
+      "area": "Representation theory",
+      "column": 3,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Hecke operators expose arithmetic structure through eigenvalues. Their unramified theory connects representations to local parameters.",
+      "source": {
+        "label": "mathlib · Hecke rings and double cosets",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/HeckeRing/Defs.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Hecke rings and double cosets",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/HeckeRing/Defs.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "hecke-formal",
+      "concept_id": "hecke",
+      "title": "Hecke operators",
+      "formula": "Tₚ · H(G,K)",
+      "area": "Representation theory",
+      "column": 3,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Define the double-coset action and verify well-definedness and composition for the chosen space.",
+      "source": {
+        "label": "mathlib · Hecke rings and double cosets",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/HeckeRing/Defs.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Hecke rings and double cosets",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/HeckeRing/Defs.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "satake",
+      "concept_id": "satake",
+      "title": "Satake correspondence",
+      "formula": "H(G,K) ↔ ᴸG",
+      "area": "Representation theory",
+      "column": 4,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "The unramified Satake picture relates a Hecke algebra to data of a dual group. It is an entry point to local parameters.",
+      "source": {
+        "label": "WARTHOG lectures · The Satake isomorphism",
+        "url": "https://pages.uoregon.edu/belias/WARTHOG/CohVsCon/LectureNotes/Lecture2.pdf"
+      },
+      "reference_source": {
+        "label": "WARTHOG lectures · The Satake isomorphism",
+        "url": "https://pages.uoregon.edu/belias/WARTHOG/CohVsCon/LectureNotes/Lecture2.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "satake-formal",
+      "concept_id": "satake",
+      "title": "Satake correspondence",
+      "formula": "H(G,K) ↔ ᴸG",
+      "area": "Representation theory",
+      "column": 4,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Fix the group, compact subgroup, coefficient ring, and normalization before specifying an isomorphism.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "WARTHOG lectures · The Satake isomorphism",
+        "url": "https://pages.uoregon.edu/belias/WARTHOG/CohVsCon/LectureNotes/Lecture2.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "local-langlands",
+      "concept_id": "local-langlands",
+      "title": "Local Langlands",
+      "formula": "πᵥ ↔ φᵥ",
+      "area": "Representation theory",
+      "column": 5,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Local correspondences compare representations of a group over a local field with suitable parameters. Cases and normalizations matter.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "local-langlands-formal",
+      "concept_id": "local-langlands",
+      "title": "Local Langlands",
+      "formula": "πᵥ ↔ φᵥ",
+      "area": "Representation theory",
+      "column": 5,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Select one local correspondence and enumerate its compatibility conditions; treat existence and uniqueness separately.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "functoriality",
+      "concept_id": "functoriality",
+      "title": "Functoriality",
+      "formula": "ᴸG → ᴸH",
+      "area": "Representation theory",
+      "column": 6,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Maps of L-groups predict transfers of automorphic representations. This is a central organizing principle of the program.",
+      "source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "functoriality-formal",
+      "concept_id": "functoriality",
+      "title": "Functoriality",
+      "formula": "ᴸG → ᴸH",
+      "area": "Representation theory",
+      "column": 6,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Specify one L-group map and a transfer statement with matching local parameters at the relevant places.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "beyond-endoscopy",
+      "concept_id": "beyond-endoscopy",
+      "title": "Beyond endoscopy",
+      "formula": "Spectral detection",
+      "area": "Representation theory",
+      "column": 7,
+      "row": 1,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "A research direction seeks to detect functorial transfers through spectral information. Analytic and structural obstacles remain.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "beyond-endoscopy-formal",
+      "concept_id": "beyond-endoscopy",
+      "title": "Beyond endoscopy",
+      "formula": "Spectral detection",
+      "area": "Representation theory",
+      "column": 7,
+      "row": 1,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Extract one finite or bounded auxiliary statement; list all analytic estimates assumed by the proposed argument.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "analysis",
+      "concept_id": "analysis",
+      "title": "Harmonic analysis",
+      "formula": "L²(G)",
+      "area": "Analysis",
+      "column": 0,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Integration and spectral decomposition make symmetry analyzable. Measures, topologies, and convergence are essential parts of each claim.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "analysis-formal",
+      "concept_id": "analysis",
+      "title": "Harmonic analysis",
+      "formula": "L²(G)",
+      "area": "Analysis",
+      "column": 0,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Establish measure normalization and the function spaces required by the intended integral identities.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "modular-forms",
+      "concept_id": "modular-forms",
+      "title": "Modular forms",
+      "formula": "f(γz) = (cz+d)ᵏf(z)",
+      "area": "Analysis",
+      "column": 1,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Holomorphic functions with modular transformation laws provide a concrete laboratory for automorphic ideas.",
+      "source": {
+        "label": "mathlib · Modular forms",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/ModularForms/Basic.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Modular forms",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/ModularForms/Basic.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "modular-forms-formal",
+      "concept_id": "modular-forms",
+      "title": "Modular forms",
+      "formula": "f(γz) = (cz+d)ᵏf(z)",
+      "area": "Analysis",
+      "column": 1,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Reuse available modular-form definitions where applicable and make cusp and growth conditions explicit.",
+      "source": {
+        "label": "mathlib · Modular forms",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/ModularForms/Basic.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Modular forms",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/ModularForms/Basic.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "automorphic-forms",
+      "concept_id": "automorphic-forms",
+      "title": "Automorphic forms",
+      "formula": "G(K) ∖ G(𝔸ₖ)",
+      "area": "Analysis",
+      "column": 2,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Automorphic forms extend the modular viewpoint to adelic quotients. Their transformation and growth conditions encode global structure.",
+      "source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "automorphic-forms-formal",
+      "concept_id": "automorphic-forms",
+      "title": "Automorphic forms",
+      "formula": "G(K) ∖ G(𝔸ₖ)",
+      "area": "Analysis",
+      "column": 2,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Specify the quotient, smoothness, central character, and growth assumptions of the chosen class of forms.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "automorphic",
+      "concept_id": "automorphic",
+      "title": "Automorphic representations",
+      "formula": "π = ⊗′πᵥ",
+      "area": "Analysis",
+      "column": 3,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "An automorphic representation packages global harmonic data together with local components.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "automorphic-formal",
+      "concept_id": "automorphic",
+      "title": "Automorphic representations",
+      "formula": "π = ⊗′πᵥ",
+      "area": "Analysis",
+      "column": 3,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "State the ambient representation and the precise meaning of its local factors and restricted tensor product.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "trace-formula",
+      "concept_id": "trace-formula",
+      "title": "Trace formula",
+      "formula": "Geometric = spectral",
+      "area": "Analysis",
+      "column": 4,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Trace formulas relate geometric orbital data and spectral representation data. The precise identity depends on the chosen setting.",
+      "source": {
+        "label": "James Arthur · An Introduction to the Trace Formula",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=13"
+      },
+      "reference_source": {
+        "label": "James Arthur · An Introduction to the Trace Formula",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=13"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "trace-formula-formal",
+      "concept_id": "trace-formula",
+      "title": "Trace formula",
+      "formula": "Geometric = spectral",
+      "area": "Analysis",
+      "column": 4,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Begin with a controlled trace identity; expose convergence and truncation obligations before generalization.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "James Arthur · An Introduction to the Trace Formula",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=13"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "endoscopy",
+      "concept_id": "endoscopy",
+      "title": "Endoscopy",
+      "formula": "Transfer of orbital data",
+      "area": "Analysis",
+      "column": 5,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Endoscopic comparison isolates contributions that are difficult to separate by direct spectral analysis.",
+      "source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "endoscopy-formal",
+      "concept_id": "endoscopy",
+      "title": "Endoscopy",
+      "formula": "Transfer of orbital data",
+      "area": "Analysis",
+      "column": 5,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Record endoscopic data and transfer factors with fixed conventions; split matching from global comparison.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "IAS · The Langlands program",
+        "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "fundamental-lemma",
+      "concept_id": "fundamental-lemma",
+      "title": "Fundamental lemma",
+      "formula": "Orbital integral identities",
+      "area": "Analysis",
+      "column": 6,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Ngô’s work established the Lie-algebra fundamental lemma using geometric methods. Here it is a reference theorem, not a checked artifact.",
+      "source": {
+        "label": "Ngô · The fundamental lemma for Lie algebras",
+        "url": "https://arxiv.org/abs/0801.0446"
+      },
+      "reference_source": {
+        "label": "Ngô · The fundamental lemma for Lie algebras",
+        "url": "https://arxiv.org/abs/0801.0446"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "fundamental-lemma-formal",
+      "concept_id": "fundamental-lemma",
+      "title": "Fundamental lemma",
+      "formula": "Orbital integral identities",
+      "area": "Analysis",
+      "column": 6,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Select an exact theorem statement from the reference and inventory the required geometry and integration machinery.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Ngô · The fundamental lemma for Lie algebras",
+        "url": "https://arxiv.org/abs/0801.0446"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "stable-trace",
+      "concept_id": "stable-trace",
+      "title": "Stable trace formula",
+      "formula": "Stabilization",
+      "area": "Analysis",
+      "column": 7,
+      "row": 2,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Stabilization reorganizes trace-formula terms to support comparisons between groups.",
+      "source": {
+        "label": "James Arthur · The stable trace formula, §29",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=228"
+      },
+      "reference_source": {
+        "label": "James Arthur · The stable trace formula, §29",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=228"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "stable-trace-formal",
+      "concept_id": "stable-trace",
+      "title": "Stable trace formula",
+      "formula": "Stabilization",
+      "area": "Analysis",
+      "column": 7,
+      "row": 2,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Document which transfer results and normalization conventions a chosen comparison requires.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "James Arthur · The stable trace formula, §29",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=228"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "geometry",
+      "concept_id": "geometry",
+      "title": "Algebraic geometry",
+      "formula": "Spec · schemes",
+      "area": "Geometry",
+      "column": 0,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Schemes and morphisms supply a shared geometric language for families, arithmetic spaces, and cohomology.",
+      "source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "reference_source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "geometry-formal",
+      "concept_id": "geometry",
+      "title": "Algebraic geometry",
+      "formula": "Spec · schemes",
+      "area": "Geometry",
+      "column": 0,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Choose existing scheme interfaces and isolate the geometric properties needed by each later construction.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "elliptic-curves",
+      "concept_id": "elliptic-curves",
+      "title": "Elliptic curves",
+      "formula": "y² = x³ + ax + b",
+      "area": "Geometry",
+      "column": 1,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Elliptic curves bring group structure to arithmetic geometry. Their rational points and reductions connect several branches of the map.",
+      "source": {
+        "label": "mathlib · Weierstrass curves",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/AlgebraicGeometry/EllipticCurve/Weierstrass.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Weierstrass curves",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/AlgebraicGeometry/EllipticCurve/Weierstrass.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "elliptic-curves-formal",
+      "concept_id": "elliptic-curves",
+      "title": "Elliptic curves",
+      "formula": "y² = x³ + ax + b",
+      "area": "Geometry",
+      "column": 1,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Fix a Weierstrass model, nonsingularity, and the base field. Track changes of coordinates and the group law.",
+      "source": {
+        "label": "mathlib · Weierstrass curves",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/AlgebraicGeometry/EllipticCurve/Weierstrass.html"
+      },
+      "reference_source": {
+        "label": "mathlib · Weierstrass curves",
+        "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/AlgebraicGeometry/EllipticCurve/Weierstrass.html"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "etale",
+      "concept_id": "etale",
+      "title": "Étale cohomology",
+      "formula": "Hⁱét(X, ℚℓ)",
+      "area": "Geometry",
+      "column": 2,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Cohomology offers ways to extract arithmetic representations from geometric objects.",
+      "source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "reference_source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "etale-formal",
+      "concept_id": "etale",
+      "title": "Étale cohomology",
+      "formula": "Hⁱét(X, ℚℓ)",
+      "area": "Geometry",
+      "column": 2,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Make the site, coefficient system, and functoriality requirements explicit before using cohomological constructions.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "shimura",
+      "concept_id": "shimura",
+      "title": "Shimura varieties",
+      "formula": "Arithmetic quotients",
+      "area": "Geometry",
+      "column": 3,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Shimura varieties connect arithmetic geometry with automorphic phenomena and representation theory.",
+      "source": {
+        "label": "J. S. Milne · Introduction to Shimura Varieties",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=277"
+      },
+      "reference_source": {
+        "label": "J. S. Milne · Introduction to Shimura Varieties",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=277"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "shimura-formal",
+      "concept_id": "shimura",
+      "title": "Shimura varieties",
+      "formula": "Arithmetic quotients",
+      "area": "Geometry",
+      "column": 3,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Choose a specific Shimura datum and level; list the canonical-model and cohomological inputs separately.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "J. S. Milne · Introduction to Shimura Varieties",
+        "url": "https://www.claymath.org/library/proceedings/cmip04.pdf#page=277"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "hitchin",
+      "concept_id": "hitchin",
+      "title": "Hitchin fibration",
+      "formula": "Higgs bundles → base",
+      "area": "Geometry",
+      "column": 4,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "The geometry of the Hitchin fibration is a key ingredient in Ngô’s approach to the fundamental lemma.",
+      "source": {
+        "label": "Ngô · The fundamental lemma for Lie algebras",
+        "url": "https://arxiv.org/abs/0801.0446"
+      },
+      "reference_source": {
+        "label": "Ngô · The fundamental lemma for Lie algebras",
+        "url": "https://arxiv.org/abs/0801.0446"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "hitchin-formal",
+      "concept_id": "hitchin",
+      "title": "Hitchin fibration",
+      "formula": "Higgs bundles → base",
+      "area": "Geometry",
+      "column": 4,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Define the selected moduli problem and isolate a tractable fiber or support statement.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Ngô · The fundamental lemma for Lie algebras",
+        "url": "https://arxiv.org/abs/0801.0446"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "modularity",
+      "concept_id": "modularity",
+      "title": "Modularity",
+      "formula": "Elliptic curves ↔ forms",
+      "area": "Geometry",
+      "column": 5,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Wiles’s modularity work is a landmark bridge between elliptic curves, modular forms, and Galois representations.",
+      "source": {
+        "label": "Wiles · Modular elliptic curves and Fermat’s Last Theorem",
+        "url": "https://annals.math.princeton.edu/1995/141-3/p01"
+      },
+      "reference_source": {
+        "label": "Wiles · Modular elliptic curves and Fermat’s Last Theorem",
+        "url": "https://annals.math.princeton.edu/1995/141-3/p01"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "modularity-formal",
+      "concept_id": "modularity",
+      "title": "Modularity",
+      "formula": "Elliptic curves ↔ forms",
+      "area": "Geometry",
+      "column": 5,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Distinguish the precise modularity theorem in the reference from broader generalizations and any unverified formal target.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Wiles · Modular elliptic curves and Fermat’s Last Theorem",
+        "url": "https://annals.math.princeton.edu/1995/141-3/p01"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "geometric-langlands",
+      "concept_id": "geometric-langlands",
+      "title": "Geometric Langlands",
+      "formula": "Sheaves ↔ local systems",
+      "area": "Geometry",
+      "column": 6,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Geometric versions of the correspondence replace arithmetic objects with sheaf-theoretic and geometric data.",
+      "source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "geometric-langlands-formal",
+      "concept_id": "geometric-langlands",
+      "title": "Geometric Langlands",
+      "formula": "Sheaves ↔ local systems",
+      "area": "Geometry",
+      "column": 6,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Select a specific version, curve, group, and sheaf theory. Record the scope before describing a conjecture or theorem.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "Langlands · Functoriality and Reciprocity",
+        "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "motives",
+      "concept_id": "motives",
+      "title": "Motivic connections",
+      "formula": "Realizations & symmetries",
+      "area": "Geometry",
+      "column": 7,
+      "row": 3,
+      "layer": "informal",
+      "status": "Research guide",
+      "summary": "Motivic viewpoints ask how different cohomological and arithmetic realizations reflect common structure.",
+      "source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "reference_source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    },
+    {
+      "id": "motives-formal",
+      "concept_id": "motives",
+      "title": "Motivic connections",
+      "formula": "Realizations & symmetries",
+      "area": "Geometry",
+      "column": 7,
+      "row": 3,
+      "layer": "formal",
+      "status": "Formalization target",
+      "summary": "Make the category and realization functors explicit. Keep conjectural properties visible as assumptions.",
+      "source": {
+        "label": "Lean community · Mathematics in mathlib",
+        "url": "https://leanprover-community.github.io/mathlib-overview"
+      },
+      "reference_source": {
+        "label": "The Stacks Project",
+        "url": "https://stacks.math.columbia.edu/"
+      },
+      "origin": "Editorial seed",
+      "memory_eligible": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "fields",
+      "target": "fields-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "fields",
+      "target": "local-fields",
+      "kind": "research-path"
+    },
+    {
+      "source": "fields-formal",
+      "target": "local-fields-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "local-fields",
+      "target": "local-fields-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "local-fields",
+      "target": "adeles",
+      "kind": "research-path"
+    },
+    {
+      "source": "local-fields-formal",
+      "target": "adeles-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "adeles",
+      "target": "adeles-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "adeles",
+      "target": "class-field",
+      "kind": "research-path"
+    },
+    {
+      "source": "adeles-formal",
+      "target": "class-field-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "class-field",
+      "target": "class-field-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "class-field",
+      "target": "galois-reps",
+      "kind": "research-path"
+    },
+    {
+      "source": "class-field-formal",
+      "target": "galois-reps-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "galois-reps",
+      "target": "galois-reps-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "galois-reps",
+      "target": "l-functions",
+      "kind": "research-path"
+    },
+    {
+      "source": "hecke",
+      "target": "l-functions",
+      "kind": "research-path"
+    },
+    {
+      "source": "galois-reps-formal",
+      "target": "l-functions-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "hecke-formal",
+      "target": "l-functions-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "l-functions",
+      "target": "l-functions-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "l-functions",
+      "target": "reciprocity",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic",
+      "target": "reciprocity",
+      "kind": "research-path"
+    },
+    {
+      "source": "l-functions-formal",
+      "target": "reciprocity-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic-formal",
+      "target": "reciprocity-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "reciprocity",
+      "target": "reciprocity-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "reciprocity",
+      "target": "bsd",
+      "kind": "research-path"
+    },
+    {
+      "source": "elliptic-curves",
+      "target": "bsd",
+      "kind": "research-path"
+    },
+    {
+      "source": "reciprocity-formal",
+      "target": "bsd-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "elliptic-curves-formal",
+      "target": "bsd-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "bsd",
+      "target": "bsd-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "groups",
+      "target": "groups-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "groups",
+      "target": "representations",
+      "kind": "research-path"
+    },
+    {
+      "source": "groups-formal",
+      "target": "representations-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "representations",
+      "target": "representations-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "representations",
+      "target": "dual-group",
+      "kind": "research-path"
+    },
+    {
+      "source": "representations-formal",
+      "target": "dual-group-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "dual-group",
+      "target": "dual-group-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "dual-group",
+      "target": "hecke",
+      "kind": "research-path"
+    },
+    {
+      "source": "modular-forms",
+      "target": "hecke",
+      "kind": "research-path"
+    },
+    {
+      "source": "dual-group-formal",
+      "target": "hecke-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "modular-forms-formal",
+      "target": "hecke-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "hecke",
+      "target": "hecke-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "hecke",
+      "target": "satake",
+      "kind": "research-path"
+    },
+    {
+      "source": "hecke-formal",
+      "target": "satake-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "satake",
+      "target": "satake-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "satake",
+      "target": "local-langlands",
+      "kind": "research-path"
+    },
+    {
+      "source": "galois-reps",
+      "target": "local-langlands",
+      "kind": "research-path"
+    },
+    {
+      "source": "satake-formal",
+      "target": "local-langlands-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "galois-reps-formal",
+      "target": "local-langlands-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "local-langlands",
+      "target": "local-langlands-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "local-langlands",
+      "target": "functoriality",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic",
+      "target": "functoriality",
+      "kind": "research-path"
+    },
+    {
+      "source": "local-langlands-formal",
+      "target": "functoriality-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic-formal",
+      "target": "functoriality-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "functoriality",
+      "target": "functoriality-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "functoriality",
+      "target": "beyond-endoscopy",
+      "kind": "research-path"
+    },
+    {
+      "source": "trace-formula",
+      "target": "beyond-endoscopy",
+      "kind": "research-path"
+    },
+    {
+      "source": "functoriality-formal",
+      "target": "beyond-endoscopy-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "trace-formula-formal",
+      "target": "beyond-endoscopy-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "beyond-endoscopy",
+      "target": "beyond-endoscopy-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "analysis",
+      "target": "analysis-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "analysis",
+      "target": "modular-forms",
+      "kind": "research-path"
+    },
+    {
+      "source": "analysis-formal",
+      "target": "modular-forms-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "modular-forms",
+      "target": "modular-forms-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "modular-forms",
+      "target": "automorphic-forms",
+      "kind": "research-path"
+    },
+    {
+      "source": "adeles",
+      "target": "automorphic-forms",
+      "kind": "research-path"
+    },
+    {
+      "source": "modular-forms-formal",
+      "target": "automorphic-forms-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "adeles-formal",
+      "target": "automorphic-forms-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic-forms",
+      "target": "automorphic-forms-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "automorphic-forms",
+      "target": "automorphic",
+      "kind": "research-path"
+    },
+    {
+      "source": "representations",
+      "target": "automorphic",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic-forms-formal",
+      "target": "automorphic-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "representations-formal",
+      "target": "automorphic-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic",
+      "target": "automorphic-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "automorphic",
+      "target": "trace-formula",
+      "kind": "research-path"
+    },
+    {
+      "source": "hecke",
+      "target": "trace-formula",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic-formal",
+      "target": "trace-formula-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "hecke-formal",
+      "target": "trace-formula-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "trace-formula",
+      "target": "trace-formula-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "trace-formula",
+      "target": "endoscopy",
+      "kind": "research-path"
+    },
+    {
+      "source": "dual-group",
+      "target": "endoscopy",
+      "kind": "research-path"
+    },
+    {
+      "source": "trace-formula-formal",
+      "target": "endoscopy-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "dual-group-formal",
+      "target": "endoscopy-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "endoscopy",
+      "target": "endoscopy-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "endoscopy",
+      "target": "fundamental-lemma",
+      "kind": "research-path"
+    },
+    {
+      "source": "hitchin",
+      "target": "fundamental-lemma",
+      "kind": "research-path"
+    },
+    {
+      "source": "endoscopy-formal",
+      "target": "fundamental-lemma-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "hitchin-formal",
+      "target": "fundamental-lemma-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "fundamental-lemma",
+      "target": "fundamental-lemma-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "fundamental-lemma",
+      "target": "stable-trace",
+      "kind": "research-path"
+    },
+    {
+      "source": "functoriality",
+      "target": "stable-trace",
+      "kind": "research-path"
+    },
+    {
+      "source": "fundamental-lemma-formal",
+      "target": "stable-trace-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "functoriality-formal",
+      "target": "stable-trace-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "stable-trace",
+      "target": "stable-trace-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "geometry",
+      "target": "geometry-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "geometry",
+      "target": "elliptic-curves",
+      "kind": "research-path"
+    },
+    {
+      "source": "fields",
+      "target": "elliptic-curves",
+      "kind": "research-path"
+    },
+    {
+      "source": "geometry-formal",
+      "target": "elliptic-curves-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "fields-formal",
+      "target": "elliptic-curves-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "elliptic-curves",
+      "target": "elliptic-curves-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "elliptic-curves",
+      "target": "etale",
+      "kind": "research-path"
+    },
+    {
+      "source": "elliptic-curves-formal",
+      "target": "etale-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "etale",
+      "target": "etale-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "etale",
+      "target": "shimura",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic-forms",
+      "target": "shimura",
+      "kind": "research-path"
+    },
+    {
+      "source": "etale-formal",
+      "target": "shimura-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "automorphic-forms-formal",
+      "target": "shimura-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "shimura",
+      "target": "shimura-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "etale",
+      "target": "hitchin",
+      "kind": "research-path"
+    },
+    {
+      "source": "groups",
+      "target": "hitchin",
+      "kind": "research-path"
+    },
+    {
+      "source": "etale-formal",
+      "target": "hitchin-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "groups-formal",
+      "target": "hitchin-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "hitchin",
+      "target": "hitchin-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "shimura",
+      "target": "modularity",
+      "kind": "research-path"
+    },
+    {
+      "source": "galois-reps",
+      "target": "modularity",
+      "kind": "research-path"
+    },
+    {
+      "source": "modular-forms",
+      "target": "modularity",
+      "kind": "research-path"
+    },
+    {
+      "source": "shimura-formal",
+      "target": "modularity-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "galois-reps-formal",
+      "target": "modularity-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "modular-forms-formal",
+      "target": "modularity-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "modularity",
+      "target": "modularity-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "hitchin",
+      "target": "geometric-langlands",
+      "kind": "research-path"
+    },
+    {
+      "source": "dual-group",
+      "target": "geometric-langlands",
+      "kind": "research-path"
+    },
+    {
+      "source": "hitchin-formal",
+      "target": "geometric-langlands-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "dual-group-formal",
+      "target": "geometric-langlands-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "geometric-langlands",
+      "target": "geometric-langlands-formal",
+      "kind": "formalization"
+    },
+    {
+      "source": "geometric-langlands",
+      "target": "motives",
+      "kind": "research-path"
+    },
+    {
+      "source": "reciprocity",
+      "target": "motives",
+      "kind": "research-path"
+    },
+    {
+      "source": "geometric-langlands-formal",
+      "target": "motives-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "reciprocity-formal",
+      "target": "motives-formal",
+      "kind": "research-path"
+    },
+    {
+      "source": "motives",
+      "target": "motives-formal",
+      "kind": "formalization"
+    }
+  ],
+  "sources": {
+    "langlands": {
+      "label": "Langlands · Functoriality and Reciprocity",
+      "url": "https://publications.ias.edu/sites/default/files/functoriality.pdf"
+    },
+    "ias": {
+      "label": "IAS · The Langlands program",
+      "url": "https://www.ias.edu/ideas/modern-mathematics-and-langlands-program"
+    },
+    "mathlib": {
+      "label": "Lean community · Mathematics in mathlib",
+      "url": "https://leanprover-community.github.io/mathlib-overview"
+    },
+    "modular": {
+      "label": "mathlib · Modular forms",
+      "url": "https://leanprover-community.github.io/mathlib4_docs/Mathlib/NumberTheory/ModularForms/Basic.html"
+    },
+    "stacks": {
+      "label": "The Stacks Project",
+      "url": "https://stacks.math.columbia.edu/"
+    },
+    "wiles": {
+      "label": "Wiles · Modular elliptic curves and Fermat’s Last Theorem",
+      "url": "https://annals.math.princeton.edu/1995/141-3/p01"
+    },
+    "ngo": {
+      "label": "Ngô · The fundamental lemma for Lie algebras",
+      "url": "https://arxiv.org/abs/0801.0446"
+    },
+    "bsd": {
+      "label": "Clay Mathematics Institute · BSD conjecture",
+      "url": "https://www.claymath.org/millennium/birch-and-swinnerton-dyer-conjecture/"
+    }
+  }
+}

@@ -1578,6 +1578,11 @@ def _llm_environment(
     return env
 
 
+# Authorship evidence travels on the model string returned by the provider call
+# (see ``proof_graph.ObservedModel``).
+from agent_monitor.proof_graph import ObservedModel as _ObservedModel
+
+
 def _chat(
     env: dict[str, str],
     model: str | None,
@@ -2234,9 +2239,31 @@ def _persist(
             ],
             "checker_profile": kernel_receipt["checker_profile"],
         })
+    # _write_and_run emits this canonical text to Proof.lean. Bind the cached
+    # verification and authorship to the same bytes, including the final LF.
+    lean_src = lean_src.rstrip() + "\n"
+    # Keep authorship tied to the exact generated source. Checking or auditing a
+    # hand-edited file must not inherit the previous model's authorship, and a
+    # caller-selected model name is never evidence of what actually ran.
+    source_digest = hashlib.sha256(lean_src.encode()).hexdigest()
+    provenance = prev.get("source_provenance") or {}
+    if action in {"verify", "revise"}:
+        observed = getattr(model, "observed_model", "")
+        provenance = (
+            {
+                "model": observed,
+                "sha256": source_digest,
+                "evidence": "provider_response",
+            }
+            if observed
+            else {}
+        )
+    elif provenance.get("sha256") != source_digest or action == "harness":
+        provenance = {}
     result = {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "model": model or prev.get("model"),
+        "source_provenance": provenance,
         "source": source or prev.get("source") or "",
         "title": title or prev.get("title") or "",
         "notes": _sanitize_formalization_notes(notes),

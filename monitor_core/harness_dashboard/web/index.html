@@ -343,7 +343,50 @@ $('theme-btn')?.addEventListener('click', () => {
 initTheme();
 
 const fmtN = n => n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n||0);
-const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const SAFE_MARKDOWN_TAGS = new Set([
+  'A','BLOCKQUOTE','BR','CODE','DEL','EM','H1','H2','H3','H4','H5','H6','HR',
+  'LI','OL','P','PRE','STRONG','TABLE','TBODY','TD','TFOOT','TH','THEAD','TR','UL'
+]);
+function safeMarkdownHref(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw, window.location.href);
+    return ['http:', 'https:', 'mailto:'].includes(parsed.protocol) ? parsed.href : null;
+  } catch (e) { return null; }
+}
+// Proof and trace text comes from models and tools, so restrict the rendered
+// result to a markdown-shaped element/attribute subset before inserting it.
+function sanitizeRenderedHtml(value) {
+  const template = document.createElement('template');
+  template.innerHTML = String(value || '');
+  function scrub(el) {
+    [...el.children].forEach(scrub);
+    if (!SAFE_MARKDOWN_TAGS.has(el.tagName)) {
+      el.replaceWith(document.createTextNode(el.textContent || ''));
+      return;
+    }
+    const href = el.tagName === 'A' ? safeMarkdownHref(el.getAttribute('href')) : null;
+    const title = el.tagName === 'A' ? (el.getAttribute('title') || '') : '';
+    const codeClass = el.tagName === 'CODE' ? (el.getAttribute('class') || '') : '';
+    [...el.attributes].forEach(attr => el.removeAttribute(attr.name));
+    if (href) {
+      el.setAttribute('href', href);
+      el.setAttribute('rel', 'noopener noreferrer');
+    }
+    if (title) el.setAttribute('title', title);
+    if (/^language-[A-Za-z0-9_-]+$/.test(codeClass)) el.setAttribute('class', codeClass);
+  }
+  [...template.content.children].forEach(scrub);
+  return template.innerHTML;
+}
+function safeMarkdown(text) {
+  let html;
+  try {
+    html = window.marked ? marked.parse(String(text || ''), {mangle:false, headerIds:false}) : null;
+  } catch (e) { html = null; }
+  return sanitizeRenderedHtml(html || `<pre>${esc(text)}</pre>`);
+}
 
 const State = { runs: [], run: null, formalRun: null, agent: null, tab: 'overview', filterHigh: false, filterWaste: false, proofTab: 'pdf', finalTexCache: {}, currentRunId: null, viewMode: localStorage.getItem('hd-view-mode') || 'map', monitorMode: localStorage.getItem('hd-monitor-mode') || 'agent', showSolutionPath: false };
 const isEmbedded = window.parent !== window;
@@ -690,7 +733,7 @@ function ensureProofSourceLoaded(run) {
   const mdEl = $('proof-md-render');
   if (mdEl) {
     loadFinalTexSource(run.run_id).then(text => {
-      mdEl.innerHTML = window.marked ? marked.parse(text, {mangle:false, headerIds:false}) : `<pre>${esc(text)}</pre>`;
+      mdEl.innerHTML = safeMarkdown(text);
       if (window.renderMathInElement) {
         try { renderMathInElement(mdEl, {delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}], throwOnError:false}); } catch(e) {}
       }

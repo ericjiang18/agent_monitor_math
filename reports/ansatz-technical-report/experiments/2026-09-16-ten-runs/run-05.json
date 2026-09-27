@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-09-16T00:52:22.462034+00:00",
+  "scope": "Loopback HTTP, real ProjectsMixin and SQLite, synthetic identities; no model runs or production traffic.",
+  "environment": {
+    "python": "3.13.15",
+    "sqlite": "3.53.1",
+    "os": "Linux",
+    "architecture": "x86_64",
+    "logical_cpus": 8
+  },
+  "source_sha256": {
+    "agent_monitor/projects.py": "187addf2deca5a0ecf9381f9e5a36bfc7eb34df938165f4f1f9db6ce992dce6a",
+    "scripts/check_collaboration_reliability.py": "fc0a71073e57eb3d0fcc0b034a150cc118fd6d32ff862b6c5d15a9e6aafc9610"
+  },
+  "trials": [
+    {
+      "clients": 8,
+      "rounds": 40,
+      "inserted_characters": 960,
+      "replayed_batches": 112,
+      "requests_measured": 760,
+      "duration_seconds": 4.923,
+      "requests_per_second": 154.37,
+      "edit_latency": {
+        "count": 440,
+        "p50_ms": 21.29,
+        "p95_ms": 119.26,
+        "max_ms": 193.37
+      },
+      "read_latency": {
+        "count": 320,
+        "p50_ms": 3.42,
+        "p95_ms": 11.57,
+        "max_ms": 48.11
+      },
+      "unexpected_errors": 0,
+      "lost_characters": 0,
+      "duplicate_characters": 0,
+      "checks": {
+        "unicode_and_deleted_anchors": true,
+        "retry_idempotence": true,
+        "convergence": true,
+        "invalid_batch_rollback": true,
+        "id_collision_rejected": true,
+        "nonmember_rejected": true,
+        "removed_member_rejected": true,
+        "revoked_invite_rejected": true,
+        "restart_persistence": true,
+        "sqlite_integrity": true
+      }
+    },
+    {
+      "clients": 16,
+      "rounds": 40,
+      "inserted_characters": 1920,
+      "replayed_batches": 224,
+      "requests_measured": 1520,
+      "duration_seconds": 20.577,
+      "requests_per_second": 73.87,
+      "edit_latency": {
+        "count": 880,
+        "p50_ms": 62.51,
+        "p95_ms": 548.19,
+        "max_ms": 954.8
+      },
+      "read_latency": {
+        "count": 640,
+        "p50_ms": 6.02,
+        "p95_ms": 45.08,
+        "max_ms": 236.03
+      },
+      "unexpected_errors": 0,
+      "lost_characters": 0,
+      "duplicate_characters": 0,
+      "checks": {
+        "unicode_and_deleted_anchors": true,
+        "retry_idempotence": true,
+        "convergence": true,
+        "invalid_batch_rollback": true,
+        "id_collision_rejected": true,
+        "nonmember_rejected": true,
+        "removed_member_rejected": true,
+        "revoked_invite_rejected": true,
+        "restart_persistence": true,
+        "sqlite_integrity": true
+      }
+    }
+  ],
+  "passed": true
+}

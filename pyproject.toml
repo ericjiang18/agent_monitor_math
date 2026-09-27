@@ -1,3 +1,4 @@
+# Define the installable Python package, CLI entry point, and dependencies.
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -49,9 +50,11 @@ where = ["."]
 include = ["agent_monitor*", "monitor_core*"]
 
 [tool.setuptools.package-data]
-agent_monitor = ["web/**/*", "starter_skills/**/*"]
+agent_monitor = ["web/**/*", "starter_skills/**/*", "examples/**/*", "data/**/*"]
 monitor_core = ["harness_dashboard/web/**/*"]
 
+# Keep locally archived projects out of automatic test discovery.
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+norecursedirs = [".*", "build", "dist", "CVS", "_darcs", "{arch}", "*.egg", "node_modules", "venv", "deleted"]

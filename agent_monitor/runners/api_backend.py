@@ -84,6 +84,20 @@ def api_chat(
     except ValueError as exc:
         raise APIBackendError("AGENT_MONITOR_API_MAX_TOKENS must be an integer") from exc
 
+    # A bounded run (currently anonymous guest sessions) carries a hard output
+    # ceiling. It only ever lowers the limit above, and it is not negotiable by
+    # the caller's own AGENT_MONITOR_API_MAX_TOKENS.
+    ceiling_raw = str(os.environ.get("AGENT_MONITOR_MAX_OUTPUT_TOKENS") or "").strip()
+    if ceiling_raw:
+        try:
+            ceiling = int(ceiling_raw)
+        except ValueError as exc:
+            raise APIBackendError(
+                "AGENT_MONITOR_MAX_OUTPUT_TOKENS must be an integer"
+            ) from exc
+        if ceiling > 0:
+            max_output = min(max_output, ceiling)
+
     if provider == "openai":
         url = f"{base}/responses"
         headers = {"Authorization": f"Bearer {key}"}

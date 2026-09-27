@@ -1,3 +1,4 @@
+# OpenAI/Codex-facing metadata for the open-problem-triage starter skill.
 interface:
   display_name: "Open Problem Triage"
   short_description: "Classify and scope research-level math targets"

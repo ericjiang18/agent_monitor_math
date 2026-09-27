@@ -389,6 +389,22 @@ def _openai_response_text(body: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+class ObservedModel(str):
+    """The requested routing ID, carrying the provider-reported identity.
+
+    Repairs must keep routing to the model the caller selected, while
+    authorship evidence may only cite what the provider said it actually ran.
+    Subclassing ``str`` keeps every existing caller unaffected.
+    """
+
+    observed_model: str
+
+    def __new__(cls, requested: str, observed: object = None) -> "ObservedModel":
+        value = super().__new__(cls, requested)
+        value.observed_model = observed.strip() if isinstance(observed, str) else ""
+        return value
+
+
 def _call_llm(
     env: dict[str, str],
     model: str | None,
@@ -505,7 +521,7 @@ def _call_llm(
         ) from exc
     if not content.strip():
         raise ValueError(f"{provider.title()} returned an empty response for {chosen}")
-    return chosen, content, provider
+    return ObservedModel(chosen, body.get("model")), content, provider
 
 _AMBIGUOUS_LATEX_ESCAPE = re.compile(
     r'\\u(?![0-9A-Fa-f]{4})'

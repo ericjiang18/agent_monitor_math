@@ -17,6 +17,7 @@ logs/
 
 # Python
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 *.egg-info/
@@ -42,6 +43,8 @@ engines/**/.cache/
 .idea/
 .vscode/
 *.swp
+/console.log
+/server.log
 
 # Hermes / Node leftovers if any
 **/node_modules/
@@ -62,3 +65,27 @@ engines/ucla/solver_history_problem_with_library.jsonl
 # engines/EXTERNAL_CHECKOUTS.md. Their local runtimes are not source artifacts.
 engines/danus/
 engines/deepseek-harness/
+# Lean binary files
+*.olean
+*.ilean
+
+# Locally archived cleanup material and generated documentation cache
+/deleted/
+/docs/.vitepress/cache/
+
+# Private sharing and project state
+/data/run_shares.sqlite3*
+/data/projects.sqlite3*
+
+# Local deploy/debug snapshots and generated graph dump
+/artifacts/
+/graph.json
+/data/deployment_backups/
+/data/research.sqlite3*
+/data/usage.db*
+
+# Separate repository checked out in-tree (kyleyuzheng/math-readability)
+/humanunderstandableexperiments/
+
+# VitePress build snapshots
+/docs/.vitepress/.dist-*/

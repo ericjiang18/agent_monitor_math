@@ -1,4 +1,4 @@
-"""UCLA harness runner stub — invokes engines/ucla entrypoints when configured."""
+"""UCLA harness runner stub — invokes monitor_core/ucla entrypoints when configured."""
 from __future__ import annotations
 
 import os
@@ -6,11 +6,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent_monitor import ENGINES_DIR, RUNS_DIR
+from agent_monitor import MONITOR_CORE_DIR, RUNS_DIR
 from agent_monitor.paths import ensure_data_dirs
 
 
-UCLA_ROOT = ENGINES_DIR / "ucla"
+# The retired UCLA harness sources live under monitor_core/, not engines/.
+UCLA_ROOT = MONITOR_CORE_DIR / "ucla"
 
 
 def run_problem(
@@ -26,7 +27,7 @@ def run_problem(
 ) -> dict[str, Any]:
     """Launch UCLA harness for a problem file.
 
-    Prefers `UCLA_ENTRY` env (script path). Default: engines/ucla/harness_0518_Final.py
+    Prefers `UCLA_ENTRY` env (script path). Default: monitor_core/ucla/harness_0518_Final.py
     if that script accepts CLI args; otherwise returns a not-configured status.
     """
     ensure_data_dirs()

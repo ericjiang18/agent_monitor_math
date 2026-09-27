@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-09-16",
+  "items": [
+    {
+      "id": "arxiv-zgcm-1-2026-09-11",
+      "title": "ZGCM-1 publishes an open training recipe for math and search",
+      "summary": "Researchers introduced a 7B-parameter model aimed at mathematical reasoning and tool-assisted search, alongside weights and training artifacts. The arXiv preprint reports benchmark comparisons based on the authors’ evaluations.",
+      "url": "https://arxiv.org/abs/2609.13356",
+      "source": "arxiv-ai",
+      "category": "research",
+      "published_at": "2026-09-11T17:18:04Z",
+      "status": "Preprint"
+    },
+    {
+      "id": "quanta-four-color-2026-09-10",
+      "title": "A new four-color proof supports faster planar-graph coloring",
+      "summary": "Quanta reports on a 2026 computer-assisted proof that yields near-linear-time four-coloring. The underlying paper was posted in March; September’s article explains the algorithmic advance beyond earlier quadratic-time methods.",
+      "url": "https://www.quantamagazine.org/the-four-color-theorem-gets-a-rare-new-proof-20260910/",
+      "source": "quanta",
+      "category": "mathematics",
+      "published_at": "2026-09-10T14:27:36Z",
+      "status": "Published",
+      "related_links": [
+        {
+          "label": "Original research paper · March 2026",
+          "url": "https://arxiv.org/abs/2603.24880"
+        }
+      ]
+    },
+    {
+      "id": "openai-navier-stokes-2026-09-08",
+      "title": "Navier–Stokes proof announced; Clay evaluation pending",
+      "summary": "OpenAI released a proposed solution with an analytical write-up and Lean formalization. Clay acknowledged an apparent resolution on September 11 and referred to its evaluation process. The announcement concerns the smooth-forced breakdown alternatives.",
+      "url": "https://openai.com/index/navier-stokes-solution",
+      "source": "openai",
+      "category": "mathematics",
+      "published_at": "2026-09-08T10:00:00Z",
+      "status": "Proof announced",
+      "related_links": [
+        {
+          "label": "Clay response · September 11",
+          "url": "https://www.claymath.org/news/navier-stokes-announcement/"
+        }
+      ]
+    },
+    {
+      "id": "openai-research-acceleration-2026-09-06",
+      "title": "OpenAI reports internal measurements of research-agent use",
+      "summary": "OpenAI shared internal measurements of researchers’ agent usage, coding and experiment activity. The report describes rising use and more complex delegated tasks, while noting that compute growth and other bottlenecks limit causal conclusions.",
+      "url": "https://openai.com/index/research-acceleration-view-inside-openai",
+      "source": "openai",
+      "category": "research",
+      "published_at": "2026-09-06T08:00:00Z",
+      "status": "Research result"
+    },
+    {
+      "id": "openai-gpt-6-astra-2026-09-03",
+      "title": "GPT-6 Astra starts its rollout",
+      "summary": "OpenAI introduced GPT-6 Astra for coding, scientific reasoning and computer use. Its announcement reports mathematical results and research benchmarks, with staged availability across ChatGPT and the API.",
+      "url": "https://openai.com/index/gpt-6-astra",
+      "source": "openai",
+      "category": "models",
+      "published_at": "2026-09-03T11:00:00Z",
+      "status": "Model release"
+    },
+    {
+      "id": "deepmind-gemini-3-8-flash-2026-09-02",
+      "title": "Gemini 3.8 Flash adds stronger reasoning and coding",
+      "summary": "Google introduced Gemini 3.8 Flash with reported improvements in reasoning, coding and extended tool use. A separate Flash Cyber version is intended for trusted cybersecurity defenders.",
+      "url": "https://deepmind.google/blog/introducing-gemini-3-8-flash-and-38-flash-cyber/",
+      "source": "deepmind",
+      "category": "models",
+      "published_at": "2026-09-02T16:18:31Z",
+      "status": "Model release"
+    },
+    {
+      "id": "anthropic-fable-mythos-5-1-2026-09-01",
+      "title": "Anthropic introduces Claude Fable 5.1 and Mythos 5.1",
+      "summary": "Anthropic announced two deployments of the same underlying model with different safeguards and access. The company reports improvements in long-running coding and scientific reasoning; Fable is generally available, while Mythos uses a restricted access program.",
+      "url": "https://www.anthropic.com/claude-fable-and-mythos-5-1",
+      "source": "anthropic",
+      "category": "models",
+      "published_at": "2026-09-01T00:00:00Z",
+      "status": "Model release",
+      "date_precision": "day"
+    },
+    {
+      "id": "microsoft-mindtopo-2026-08-12",
+      "title": "MindTopo tests whether AI can preserve topological relationships",
+      "summary": "Microsoft Research introduced a benchmark for reasoning about connectivity, enclosure and related spatial properties. Its tests distinguish recognizing a static diagram from planning changes that preserve topology, where evaluated models showed greater difficulty.",
+      "url": "https://www.microsoft.com/en-us/research/blog/mindtopo-reveals-vlms-spatial-reasoning-abilities/",
+      "source": "microsoft-research",
+      "category": "research",
+      "published_at": "2026-08-12T16:00:00Z",
+      "status": "Research result"
+    },
+    {
+      "id": "openai-ten-mathematics-2026-08-01",
+      "title": "Ten reported advances in mathematics and theoretical computer science",
+      "summary": "OpenAI published ten results it says resolve or advance longstanding problems, with a paper and reasoning walkthroughs. The announcement covers mathematics and theoretical computer science; each result has its own precise statement and supporting argument.",
+      "url": "https://openai.com/index/ten-advances-in-mathematics",
+      "source": "openai",
+      "category": "mathematics",
+      "published_at": "2026-08-01T00:00:00Z",
+      "status": "Research result"
+    },
+    {
+      "id": "clay-fields-medals-2026-07-23",
+      "title": "2026 Fields Medals recognize advances across mathematics",
+      "summary": "Clay congratulated John Pardon, Yu Deng, Hong Wang and Jacob Tsimerman on their Fields Medals. The awards recognize contributions spanning geometry and topology, partial differential equations, harmonic analysis and arithmetic geometry.",
+      "url": "https://www.claymath.org/news/2026-fields-medals/",
+      "source": "clay",
+      "category": "mathematics",
+      "published_at": "2026-07-23T14:10:17Z",
+      "status": "Published"
+    },
+    {
+      "id": "clay-navier-stokes-response-2026-09-11",
+      "title": "Clay responds to the announced Navier–Stokes proof",
+      "summary": "Clay acknowledged the announcement of an apparent resolution of the Navier–Stokes problem and said it would follow its published process for evaluating the achievement and assigning credit. The linked OpenAI announcement states a smooth-forced breakdown result.",
+      "url": "https://www.claymath.org/news/navier-stokes-announcement/",
+      "source": "clay",
+      "category": "mathematics",
+      "published_at": "2026-09-11T07:08:02Z",
+      "status": "Proof announced",
+      "related_links": [
+        {
+          "label": "OpenAI announcement and proof links",
+          "url": "https://openai.com/index/navier-stokes-solution"
+        },
+        {
+          "label": "Clay prize rules",
+          "url": "https://www.claymath.org/wp-content/uploads/2022/03/millennium_prize_rules_0.pdf"
+        }
+      ]
+    },
+    {
+      "id": "quanta-navier-stokes-report-2026-09-08",
+      "title": "Quanta reports on the announced Navier–Stokes proof",
+      "summary": "Quanta covers OpenAI’s announced smooth-forced Navier–Stokes blowup proof and questions about credit for related work. The report discusses Lean formalization and the need for mathematical scrutiny; Clay’s September 11 response describes its evaluation process.",
+      "url": "https://www.quantamagazine.org/ai-has-solved-one-of-maths-1-million-millennium-prize-problems-20260908/",
+      "source": "quanta",
+      "category": "mathematics",
+      "published_at": "2026-09-08T08:43:52Z",
+      "status": "Proof announced",
+      "related_links": [
+        {
+          "label": "OpenAI announcement and proof links",
+          "url": "https://openai.com/index/navier-stokes-solution"
+        },
+        {
+          "label": "Clay response · September 11",
+          "url": "https://www.claymath.org/news/navier-stokes-announcement/"
+        }
+      ]
+    }
+  ],
+  "research_status": "complete; twelve reviewed records",
+  "date_note": "RSS timestamps are preserved where provided. The Anthropic newsroom provides September 1 as a calendar date only, represented at midnight UTC with date_precision=day. arXiv uses the first-submission timestamp, not its later feed announcement date."
+}

@@ -1893,7 +1893,7 @@ theorem main : True := by
 
     def test_ucla_kimi_request_adapter_strips_unsupported_responses_fields(self) -> None:
         source_path = (
-            Path(__file__).parents[1] / "engines" / "ucla" / "harness_0518_Final.py"
+            Path(__file__).parents[1] / "monitor_core" / "ucla" / "harness_0518_Final.py"
         )
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
         names = {
@@ -1942,7 +1942,7 @@ theorem main : True := by
 
     def test_ucla_skip_benchmark_keeps_legacy_typeset_candidate_defined(self) -> None:
         source = (
-            Path(__file__).parents[1] / "engines" / "ucla" / "harness_0518_Final.py"
+            Path(__file__).parents[1] / "monitor_core" / "ucla" / "harness_0518_Final.py"
         ).read_text(encoding="utf-8")
         stage = source.index("# ── Stage 8: Benchmark documentation")
         candidate = source.index("best_entry = None", stage)
@@ -1958,7 +1958,7 @@ theorem main : True := by
 
     def test_ucla_background_response_emits_poll_status(self) -> None:
         source = (
-            Path(__file__).parents[1] / "engines" / "ucla" / "harness_0518_Final.py"
+            Path(__file__).parents[1] / "monitor_core" / "ucla" / "harness_0518_Final.py"
         ).read_text(encoding="utf-8")
         self.assertIn("last_poll_report", source)
         self.assertIn("status={response.status}", source)
@@ -1969,7 +1969,7 @@ theorem main : True := by
         import urllib.error
 
         root = Path(__file__).parents[1]
-        ucla_dir = root / "engines" / "ucla"
+        ucla_dir = root / "monitor_core" / "ucla"
         spec = importlib_util.spec_from_file_location(
             "ucla_deep_read_retry_test", ucla_dir / "deep_read.py"
         )
@@ -2002,7 +2002,7 @@ theorem main : True := by
 
     def test_ucla_literature_reads_use_bounded_default_budgets(self) -> None:
         source = (
-            Path(__file__).parents[1] / "engines" / "ucla" / "harness_0518_Final.py"
+            Path(__file__).parents[1] / "monitor_core" / "ucla" / "harness_0518_Final.py"
         ).read_text(encoding="utf-8")
         self.assertIn(
             'LIT_SEARCH_MAX_TOKENS    = env_int ("LIT_SEARCH_MAX_TOKENS",    16000)',
@@ -2019,7 +2019,7 @@ theorem main : True := by
 
     def test_ucla_terminal_output_truncation_adapts_and_is_bounded(self) -> None:
         source = (
-            Path(__file__).parents[1] / "engines" / "ucla" / "harness_0518_Final.py"
+            Path(__file__).parents[1] / "monitor_core" / "ucla" / "harness_0518_Final.py"
         ).read_text(encoding="utf-8")
         self.assertIn("TERMINAL_RETRY_LIMIT", source)
         self.assertIn("class TerminalResponseExhausted", source)
@@ -2032,11 +2032,11 @@ theorem main : True := by
     def test_ucla_pdf_parser_is_a_main_runtime_dependency(self) -> None:
         root = Path(__file__).parents[1]
         pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
-        deep_read = (root / "engines" / "ucla" / "deep_read.py").read_text(
+        deep_read = (root / "monitor_core" / "ucla" / "deep_read.py").read_text(
             encoding="utf-8"
         )
         literature = (
-            root / "engines" / "ucla" / "literature_research.py"
+            root / "monitor_core" / "ucla" / "literature_research.py"
         ).read_text(encoding="utf-8")
         self.assertIn('"PyMuPDF>=1.24,<2"', pyproject)
         self.assertIn("def _require_pdf_parser()", deep_read)
@@ -2044,7 +2044,7 @@ theorem main : True := by
 
     def test_ucla_advisor_does_not_trust_failed_paper_extractions(self) -> None:
         source = (
-            Path(__file__).parents[1] / "engines" / "ucla" / "harness_0518_Final.py"
+            Path(__file__).parents[1] / "monitor_core" / "ucla" / "harness_0518_Final.py"
         ).read_text(encoding="utf-8")
         self.assertIn("usable_count = sum(", source)
         self.assertIn("Stage 0 successfully read 0 papers", source)

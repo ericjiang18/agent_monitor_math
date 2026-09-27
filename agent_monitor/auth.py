@@ -38,6 +38,7 @@ from agent_monitor import DATA_DIR
 DB_PATH = DATA_DIR / "users.db"
 SESSION_COOKIE = "pc_session"
 SESSION_TTL_DAYS = 30
+GUEST_SESSION_TTL_HOURS = 24
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _GUEST_EMAIL_RE = re.compile(r"^guest\+[0-9a-f]+@public\.local$")
@@ -73,6 +74,19 @@ def public_mode() -> bool:
     }
 
 
+def _registration_override() -> bool | None:
+    raw = os.environ.get("AGENT_MONITOR_REGISTRATION_OPEN")
+    if raw is None or not raw.strip():
+        return None
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def registration_open() -> bool:
+    """Whether an operator explicitly enabled HTTP self-registration."""
+    override = _registration_override()
+    return override is True
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -90,6 +104,26 @@ def _seed_new_user_defaults(conn: sqlite3.Connection, user_id: int) -> None:
             for key, value in _NEW_USER_DEFAULTS.items()
         ],
     )
+
+
+def _migrate_user_roles(conn: sqlite3.Connection) -> None:
+    """Add an explicit guest role and backfill legacy generated guests."""
+    columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(users)").fetchall()
+    }
+    if "is_guest" not in columns:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0"
+        )
+    conn.execute(
+        "UPDATE users SET is_guest=1, is_admin=0"
+        " WHERE is_guest=0 AND email GLOB 'guest+*@public.local'"
+        " AND password_hash IS NULL AND google_sub IS NULL"
+    )
+    # Guest is the least-privileged role even if an older bootstrap flow (or a
+    # manually edited database) left both role bits set.
+    conn.execute("UPDATE users SET is_admin=0 WHERE is_guest=1 AND is_admin!=0")
 
 
 def _conn() -> sqlite3.Connection:
@@ -118,6 +152,7 @@ def _conn() -> sqlite3.Connection:
                     google_sub TEXT UNIQUE,
                     picture TEXT,
                     is_admin INTEGER DEFAULT 0,
+                    is_guest INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT
                 );
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -132,12 +167,6 @@ def _conn() -> sqlite3.Connection:
                     value TEXT,
                     PRIMARY KEY (user_id, key)
                 );
-                CREATE TABLE IF NOT EXISTS user_env (
-                    user_id INTEGER NOT NULL,
-                    key TEXT NOT NULL,
-                    value TEXT,
-                    PRIMARY KEY (user_id, key)
-                );
 
                 CREATE TABLE IF NOT EXISTS password_resets (
                     token_hash TEXT PRIMARY KEY,
@@ -145,7 +174,19 @@ def _conn() -> sqlite3.Connection:
                     expires_at TEXT NOT NULL,
                     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS guest_usage (
+                    user_id INTEGER PRIMARY KEY,
+                    runs_started INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_sessions_user_id
+                    ON sessions(user_id);
+                CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
+                    ON sessions(expires_at);
                 """
+                )
+                _migrate_user_roles(conn)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_users_is_guest ON users(is_guest)"
                 )
                 conn.commit()
                 _migrate_user_env_encryption(conn)
@@ -154,6 +195,29 @@ def _conn() -> sqlite3.Connection:
                 conn.close()
                 raise
     return conn
+
+
+def guest_runs_started(user_id: int) -> int:
+    """Lifetime starts for this guest identity, independent of run deletion."""
+    with _conn() as conn:
+        row = conn.execute("SELECT runs_started FROM guest_usage WHERE user_id=?", (user_id,)).fetchone()
+    return int(row[0]) if row else 0
+
+
+def reserve_guest_run(user_id: int, limit: int, *, previous_runs: int = 0) -> bool:
+    """Reserve one use atomically, including runs predating the usage ledger."""
+    with _conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO guest_usage(user_id, runs_started) VALUES (?, ?)",
+                     (user_id, max(0, previous_runs)))
+        result = conn.execute("UPDATE guest_usage SET runs_started=runs_started+1 WHERE user_id=? AND runs_started<?",
+                              (user_id, limit))
+    return result.rowcount == 1
+
+
+def release_guest_run(user_id: int) -> None:
+    """Refund a reservation only if synchronous job validation failed."""
+    with _conn() as conn:
+        conn.execute("UPDATE guest_usage SET runs_started=MAX(0, runs_started-1) WHERE user_id=?", (user_id,))
 
 
 # ── passwords ────────────────────────────────────────────────────────────────
@@ -171,46 +235,92 @@ def _authenticated_user(conn: sqlite3.Connection, email: str, password: str) -> 
     return row
 
 
-def _insert_session(conn: sqlite3.Connection, user_id: int) -> str:
+def _insert_session(
+    conn: sqlite3.Connection,
+    user_id: int,
+    *,
+    ttl: timedelta | None = None,
+) -> str:
     token = secrets.token_urlsafe(32)
-    expires = datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
+    expires = datetime.now(timezone.utc) + (
+        ttl if ttl is not None else timedelta(days=SESSION_TTL_DAYS)
+    )
     conn.execute(
         "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)",
         (_token_hash(token), user_id, _now(), expires.isoformat()),
     )
     conn.execute("DELETE FROM sessions WHERE expires_at < ?", (_now(),))
+    _purge_expired_guest_accounts(conn)
     return token
 
 
 def _user_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if row is None:
         return None
+    is_guest = bool(row["is_guest"])
     return {
         "id": row["id"],
         "email": row["email"],
         "name": row["name"] or row["email"].split("@")[0],
         "picture": row["picture"],
-        "is_admin": bool(row["is_admin"]),
-        "guest": bool(_GUEST_EMAIL_RE.match(row["email"] or "")),
+        "is_admin": bool(row["is_admin"]) and not is_guest,
+        "guest": is_guest,
     }
 
 
-def register(email: str, password: str, name: str | None = None) -> dict[str, Any]:
+def _registered_user_exists(conn: sqlite3.Connection) -> bool:
+    """Return whether a password or federated account already exists."""
+    return (
+        conn.execute(
+            "SELECT 1 FROM users"
+            " WHERE password_hash IS NOT NULL OR google_sub IS NOT NULL LIMIT 1"
+        ).fetchone()
+        is not None
+    )
+
+
+def register(
+    email: str,
+    password: str,
+    name: str | None = None,
+    *,
+    require_open: bool = False,
+) -> dict[str, Any]:
+    # The public route remains reachable so the UI can explain that account
+    # creation is closed. Reject before the deliberately expensive scrypt
+    # operation, then recheck under the write lock below.
+    if require_open and _registration_override() is not True:
+        raise PermissionError("Account registration is currently closed")
     email = (email or "").strip().lower()
     if not _EMAIL_RE.match(email):
         raise ValueError("Please enter a valid email address")
+    if email.endswith("@public.local"):
+        raise ValueError("Please enter a non-reserved email address")
     if len(password or "") < 8:
         raise ValueError("Password must be at least 8 characters")
     salt = secrets.token_bytes(16)
     pw_hash = _hash_password(password, salt)
-    with closing(_conn()) as conn, conn:
-        # First account becomes admin (inherits server .env keys as fallback).
-        is_admin = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    with _conn() as conn:
+        # Serialize first-admin selection and ignore anonymous guest rows.
+        conn.execute("BEGIN IMMEDIATE")
+        registration_override = _registration_override()
+        if require_open and registration_override is not True:
+            raise PermissionError("Account registration is currently closed")
+        is_admin = not _registered_user_exists(conn)
         try:
             cur = conn.execute(
-                "INSERT INTO users (email, name, password_hash, salt, is_admin, created_at)"
-                " VALUES (?,?,?,?,?,?)",
-                (email, (name or "").strip() or None, pw_hash, salt, int(is_admin), _now()),
+                "INSERT INTO users"
+                " (email, name, password_hash, salt, is_admin, is_guest, created_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (
+                    email,
+                    (name or "").strip() or None,
+                    pw_hash,
+                    salt,
+                    int(is_admin),
+                    0,
+                    _now(),
+                ),
             )
         except sqlite3.IntegrityError:
             raise ValueError("This email is already registered") from None
@@ -231,6 +341,30 @@ def ensure_guest_user() -> dict[str, Any]:
         _seed_new_user_defaults(conn, int(cur.lastrowid))
         row = conn.execute("SELECT * FROM users WHERE id=?", (cur.lastrowid,)).fetchone()
     return _user_dict(row)  # type: ignore[return-value]
+
+
+def create_guest_session() -> tuple[dict[str, Any], str]:
+    """Atomically create one isolated guest identity and its session."""
+    email = f"guest+{secrets.token_hex(8)}@public.local"
+    with _conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        cur = conn.execute(
+            "INSERT INTO users"
+            " (email, name, password_hash, salt, is_admin, is_guest, created_at)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (email, "Guest", None, None, 0, 1, _now()),
+        )
+        row = conn.execute(
+            "SELECT * FROM users WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+        token = _insert_session(
+            conn,
+            int(cur.lastrowid),
+            ttl=timedelta(hours=GUEST_SESSION_TTL_HOURS),
+        )
+    account = _user_dict(row)
+    assert account is not None
+    return account, token
 
 
 def login(email: str, password: str) -> dict[str, Any]:
@@ -281,8 +415,45 @@ def user_for_token(token: str | None) -> dict[str, Any] | None:
 def destroy_session(token: str | None) -> None:
     if not token:
         return
-    with closing(_conn()) as conn, conn:
-        conn.execute("DELETE FROM sessions WHERE token_hash=?", (_token_hash(token),))
+    with _conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        token_hash = _token_hash(token)
+        session = conn.execute(
+            "SELECT s.user_id, u.is_guest FROM sessions s"
+            " JOIN users u ON u.id=s.user_id WHERE s.token_hash=?",
+            (token_hash,),
+        ).fetchone()
+        conn.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash,))
+        if session is not None and bool(session["is_guest"]):
+            user_id = int(session["user_id"])
+            # Ending a guest session is destructive by design: remove the
+            # abandoned identity and its encrypted provider credential.
+            conn.execute("DELETE FROM password_resets WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM user_env WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM guest_usage WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+            conn.execute("DELETE FROM users WHERE id=? AND is_guest=1", (user_id,))
+
+
+def _purge_expired_guest_accounts(conn: sqlite3.Connection) -> int:
+    """Delete expired/orphan guest identities and encrypted settings.
+
+    Cleanup runs inside session-creation transactions. Run artifacts remain
+    under the operator's ordinary retention policy, already marked ``guest``.
+    """
+    now = _now()
+    conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now,))
+    rows = conn.execute(
+        "SELECT u.id FROM users u WHERE u.is_guest=1"
+        " AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.user_id=u.id)"
+    ).fetchall()
+    user_ids = [int(row["id"]) for row in rows]
+    for user_id in user_ids:
+        conn.execute("DELETE FROM password_resets WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM user_env WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM guest_usage WHERE user_id=?", (user_id,))
+        conn.execute("DELETE FROM users WHERE id=? AND is_guest=1", (user_id,))
+    return len(user_ids)
 
 
 # ── per-user env (API keys & settings) ───────────────────────────────────────
@@ -334,6 +505,8 @@ def _dedicated_fernet() -> Fernet | None:
 
     if explicit and credential_path is not None:
         if os.path.abspath(explicit) != os.path.abspath(credential_path):
+            # A populated systemd credential and an override are ambiguous even
+            # if one of them is currently missing.
             credential_material = _read_data_key_file(credential_path, optional=True)
             if credential_material is not None:
                 raise RuntimeError("conflicting user-environment data key files")
@@ -519,6 +692,7 @@ def _migrate_user_env_encryption(conn: sqlite3.Connection) -> int:
             )
             changed += 1
 
+        # Validate the exact rows written before making any migration durable.
         for row in conn.execute("SELECT value FROM user_env"):
             stored = str(row["value"] or "")
             if not stored.startswith(_USER_ENV_CIPHERTEXT_PREFIX):
@@ -582,7 +756,9 @@ def _google_jwks() -> dict[str, Any]:
     return _jwks_cache["keys"]
 
 
-def login_with_google(credential: str) -> dict[str, Any]:
+def login_with_google(
+    credential: str, *, require_open_for_new: bool = False
+) -> dict[str, Any]:
     """Verify a Google Identity Services ID token and upsert the user."""
     cid = google_client_id()
     if not cid:
@@ -607,7 +783,8 @@ def login_with_google(credential: str) -> dict[str, Any]:
         raise ValueError("Google account has no verified email")
     name = claims.get("name")
     picture = claims.get("picture")
-    with closing(_conn()) as conn, conn:
+    with _conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT * FROM users WHERE google_sub=?", (sub,)).fetchone()
         if row is None:
             row = conn.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
@@ -617,11 +794,15 @@ def login_with_google(credential: str) -> dict[str, Any]:
                     (sub, picture, row["id"]),
                 )
             else:
-                is_admin = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-                cur = conn.execute(
-                    "INSERT INTO users (email, name, google_sub, picture, is_admin, created_at)"
-                    " VALUES (?,?,?,?,?,?)",
-                    (email, name, sub, picture, int(is_admin), _now()),
+                registration_override = _registration_override()
+                if require_open_for_new and registration_override is not True:
+                    raise PermissionError("Account registration is currently closed")
+                is_admin = not _registered_user_exists(conn)
+                conn.execute(
+                    "INSERT INTO users"
+                    " (email, name, google_sub, picture, is_admin, is_guest, created_at)"
+                    " VALUES (?,?,?,?,?,?,?)",
+                    (email, name, sub, picture, int(is_admin), 0, _now()),
                 )
                 _seed_new_user_defaults(conn, int(cur.lastrowid))
         else:

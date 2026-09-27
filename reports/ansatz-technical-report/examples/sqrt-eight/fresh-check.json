@@ -1,0 +1,34 @@
+{
+  "checked_at_utc": "2026-09-20T22:56:56.698556+00:00",
+  "method": "Independent local Lean compilation of exact saved source and separate axiom audit",
+  "lean_version": "Lean (version 4.14.0, x86_64-unknown-linux-gnu, commit 410fab728470, Release)",
+  "mathlib_git_revision": "4bbdccd9c5f862bf90ff12f0a9e2c8be032b9a84",
+  "mathlib_source_revision_note": "Identifies the local source checkout; this check trusts the installed prebuilt libraries and does not rebuild them.",
+  "source_sha256": "05e19732c1e40b2cc4515971eb30ff48ce35cd56899dbff2a8c5994509307100",
+  "matches_historical_verified_source": true,
+  "checks": [
+    {
+      "command": [
+        "lean",
+        "Proof.lean"
+      ],
+      "exit_code": 0,
+      "duration_s": 1.698,
+      "stdout": "",
+      "stderr": "",
+      "source_sha256": "05e19732c1e40b2cc4515971eb30ff48ce35cd56899dbff2a8c5994509307100"
+    },
+    {
+      "command": [
+        "lean",
+        "AxiomAudit.lean"
+      ],
+      "exit_code": 0,
+      "duration_s": 2.059,
+      "stdout": "main : Irrational \u221a8\n'main' depends on axioms: [propext, Classical.choice, Quot.sound]\n",
+      "stderr": "",
+      "source_sha256": "1897ed6978ff6a2b3be04701928110bd426f52158c2827ef4a9842ef8c243d13"
+    }
+  ],
+  "all_passed": true
+}

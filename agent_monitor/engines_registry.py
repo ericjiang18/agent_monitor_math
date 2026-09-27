@@ -4,7 +4,7 @@ External harnesses (Codex CLI, OpenClaude, OpenHands) run as
 subprocesses inside the per-run workspace. Command templates can be overridden
 via environment variables so users can adapt to their local install.
 
-Template placeholders: {prompt} {workspace} {problem_file}
+Template placeholders: {prompt} {workspace} {problem_file} {model_args}
 """
 from __future__ import annotations
 
@@ -119,6 +119,25 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         "ready_detail": "bounded response-only adapter ready",
         "parser_style": "codex",
     },
+    # Tool-free Kimi draft/critique/refine harness. This is the default engine
+    # for guest sessions, which cannot use the coding-agent CLIs.
+    "kimi": {
+        "id": "kimi",
+        "label": "Kimi Proof",
+        "vendor": "Moonshot AI",
+        "description": "Draft, critique, and refine a proof with Kimi",
+        "kind": "cli",
+        "url": "https://platform.moonshot.ai",
+        "check_file": "agent_monitor/runners/kimi_runner.py",
+        "cmd_env": "KIMI_PROOF_CMD",
+        "default_cmd": (
+            "{python} -u "
+            "{root}/agent_monitor/runners/kimi_runner.py {prompt}"
+        ),
+        "install_hint": "Add a Kimi API key in Settings",
+        "parser_style": "codex",
+        "supported_models": ["kimi-k3"],
+    },
     "codex": {
         "id": "codex",
         "label": "Codex CLI",
@@ -132,7 +151,7 @@ CLI_ENGINES: dict[str, dict[str, Any]] = {
         # --json emits JSONL events (incl. per-turn token usage) instead of TTY text.
         # Landlock (workspace-write) denies all writes on this kernel, so run
         # unsandboxed — each run already gets its own workspace directory.
-        "default_cmd": 'codex exec --json --cd {workspace} --sandbox danger-full-access --skip-git-repo-check {prompt}',
+        "default_cmd": 'codex exec --json --cd {workspace} --sandbox danger-full-access --skip-git-repo-check {model_args} {prompt}',
         "install_hint": "npm install -g @openai/codex  (or: brew install --cask codex)",
     },
     "claude": {
@@ -328,6 +347,7 @@ FORMAL_LEAN_ENGINES = frozenset(
     {"codex", "claude", "openclaude", "openclaw", "deepagents"}
 )
 ENGINE_AUTH_MODES: dict[str, list[str]] = {
+    "kimi": ["api_key"],
     "hermes": ["codex_subscription", "api_key"],
     "improof": ["codex_subscription", "claude_subscription", "api_key"],
     "math_harness": ["codex_subscription", "claude_subscription", "api_key"],
@@ -361,7 +381,6 @@ def tool_search_path() -> str:
 
 def which_tool(binary: str) -> str | None:
     return shutil.which(binary, path=tool_search_path())
-
 
 def _cli_available(spec: dict[str, Any]) -> tuple[bool, str | None]:
     """Return (available, resolved_command_template)."""
@@ -469,7 +488,14 @@ def supported_models(engine_id: str) -> list[str]:
     return list((CLI_ENGINES.get(engine_id) or {}).get("supported_models") or [])
 
 
-def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_file: Path) -> list[str] | None:
+def build_cli_command(
+    engine_id: str,
+    *,
+    prompt: str,
+    workspace: Path,
+    problem_file: Path,
+    model: str | None = None,
+) -> list[str] | None:
     """Resolve a CLI engine's command as argv list, or None if unavailable."""
     spec = CLI_ENGINES.get(engine_id)
     if not spec:
@@ -479,6 +505,10 @@ def build_cli_command(engine_id: str, *, prompt: str, workspace: Path, problem_f
         return None
     argv: list[str] = []
     for token in shlex.split(template):
+        if token == "{model_args}":
+            if model:
+                argv.extend(["--model", model])
+            continue
         token = token.replace("{root}", str(_ROOT))
         token = token.replace("{python}", sys.executable)
         token = token.replace("{home}", str(Path.home()))
