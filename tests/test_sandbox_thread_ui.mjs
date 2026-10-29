@@ -2891,3 +2891,46 @@ test('the proof is drawn anew (forced) only as a turn ends, never as one starts:
   await advance(60000)
   assert.deepEqual(plain(step('forced')), [0, 52000, 52900])
 })
+
+test('Auto: Jev picks the mode at Start, a clearly non-mathematics request starts nothing, and nothing picked is kept', async () => {
+  const ctx = vm.createContext({ console, JSON })
+  vm.runInContext(`
+const els={'form-error':{style:{display:'none'},textContent:''},'problem-text':{value:''},'start-btn':{disabled:false}}; const $=id=>els[id];
+let reply=null, posted=[], started=[], offered={analyze:true,readability:true};
+const fetch=async(url,init)=>{ posted.push([url,JSON.parse(init.body)]); return reply===null?{ok:false,json:async()=>({})}:{ok:true,json:async()=>reply}; };
+const initialAttachments={busy:false,files:[]};
+const analyzeLinkFromText=t=>(/https:\\/\\/\\S+/.exec(t)||[''])[0];
+const runKindOffered=k=>!!offered[k];
+const renderFormalizeSwitch=()=>{}, syncStartButton=()=>{};
+let autoPick=null;
+const startRun=async()=>{ started.push(JSON.parse(JSON.stringify(autoPick))); };
+${fn('startAutoRun')}`, ctx)
+  const step = code => vm.runInContext(code, ctx)
+  const run = async (text, rep, files = 0) => { step(`els['problem-text'].value=${JSON.stringify(text)}; initialAttachments.files=new Array(${files}).fill({}); reply=${JSON.stringify(rep)}; posted=[]; started=[]; els['form-error'].style.display='none'; els['form-error'].textContent='';`); await step('startAutoRun()'); return { posted: plain(step('posted')), started: plain(step('started')), error: step("els['form-error'].style.display==='block'?els['form-error'].textContent:''"), pick: step('autoPick') } }
+  // Not mathematics: refused with the server's words, nothing started.
+  let r = await run('Write me a poem.', { enabled: true, math: false, mode: '', message: 'Ansätze answers mathematics only, …' })
+  assert.deepEqual([r.started, r.error], [[], 'Ansätze answers mathematics only, …'])
+  assert.deepEqual(r.posted, [['/api/route-request', { problem_text: 'Write me a poem.', has_source: false }]])
+  // A pick: the start runs as that mode, and then nothing of it is left.
+  r = await run('Prove that √2 is irrational.', { enabled: true, math: true, mode: 'formal' })
+  assert.deepEqual([r.started, r.error, r.pick], [[{ mode: 'formal', kind: 'prove' }], '', null])
+  r = await run('Prove RH.', { enabled: true, math: true, mode: 'informal' })
+  assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
+  r = await run('Make this readable https://arxiv.org/abs/1', { enabled: true, math: true, mode: 'readability' })
+  assert.deepEqual([r.posted[0][1].has_source, r.started], [true, [{ mode: 'readability', kind: 'readability' }]])
+  r = await run('', { enabled: true, math: true, mode: 'analyze' }, 1)
+  assert.deepEqual([r.posted[0][1].has_source, r.started], [true, [{ mode: 'analyze', kind: 'analyze' }]])
+  // A mode this site does not offer: a proof instead.
+  step('offered.analyze=false')
+  r = await run('Check https://arxiv.org/abs/1', { enabled: true, math: true, mode: 'analyze' })
+  assert.deepEqual(r.started, [{ mode: 'formal', kind: 'prove' }])
+  step('offered.analyze=true')
+  // The judge off or failing: the default (a manuscript is analyzed, else informal + formalization).
+  r = await run('Prove 1+1=2.', { enabled: false })
+  assert.deepEqual(r.started, [{ mode: 'formal', kind: 'prove' }])
+  r = await run('https://arxiv.org/abs/1', null)
+  assert.deepEqual(r.started, [{ mode: 'analyze', kind: 'analyze' }])
+  // Nothing to rate: says so, asks nothing.
+  r = await run('   ', { enabled: true, math: true, mode: 'formal' })
+  assert.deepEqual([r.posted, r.started, /enter a problem/.test(r.error)], [[], [], true])
+})

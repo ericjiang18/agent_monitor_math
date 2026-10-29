@@ -2307,6 +2307,7 @@ body { background:var(--bg); }
         <div class="prompt-tools">
           <div id="problem-attachments" class="attachment-composer"></div>
           <div class="formalize-switch" id="formalize-switch" role="radiogroup" aria-label="Mode">
+            <button type="button" role="radio" data-auto="1" aria-checked="false" tabindex="-1" hidden title="Let Jev choose: Informal only, Informal + formalization, Analyze or Readability, from what you wrote and attached. Requests that are not mathematics are declined.">Auto</button>
             <button type="button" role="radio" data-formalize="0" aria-checked="false" title="Write the informal proof only. You can still formalize it later with ∎ Verify in the Lean tab.">Informal only</button>
             <button type="button" role="radio" data-formalize="1" aria-checked="true" title="Also translate the proof to Lean and verify it automatically.">Informal + formalization</button>
             <button type="button" role="radio" data-run-kind="analyze" aria-checked="false" tabindex="-1" hidden title="Analyze an existing manuscript result by result: paste a link (arXiv, GitHub, openai/math, PDF/TeX) or the text, or attach the files. Checked by a model verifier — not a certificate.">Analyze</button>
@@ -6061,6 +6062,7 @@ function attachmentLinks(items,rid){
 
 async function startRun(){
   if(CURRENT_USER?.guest&&GUEST_POLICY?.login_required){location.href=pcUrl('/login');return;}
+  if((typeof autoActive==='function'&&autoActive())&&!(typeof autoPick!=='undefined'&&autoPick))return startAutoRun();
   if(runKindChoice()==='analyze')return startAnalyzeRun();
   if(runKindChoice()==='readability')return startReadabilityRun();
   const text=$('problem-text').value.trim(); const eb=$('form-error'); eb.style.display='none';
@@ -6081,7 +6083,7 @@ async function startRun(){
   try{
     const attachments=await initialAttachments.payload();
     const tuning=currentRunTuning();
-    const r=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({engine,problem_text:text,attachments,model:currentModel()||null,auth_route:runAuthRoute(),reasoning_effort:tuning.reasoning_effort,speed_mode:tuning.speed_mode,formalize:formalizeChoice(),max_iterations:Number(SETTINGS?.max_iterations)||40,use_subagents:false,subagent_model:null})});
+    const r=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({engine,problem_text:text,attachments,model:currentModel()||null,auth_route:runAuthRoute(),reasoning_effort:tuning.reasoning_effort,speed_mode:tuning.speed_mode,formalize:formalizeChoice(),max_iterations:Number(SETTINGS?.max_iterations)||40,use_subagents:false,subagent_model:null,...((typeof autoPick!=='undefined'&&autoPick)?{auto_mode:(typeof autoPick!=='undefined'&&autoPick).mode}:{})})});
     const d=await r.json(); if(d.guest_policy){GUEST_POLICY=d.guest_policy;applyGuestUi();} if(!r.ok){ if(/Unsupported (?:Codex|Claude) account model|conflicts with the selected/i.test(String(d.error||'')))loadSettings({keepEngine:true}); const refused=new Error(d.error||('HTTP '+r.status));refused.refused=true;throw refused;}
     initialAttachments.clear();
     selectRun(d.run_id,d.job_id); goSession('sandbox');
@@ -6091,6 +6093,32 @@ async function startRun(){
     else setPill('failed','failed');
   }
   finally{initialAttachments.lock(false);$('start-btn').disabled=false;}
+}
+
+/* Auto: Jev rates the request (is it mathematics, which mode), then the run
+   starts as that mode would start it, saying in its thread what was chosen.
+   A request that is clearly not mathematics starts nothing. */
+async function startAutoRun(){
+  const eb=$('form-error'); eb.style.display='none';
+  if(initialAttachments.busy)return;
+  const text=$('problem-text').value.trim(), files=initialAttachments.files.length;
+  if(!text&&!files){ eb.style.display='block'; eb.textContent='Please enter a problem, paste a link, or attach files.'; return; }
+  const hasSource=!!analyzeLinkFromText(text)||files>0;
+  $('start-btn').disabled=true;
+  let rated=null;
+  try{
+    const r=await fetch('/api/route-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({problem_text:text,has_source:hasSource})});
+    rated=r.ok?await r.json():null;
+  }catch(e){ rated=null; }
+  finally{ $('start-btn').disabled=false; }
+  if(rated&&rated.enabled&&rated.math===false){ eb.style.display='block'; eb.textContent=String(rated.message||'Ansätze answers mathematics only.'); return; }
+  // No answer (the judge off or failing): what Auto picks by default.
+  let mode=rated&&rated.enabled&&rated.mode?String(rated.mode):(hasSource?'analyze':'formal');
+  if((mode==='analyze'||mode==='readability')&&!runKindOffered(mode))mode='formal';
+  if((mode==='analyze'||mode==='readability')&&!(analyzeLinkFromText(text)||files||text))mode='formal';
+  autoPick={mode,kind:mode==='analyze'||mode==='readability'?mode:'prove'};
+  try{ await startRun(); }
+  finally{ autoPick=null; renderFormalizeSwitch(); syncStartButton(); }
 }
 
 /* ── runs ── */
@@ -10618,18 +10646,32 @@ $('run-thinking-slider').oninput=()=>{
    one so it is easier to follow). Remembered in this browser; each run keeps
    its own choice. formalizeChoice() keeps its meaning (the proof output); the
    run kind has its own key. A radio with data-run-kind is its own run kind. */
-const FORMALIZE_KEY='proving-console-formalize-v1';
+const FORMALIZE_KEY='proving-console-formalize-v1', AUTO_MODE_KEY='proving-console-auto-mode-v1';
+/* Auto (easy_route): Jev picks the mode when a run starts. Offered to a
+   signed-in account while the judge is on; chosen by default. autoPick holds
+   the mode it picked for the start in progress (runKindChoice and
+   formalizeChoice follow it), and nothing it picks is saved as the choice. */
+let autoPick=null;
+function autoOffered(){ try{ return !!SETTINGS?.easy_route?.enabled&&!viewerIsGuest(); }catch(e){ return false; } }
+function autoActive(){
+  if(!autoOffered())return false;
+  try{ return localStorage.getItem(AUTO_MODE_KEY)!=='0'; }catch(e){ return true; }
+}
+// (Each Auto reference is guarded: a function may run without the Auto state.)
 function formalizeChoice(){
+  if((typeof autoPick!=='undefined'&&autoPick))return (typeof autoPick!=='undefined'&&autoPick).mode==='formal';
   try{ return localStorage.getItem(FORMALIZE_KEY)!=='0'; }catch(e){ return true; }
 }
 function renderFormalizeSwitch(){
-  const on=formalizeChoice(), kind=runKindChoice();
+  const on=formalizeChoice(), kind=runKindChoice(), auto=(typeof autoActive==='function'&&autoActive());
   document.querySelectorAll('#formalize-switch [role="radio"]').forEach(button=>{
     const own=button.dataset.runKind;
     if(own)button.hidden=!runKindOffered(own);
-    const checked=own?kind===own:kind==='prove'&&(button.dataset.formalize==='1')===on;
+    if(button.dataset.auto)button.hidden=!(typeof autoOffered==='function'&&autoOffered());
+    const checked=button.dataset.auto?auto:auto?false:own?kind===own:kind==='prove'&&(button.dataset.formalize==='1')===on;
     button.setAttribute('aria-checked',String(checked)); button.tabIndex=checked?0:-1;
   });
+  if(typeof syncStartButton==='function')syncStartButton();
 }
 function setFormalizeChoice(on){
   try{ localStorage.setItem(FORMALIZE_KEY,on?'1':'0'); }catch(e){}
@@ -10664,14 +10706,25 @@ function readabilityOffered(){
 }
 function runKindOffered(kind){ return kind==='analyze'?analyzeOffered():kind==='readability'?readabilityOffered():false; }
 function runKindChoice(){
+  if((typeof autoPick!=='undefined'&&autoPick))return (typeof autoPick!=='undefined'&&autoPick).kind;
+  if((typeof autoActive==='function'&&autoActive()))return 'prove';
   let saved='';
   try{ saved=localStorage.getItem(RUN_KIND_KEY)||''; }catch(e){ saved=''; }
   return runKindOffered(saved)?saved:'prove';
 }
 function modeRadios(){ return [...document.querySelectorAll('#formalize-switch [role="radio"]')].filter(button=>!button.hidden); }
-function radioMode(button){ return button?.dataset?.runKind||(button?.dataset?.formalize==='1'?'formal':'informal'); }
+function radioMode(button){ return button?.dataset?.auto?'auto':button?.dataset?.runKind||(button?.dataset?.formalize==='1'?'formal':'informal'); }
 function chooseMode(mode){
-  const before=runKindChoice(), kind=['analyze','readability'].includes(mode)?mode:'prove';
+  const before=runKindChoice();
+  try{ if(typeof AUTO_MODE_KEY!=='undefined')localStorage.setItem(AUTO_MODE_KEY,mode==='auto'?'1':'0'); }catch(e){}
+  if(mode==='auto'){
+    try{ localStorage.setItem(RUN_KIND_KEY,'prove'); }catch(e){}
+    renderFormalizeSwitch();
+    if(runKindChoice()!==before)runKindChanged();
+    syncStartButton();
+    return;
+  }
+  const kind=['analyze','readability'].includes(mode)?mode:'prove';
   try{ localStorage.setItem(RUN_KIND_KEY,kind); }catch(e){}
   if(kind!=='prove')renderFormalizeSwitch();
   else setFormalizeChoice(mode==='formal');
@@ -10755,7 +10808,7 @@ function syncStartButton(){
   try{ signIn=!!(CURRENT_USER?.guest&&GUEST_POLICY?.login_required); }catch(e){ signIn=false; }
   const label=document.createElement('span'); label.id='start-label';
   const kind=runKindChoice();
-  label.textContent=signIn?'Sign in to continue':kind==='analyze'?'Analyze':kind==='readability'?'Make readable':'Prove';
+  label.textContent=signIn?'Sign in to continue':(typeof autoActive==='function'&&autoActive())&&!(typeof autoPick!=='undefined'&&autoPick)?'Start':kind==='analyze'?'Analyze':kind==='readability'?'Make readable':'Prove';
   const nodes=[label];
   if(!signIn){ const arrow=document.createElement('span'); arrow.setAttribute('aria-hidden','true'); arrow.textContent='→'; nodes.push(' ',arrow); }
   button.replaceChildren(...nodes);
@@ -11115,6 +11168,7 @@ async function startAnalyzeRun(){
     if(source.kind==='url')request.source={url:source.url};
     else if(source.kind==='paste')request.source=source.format?{text:source.text,format:source.format}:{text:source.text};
     else request.attachments=await initialAttachments.payload();
+    if((typeof autoPick!=='undefined'&&autoPick))request.auto_mode=(typeof autoPick!=='undefined'&&autoPick).mode;
     const response=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
     const started=await response.json().catch(()=>({}));
     if(started.guest_policy){GUEST_POLICY=started.guest_policy;applyGuestUi();}
@@ -11242,6 +11296,7 @@ async function startReadabilityRun(){
     if(source.kind==='url')request.source={url:source.url};
     else if(source.kind==='paste')request.source=source.format?{text:source.text,format:source.format}:{text:source.text};
     else request.attachments=await initialAttachments.payload();
+    if((typeof autoPick!=='undefined'&&autoPick))request.auto_mode=(typeof autoPick!=='undefined'&&autoPick).mode;
     const response=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
     const started=await response.json().catch(()=>({}));
     if(started.guest_policy){GUEST_POLICY=started.guest_policy;applyGuestUi();}

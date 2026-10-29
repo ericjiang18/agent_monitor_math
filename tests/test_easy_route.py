@@ -756,3 +756,119 @@ class PlainApiAnswerTest(unittest.TestCase):
         with patch.dict(os.environ, {plain_runner.ANSWER_ONLY_ENV: "1"}):
             self.assertEqual(plain_runner._api_artifact_issues("Step 3 holds because $x^2 \\ge 0$."), [])
             self.assertEqual(plain_runner._api_artifact_issues("Sure. <function_calls><invoke name='x'>"), ["<function_calls>", "<invoke "])
+
+
+def _answers(**questions) -> dict:
+    """A Decisions API answer: ``topic=("not_math", 0.95)`` style choices."""
+    out = {}
+    for name, (choice, p) in questions.items():
+        out[name] = {"type": "choice", "choice": choice, "probabilities": {choice: p}, "confidence": p}
+    return {"answers": out}
+
+
+class AutoModeTest(unittest.TestCase):
+    """Auto (rate_request) and the mathematics-only refusal (topic_refusal)."""
+
+    def setUp(self) -> None:
+        self.enterContext(patch.dict(os.environ, {easy_route.KEY_ENV: KEY}))
+        os.environ.pop(easy_route.SWITCH_ENV, None)
+
+    def rate(self, reply, text="Prove that 2+2=4.", source=False):
+        opener = _Opener(_reply(reply))
+        with patch("urllib.request.build_opener", return_value=opener):
+            return easy_route.rate_request(text, has_source=source), opener
+
+    def test_the_request_asks_topic_and_formalization_and_with_a_manuscript_the_task(self) -> None:
+        _, opener = self.rate(_answers(topic=("math", 1.0), formalize=("formal", 1.0)))
+        sent = json.loads(opener.requests[0][0].data)
+        self.assertEqual(sorted(sent["questions"]), ["formalize", "topic"])
+        self.assertEqual(sorted(sent["questions"]["topic"]["criteria"]), ["math", "not_math"])
+        _, opener = self.rate(_answers(topic=("math", 1.0), formalize=("formal", 1.0), task=("analyze", 1.0)), source=True)
+        sent = json.loads(opener.requests[0][0].data)
+        self.assertEqual(sorted(sent["questions"]["task"]["criteria"]), ["analyze", "prove", "readability"])
+
+    def test_modes(self) -> None:
+        cases = [
+            (_answers(topic=("math", 1.0), formalize=("formal", 0.9)), False, "formal"),
+            (_answers(topic=("math", 1.0), formalize=("informal", 0.9)), False, "informal"),
+            (_answers(topic=("math", 1.0), formalize=("informal", 0.55)), False, "formal"),  # not clearly informal
+            (_answers(topic=("math", 1.0), formalize=("formal", 1.0), task=("analyze", 0.9)), True, "analyze"),
+            (_answers(topic=("math", 1.0), formalize=("formal", 1.0), task=("readability", 0.8)), True, "readability"),
+            (_answers(topic=("math", 1.0), formalize=("informal", 1.0), task=("prove", 0.9)), True, "informal"),
+            (_answers(topic=("math", 1.0), formalize=("formal", 1.0), task=("readability", 0.4)), True, "analyze"),
+            ({}, True, "analyze"),
+            ({}, False, "formal"),
+        ]
+        for reply, source, want in cases:
+            rated, _ = self.rate(reply, source=source)
+            self.assertEqual((rated["math"], rated["mode"]), (True, want), (reply, source))
+
+    def test_only_a_clear_not_math_is_refused(self) -> None:
+        rated, _ = self.rate(_answers(topic=("not_math", 0.97), formalize=("informal", 1.0)), text="Write a poem.")
+        self.assertEqual((rated["math"], rated["mode"]), (False, ""))
+        self.assertIn("Ansätze answers mathematics only", rated["reason"])
+        rated, _ = self.rate(_answers(topic=("not_math", 0.7), formalize=("formal", 1.0)), text="Write a poem.")
+        self.assertTrue(rated["math"])
+        for failure in (urllib.error.HTTPError("u", 500, "x", {}, io.BytesIO(b"")), TimeoutError("slow")):
+            opener = _Opener(failure)
+            with patch("urllib.request.build_opener", return_value=opener):
+                rated = easy_route.rate_request("Write a poem.", has_source=False)
+            self.assertEqual((rated["math"], rated["mode"]), (True, "formal"))
+
+    def test_topic_refusal(self) -> None:
+        def refusal(reply, text="Tell me a joke.", **kw):
+            with patch("urllib.request.build_opener", return_value=_Opener(_reply(reply))):
+                return easy_route.topic_refusal(text, **kw)
+
+        self.assertIn("mathematics only", refusal(_answers(topic=("not_math", 0.95))))
+        self.assertEqual(refusal(_answers(topic=("not_math", 0.6))), "")
+        self.assertEqual(refusal(_answers(topic=("math", 1.0)), text="keep trying!", problem="Prove RH."), "")
+        self.assertEqual(refusal({}), "")
+        self.assertEqual(refusal(_answers(topic=("not_math", 1.0)), text="   "), "")  # nothing to rate
+        with patch.dict(os.environ, {easy_route.SWITCH_ENV: "0"}):
+            self.assertEqual(refusal(_answers(topic=("not_math", 1.0))), "")
+        with patch("urllib.request.build_opener", return_value=_Opener(_reply(_answers(topic=("math", 1.0))))) as built:
+            easy_route.topic_refusal("Explain step 3.", problem="Prove RH.")
+        sent = json.loads(built.return_value.requests[0][0].data)
+        self.assertEqual(sent["state"], ["ORIGINAL PROBLEM OF THE SESSION:\nProve RH.", "REQUEST (this turn):\nExplain step 3."])
+
+
+class ServerAutoTest(unittest.TestCase):
+    def test_refusal_is_for_signed_in_accounts_with_text_only(self) -> None:
+        from agent_monitor import console_server
+
+        with patch.dict(os.environ, {easy_route.KEY_ENV: KEY}), \
+                patch.object(easy_route, "topic_refusal", return_value="no") as refuse:
+            os.environ.pop(easy_route.SWITCH_ENV, None)
+            self.assertEqual(console_server._not_math_refusal({"id": 1}, "Write a poem."), "no")
+            self.assertEqual(console_server._not_math_refusal({"id": 2, "guest": True}, "Write a poem."), "")
+            self.assertEqual(console_server._not_math_refusal({"id": 1}, "   "), "")
+            self.assertEqual(console_server._not_math_refusal({}, "x"), "")
+            self.assertEqual(refuse.call_count, 1)
+        with patch.dict(os.environ, {easy_route.KEY_ENV: ""}):
+            self.assertEqual(console_server._not_math_refusal({"id": 1}, "Write a poem."), "")
+
+    def test_the_auto_note(self) -> None:
+        from agent_monitor import console_server
+
+        notes = []
+        with patch.object(console_server.job_manager, "_append_chat", side_effect=lambda rid, role, text: notes.append((rid, role, text))):
+            console_server._note_auto_mode({"run_id": "r1"}, {"auto_mode": "formal"})
+            console_server._note_auto_mode({"run_id": "r2"}, {"auto_mode": "bogus"})
+            console_server._note_auto_mode({"run_id": "r3"}, {})
+            console_server._note_auto_mode({}, {"auto_mode": "analyze"})
+        self.assertEqual(notes, [("r1", "system", "Auto mode: Informal + formalization (chosen by typesafe/jev-1.13).")])
+
+    def test_wiring(self) -> None:
+        import inspect
+
+        from agent_monitor import console_server
+
+        source = inspect.getsource(console_server)
+        self.assertIn('if path == "/api/route-request":', source)
+        self.assertEqual(source.count("_note_auto_mode(job, body)"), 3)  # proof, Analyze, Readability starts
+        self.assertIn('refusal = _not_math_refusal(user, body.get("problem_text"))', source)
+        self.assertIn('refusal = _not_math_refusal(user, body.get("message"), run_id=run_id)', source)
+        # The follow-up refusal comes before any run start is reserved.
+        chat = source[source.index('refusal = _not_math_refusal(user, body.get("message")'):]
+        self.assertLess(chat.index("refusal"), chat.index("_admit_member_message(user)"))
