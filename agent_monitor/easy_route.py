@@ -103,15 +103,23 @@ def asks_for_cgm(text: str) -> bool:
     return bool(_ASKS_FOR_CGM.search(str(text or "")))
 
 
-# The words that ask for Ansatz CGM ("use Ansatz CGM", "on the full harness",
-# "Ansatz CGM:"): an instruction to the console, not part of the problem.  A
-# bare "CGM" (which may be mathematics) is left alone unless a verb asks for it.
-_CGM_DIRECTIVE = re.compile(
-    r"(?:\b(?:please\s+)?(?:use|using|with|via|on|try|run\s+(?:it\s+|this\s+)?(?:on|with))\s+(?:the\s+)?"
-    r"(?:ansatz\s*cgm|cgm|full\s+harness|ansatz\s+harness)\b"
-    r"|\b(?:ansatz\s*cgm|ansatz\s+harness)\b)"
-    r"(?:\s+(?:please|instead|again|for\s+(?:this|it)))*\s*[.!:;,]?",
+# The words that ask for Ansatz CGM: an instruction to the console, not part
+# of the problem. The product's names ("Ansatz CGM", "Ansatz harness", "full
+# harness"), with or without a verb ("use Ansatz CGM", "on the full harness",
+# "Ansatz CGM:"); a bare "CGM" only as a whole sentence of its own ("Use
+# CGM.", "Run it with CGM please."): anywhere else "CGM" may be mathematics
+# (the conjugate gradient method: "with CGM for symmetric A", "the CGM
+# subspace") and is left alone.
+_CGM_TRAILING = r"(?:\s+(?:please|instead|again|for\s+(?:this|it)|on\s+(?:this|it)))*"
+_CGM_NAMED = re.compile(
+    r"\b(?:(?:please\s+)?(?:use|using|with|via|on|try|run\s+(?:it\s+|this\s+)?(?:on|with))\s+(?:the\s+)?)?"
+    r"(?:ansatz\s*cgm|ansatz\s+harness|full\s+harness)\b" + _CGM_TRAILING + r"\s*[.!:;,]?",
     re.IGNORECASE,
+)
+_CGM_BARE_SENTENCE = re.compile(
+    r"(?:^|(?<=[.!?;]))[ \t]*(?:please\s+)?(?:use|try|run\s+(?:it\s+|this\s+)?(?:on|with))\s+(?:the\s+)?cgm\b"
+    + _CGM_TRAILING + r"[ \t]*(?:[.!]|$)",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -120,7 +128,7 @@ def strip_cgm_directive(text: str) -> str:
     read (the chat keeps the message as typed).  Text that would be left
     empty is returned as it was."""
     raw = str(text or "")
-    stripped = _CGM_DIRECTIVE.sub(" ", raw)
+    stripped = _CGM_BARE_SENTENCE.sub(" ", _CGM_NAMED.sub(" ", raw))
     stripped = re.sub(r"[ \t]{2,}", " ", stripped)
     stripped = re.sub(r"[ \t]+([.,;:!?])", r"\1", stripped).strip()
     stripped = re.sub(r"^[,;:.!\s\-\u2013\u2014]+", "", stripped).strip()

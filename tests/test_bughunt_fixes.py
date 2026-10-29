@@ -36,9 +36,23 @@ class StripDirectiveTest(unittest.TestCase):
             self.assertTrue(easy_route.asks_for_cgm(text), text)
 
     def test_mathematics_and_a_bare_directive_stay_as_they_are(self) -> None:
-        # A bare "CGM" may be mathematics; a message that is only the directive keeps its words.
-        for text in ("Explain the CGM inequality in step 3.", "use Ansatz CGM", "please use CGM instead", ""):
+        # A bare "CGM" may be mathematics (the conjugate gradient method); a message
+        # that is only the directive keeps its words.
+        for text in (
+            "Explain the CGM inequality in step 3.",
+            "Prove the convergence of the iterates with CGM for symmetric positive definite A.",
+            "Bound the error of the approximation using CGM after k steps.",
+            "Show the estimate holds on the CGM subspace.",
+            "Use CGM to solve Ax = b and bound the residual.",
+            "use Ansatz CGM", "Use Ansatz CGM on this.", "please use CGM instead", "Use CGM.",
+            "Run it with CGM please.", "",
+        ):
             self.assertEqual(easy_route.strip_cgm_directive(text), text.strip(), text)
+
+    def test_a_bare_cgm_directive_is_stripped_only_as_a_sentence_of_its_own(self) -> None:
+        self.assertEqual(easy_route.strip_cgm_directive("Prove X. Use CGM."), "Prove X.")
+        self.assertEqual(easy_route.strip_cgm_directive("Prove X.\nUse CGM again"), "Prove X.")
+        self.assertEqual(easy_route.strip_cgm_directive("Prove it again with the full harness please."), "Prove it again")
 
 
 class FormalizationTest(unittest.TestCase):

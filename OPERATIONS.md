@@ -1297,8 +1297,11 @@ always gets it, without the judge.
   engine; the engine reads the request without them
   (`easy_route.strip_cgm_directive`: a start's problem text, problem.txt /
   problems.json and a follow-up's prompt), so they never reach a theorem's
-  statement. The chat keeps the message as typed; a bare "CGM", which may be
-  mathematics, is left alone.
+  statement. The chat keeps the message as typed. A bare "CGM", which may be
+  mathematics (the conjugate gradient method: "with CGM for symmetric A",
+  "the CGM subspace"), is taken out only as a sentence of its own ("Use
+  CGM.", "Run it with CGM please."); asking for Ansatz CGM in any form still
+  routes the turn there.
 - **Said where a run is chosen.** With the judge on, the launcher's "Runs on
   …" line for Ansatz CGM (not Max) and Ansatz CGM · Kimi K3 adds: "Easy requests may be rated by an
   external model (OpenRouter · <judge>) and answered with Plain on the same
