@@ -3183,13 +3183,16 @@ test('a reload opens the run this tab had open again (not a deleted one, nor ove
   const store = new Map()
   const ctx = vm.createContext({ console, sessionStorage: { getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) } })
   vm.runInContext(`let runId=null, screen='landing', selected=[], ok=true; const els={'problem-text':{value:''}}; const $=id=>els[id];
-const fetch=async()=>({ok}); const selectRun=rid=>{ selected.push(rid); runId=rid; };
+const fetch=async()=>({ok}); const selectRun=rid=>{ selected.push(rid); runId=rid; }; const goSession=view=>{ screen='session:'+view; };
 ${constant('OPEN_RUN_KEY')}
 ${['rememberOpenRun', 'restoreOpenRun'].map(fn).join('\n')}`, ctx)
   const step = code => vm.runInContext(code, ctx)
   step("rememberOpenRun('r1')")
   assert.equal(await step('restoreOpenRun()'), true)
   assert.deepEqual(plain(step('selected')), ['r1'])
+  // In its Sandbox (as the run list opens a run), not on the composer.
+  assert.equal(step('screen'), 'session:sandbox')
+  step("screen='landing'")
   // Typed meanwhile, or another run open: nothing.
   step("runId=null; selected=[]; els['problem-text'].value='Prove it.'")
   assert.equal(await step('restoreOpenRun()'), false)

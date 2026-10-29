@@ -6381,7 +6381,8 @@ async function restoreOpenRun(){
   try{ const r=await fetch('/api/run/'+encodeURIComponent(rid)); if(!r.ok){ rememberOpenRun(''); return false; } }catch(e){ return false; }
   // Still on the composer, with nothing typed meanwhile.
   if(runId||screen!=='landing'||$('problem-text')?.value.trim())return false;
-  selectRun(rid); return true;
+  // Opened as the run list opens a run: its Sandbox, not the composer behind it.
+  selectRun(rid); goSession('sandbox'); return true;
 }
 function selectRun(rid,jid){
   if(typeof rememberOpenRun==='function')rememberOpenRun(rid);
