@@ -1962,6 +1962,25 @@ def _guest_rating_allowed(user: dict) -> bool:
         return True
 
 
+def _guest_easy_verdict(user: dict, engine: str, text: object) -> dict:
+    """A guest start's easy-request rating, taken outside the guest start lock:
+    the judge's verdict while the guest has ratings left this hour, else
+    "hard" (the start stays on its engine)."""
+    from agent_monitor import easy_route
+
+    unrated = {"verdict": "hard", "reason": "", "model": easy_route.model(), "error": "not rated"}
+    request = str(text or "").strip()
+    if (
+        engine not in easy_route.HOMES
+        or not easy_route.enabled()
+        or not request
+        or easy_route.asks_for_cgm(request)
+        or not _guest_rating_allowed(user)
+    ):
+        return unrated
+    return easy_route.judge(request)
+
+
 def _not_math_refusal(user: dict, text: object, *, run_id: str = "") -> str:
     """easy_route's refusal of a request that is clearly not mathematics, for
     a signed-in account with the judge on ("" otherwise, and on any doubt)."""
@@ -4635,10 +4654,21 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 return
             # Mathematics only (easy_route): a request the judge is sure is not
             # mathematics starts nothing (before any run start is reserved).
-            refusal = _not_math_refusal(user, body.get("problem_text"))
+            # A guest's check is one of its hourly ratings (past them, the
+            # start goes on unrated and costs a guest run as usual).
+            if user.get("guest") and (
+                engine not in guest_engine_allowlist() or not _guest_rating_allowed(user)
+            ):
+                refusal = ""
+            else:
+                refusal = _not_math_refusal(user, body.get("problem_text"))
             if refusal:
                 self._send(400, json.dumps({"error": refusal, "not_math": True}, ensure_ascii=False))
                 return
+            # A guest's easy-request rating is taken here, before the guest
+            # start lock (one judge call never holds up other guests' starts),
+            # and counts against its hourly ratings.
+            easy_verdict = _guest_easy_verdict(user, engine, body.get("problem_text")) if user.get("guest") else None
             requested_model = body.get("model") or None
             requested_subagent_model = (
                 str(body.get("subagent_model") or "").strip() or None
@@ -4715,6 +4745,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                         # Only an explicit false turns automatic formalization off.
                         formalize=body.get("formalize") is not False,
                         tool_free=tool_free,
+                        easy_verdict=easy_verdict,
                     ))
 
                 if user.get("guest"):

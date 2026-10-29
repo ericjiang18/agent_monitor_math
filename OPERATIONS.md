@@ -1247,8 +1247,12 @@ files, `task`), then starts the run as the chosen mode would, with
   request on Ansatz CGM · Kimi K3 moved to Plain (only while Plain is one of
   the operator's guest engines; the guest's limits go with it). Guests send no
   follow-ups. The guest note under the start box says requests are rated by
-  the external model. A guest's Auto ratings are limited to 30 an hour
-  (`GUEST_RATINGS_PER_HOUR`); past that, Auto takes its default.
+  the external model. Every judge call a guest makes counts against 30 an
+  hour (`GUEST_RATINGS_PER_HOUR`): its Auto ratings, the mathematics-only
+  check of its starts and the easy-request rating of its starts. Past them
+  Auto takes its default and a start goes on unrated (and costs a guest run
+  as usual). A guest's easy-request rating is taken before the guest start
+  lock, so a judge call never holds up other guests' starts.
 
 ## Analyze runs
 
