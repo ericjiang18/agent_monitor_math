@@ -53,6 +53,9 @@ class StripDirectiveTest(unittest.TestCase):
         self.assertEqual(easy_route.strip_cgm_directive("Prove X. Use CGM."), "Prove X.")
         self.assertEqual(easy_route.strip_cgm_directive("Prove X.\nUse CGM again"), "Prove X.")
         self.assertEqual(easy_route.strip_cgm_directive("Prove it again with the full harness please."), "Prove it again")
+        self.assertEqual(easy_route.strip_cgm_directive("Prove the bound; run it on the full harness please."), "Prove the bound")
+        # Text the directive never touched keeps its own ending.
+        self.assertEqual(easy_route.strip_cgm_directive("Prove the following:"), "Prove the following:")
 
 
 class FormalizationTest(unittest.TestCase):

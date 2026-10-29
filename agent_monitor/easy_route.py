@@ -132,6 +132,9 @@ def strip_cgm_directive(text: str) -> str:
     stripped = re.sub(r"[ \t]{2,}", " ", stripped)
     stripped = re.sub(r"[ \t]+([.,;:!?])", r"\1", stripped).strip()
     stripped = re.sub(r"^[,;:.!\s\-\u2013\u2014]+", "", stripped).strip()
+    if stripped != raw.strip():
+        # A directive taken from the end leaves no dangling separator ("Prove the bound;").
+        stripped = re.sub(r"[\s,;:\-\u2013\u2014]+$", "", stripped).strip()
     return stripped or raw.strip()
 
 
