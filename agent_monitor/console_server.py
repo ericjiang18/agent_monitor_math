@@ -1935,6 +1935,51 @@ def _readability_preview(run_id: str, data: dict) -> dict:
     }
 
 
+def _not_math_refusal(user: dict, text: object, *, run_id: str = "") -> str:
+    """easy_route's refusal of a request that is clearly not mathematics, for
+    a signed-in account with the judge on ("" otherwise, and on any doubt)."""
+    from agent_monitor import easy_route
+
+    if not user or user.get("guest") or not easy_route.enabled():
+        return ""
+    request = str(text or "").strip()
+    if not request:
+        return ""
+    problem = ""
+    if run_id:
+        try:
+            record = _run_record_for(run_id) or {}
+            problems = job_manager.ensure_problems(record, run_id)
+            problem = job_manager._problem_item_text(problems[0]) if problems else str(record.get("problem_text") or "")
+        except Exception:  # noqa: BLE001 - context only
+            problem = ""
+    return easy_route.topic_refusal(request, problem=problem)
+
+
+_AUTO_MODE_LABELS = {
+    "informal": "Informal only",
+    "formal": "Informal + formalization",
+    "analyze": "Analyze",
+    "readability": "Readability",
+}
+
+
+def _note_auto_mode(job: dict, body: dict) -> None:
+    """A run started in Auto mode says in its thread which mode was chosen."""
+    mode = str((body or {}).get("auto_mode") or "").strip().lower()
+    run_id = str((job or {}).get("run_id") or "")
+    if mode not in _AUTO_MODE_LABELS or not run_id:
+        return
+    from agent_monitor import easy_route
+
+    try:
+        job_manager._append_chat(
+            run_id, "system", f"Auto mode: {_AUTO_MODE_LABELS[mode]} (chosen by {easy_route.model()})."
+        )
+    except Exception:  # noqa: BLE001 - the note is informational
+        return
+
+
 def _sandbox_preview(run_id: str, data: dict | None) -> dict:
     """Proof.md if it exists, otherwise the latest non-tool agent writes.
 
@@ -2807,6 +2852,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
         except Exception as exc:  # noqa: BLE001
             self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
             return
+        _note_auto_mode(job, body)
         self._send(200, json.dumps(job))
 
     def _start_readability_run(self, body: dict, user: dict) -> None:
@@ -2928,6 +2974,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
         except Exception as exc:  # noqa: BLE001
             self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
             return
+        _note_auto_mode(job, body)
         self._send(200, json.dumps(job))
 
     def _start_manuscript_ask(self, rid: str, body: dict, user: dict, kind: str) -> None:
@@ -4501,6 +4548,26 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                     slot.release()
             return
 
+        if path == "/api/route-request":
+            # Auto mode (easy_route): is the new request mathematics, and which
+            # mode fits it. Signed-in accounts only, with the judge on.
+            from agent_monitor import easy_route
+
+            if user.get("guest") or not easy_route.enabled():
+                self._send(200, json.dumps({"enabled": False}))
+                return
+            rated = easy_route.rate_request(
+                str(body.get("problem_text") or "")[:20_000], has_source=bool(body.get("has_source"))
+            )
+            self._send(200, json.dumps({
+                "enabled": True,
+                "math": bool(rated.get("math")),
+                "mode": rated.get("mode") or "",
+                "label": easy_route.MODE_LABELS.get(rated.get("mode") or "", ""),
+                "message": rated.get("reason") if not rated.get("math") else "",
+                "model": rated.get("model"),
+            }, ensure_ascii=False))
+            return
         if path == "/api/runs":
             from agent_monitor import analyze_runs
 
@@ -4537,6 +4604,12 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                                  "Readability",
                     }),
                 )
+                return
+            # Mathematics only (easy_route): a request the judge is sure is not
+            # mathematics starts nothing (before any run start is reserved).
+            refusal = _not_math_refusal(user, body.get("problem_text"))
+            if refusal:
+                self._send(400, json.dumps({"error": refusal, "not_math": True}, ensure_ascii=False))
                 return
             requested_model = body.get("model") or None
             requested_subagent_model = (
@@ -4689,6 +4762,7 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             except Exception as exc:  # noqa: BLE001
                 self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
                 return
+            _note_auto_mode(job, body)
             self._send(200, json.dumps(job))
             return
 
@@ -4779,6 +4853,12 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             if self._deny_run_change(run_id, user, "send it feedback"):
                 return
             if self._refuse_analyze_continuation(run_id):
+                return
+            # Mathematics only (easy_route): a message the judge is sure is not
+            # mathematics (with the run's problem as context) is not sent.
+            refusal = _not_math_refusal(user, body.get("message"), run_id=run_id)
+            if refusal:
+                self._send(400, json.dumps({"error": refusal, "not_math": True}, ensure_ascii=False))
                 return
             if not self._admit_member_message(user):
                 return

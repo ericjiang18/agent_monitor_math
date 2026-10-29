@@ -65,8 +65,12 @@ class FormalizeSwitchTests(unittest.TestCase):
     def test_analyze_is_the_third_choice_and_starts_hidden(self) -> None:
         switch = HTML.split('id="formalize-switch"', 1)[1].split("</div>", 1)[0]
         radios = re.findall(r"<button[^>]*role=\"radio\"[^>]*>", switch)
-        self.assertEqual(len(radios), 4)
-        analyze, readability = radios[2], radios[3]
+        # Auto (easy_route) first, hidden until the judge is on for a signed-in account.
+        self.assertEqual(len(radios), 5)
+        auto = radios[0]
+        self.assertIn('data-auto="1"', auto)
+        self.assertIn(" hidden", auto)
+        analyze, readability = radios[3], radios[4]
         # Shown only once /api/engines advertises the analyze (readability) engine.
         for radio, kind in ((analyze, "analyze"), (readability, "readability")):
             self.assertIn(f'data-run-kind="{kind}"', radio)

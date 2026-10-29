@@ -1217,6 +1217,32 @@ always gets it, without the judge.
   on (`home`) and each turn's engine, verdict, reason and judge. The run
   record's `engine` is the current turn's.
 
+## Auto mode and mathematics only
+
+With the judge on (`AGENT_MONITOR_EASY_ROUTE_OPENROUTER_KEY`, see above), a
+signed-in account's start page offers **Auto** first among the modes, chosen
+by default (`proving-console-auto-mode-v1` in the browser; choosing a mode by
+hand turns it off, and choosing Auto again turns it back on). On Start the page
+asks `POST /api/route-request` (`easy_route.rate_request`: one Decisions API
+call with the questions `topic`, `formalize` and, with a manuscript link or
+files, `task`), then starts the run as the chosen mode would, with
+`auto_mode` in the request; the thread says "Auto mode: … (chosen by …)".
+
+- **Modes.** Without a manuscript: Informal + formalization unless the judge
+  rates the request clearly informal (P ≥ 0.6), then Informal only. With one:
+  Analyze or Readability when the judge picks it (P ≥ 0.5), Analyze by
+  default, or a proof when the request asks to prove something. A mode this
+  site does not offer becomes Informal + formalization. With the judge off or
+  failing, Auto picks the default (Analyze with a manuscript, else Informal +
+  formalization).
+- **Mathematics only.** A request the judge rates `not_math` with probability
+  at least 0.8 is refused with "Ansätze answers mathematics only …": a new
+  proof start (`/api/runs`, 400 with `not_math`, before any run start is
+  reserved) and a follow-up message (`/api/runs/<id>/chat`, rated with the
+  run's first problem as context; nothing is recorded and the message stays
+  in the box). Any doubt, error or timeout lets the request through. Guests
+  are never rated, and Analyze and Readability manuscripts are not.
+
 ## Analyze runs
 
 Analyze checks an existing manuscript (a link, pasted text or uploads) into a
