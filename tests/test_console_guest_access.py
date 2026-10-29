@@ -107,6 +107,8 @@ def guest_console(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # explicit endpoint while old worktree changes are being reconciled.
     monkeypatch.setattr(console, "PUBLIC_MODE", False, raising=False)
     monkeypatch.setattr(console.job_manager, "persisted_run_count", lambda _owner: 0)
+    # Each test's guests start with their judge ratings (easy_route) unused.
+    monkeypatch.setattr(console, "_GUEST_RATINGS", {})
     monkeypatch.setattr(settings, "ENV_PATH", env_file)
     monkeypatch.setattr(
         settings,

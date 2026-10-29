@@ -707,6 +707,10 @@ class KimiHomeTest(unittest.TestCase):
         for name in ("KIMI_API_KEY", "KIMI_API_BASE", "KIMI_BASE_URL"):
             self.enterContext(patch.dict(os.environ, {name: ""}))
         admin = {"id": 1, "is_admin": True, "email": "admin@example.test"}
+        # The real start_job below registers a job (its worker never runs):
+        # it is removed again, so no later test sees account 1 with a running job.
+        before = set(jobs._JOBS)
+        self.addCleanup(lambda: [jobs._JOBS.pop(key, None) for key in set(jobs._JOBS) - before])
         # Home Ansatz CGM (math_harness): refused before anything is written.
         with patch.object(jobs.threading, "Thread") as thread:
             with self.assertRaisesRegex(ValueError, "sponsored Kimi service"):

@@ -2741,6 +2741,8 @@ def start_job_routed(**kwargs: Any) -> dict[str, Any]:
     is ``start_job`` unchanged."""
     from agent_monitor import easy_route
 
+    # A verdict taken before (a guest's, outside the guest start lock).
+    given_verdict = kwargs.pop("easy_verdict", None)
     user = kwargs.get("user") or {}
     kind = str(kwargs.get("run_kind") or "prove").strip().lower()
     if (
@@ -2761,6 +2763,8 @@ def start_job_routed(**kwargs: Any) -> dict[str, Any]:
         why = "no text"
     elif easy_route.asks_for_cgm(text):
         why = "asked"
+    elif isinstance(given_verdict, dict):
+        verdict = given_verdict
     else:
         verdict = easy_route.judge(text)
     job = None
