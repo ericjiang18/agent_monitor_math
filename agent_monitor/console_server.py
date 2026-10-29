@@ -1972,6 +1972,8 @@ def _guest_easy_verdict(user: dict, engine: str, text: object) -> dict:
     request = str(text or "").strip()
     if (
         engine not in easy_route.HOMES
+        or engine not in guest_engine_allowlist()
+        or "plain" not in guest_engine_allowlist()
         or not easy_route.enabled()
         or not request
         or easy_route.asks_for_cgm(request)

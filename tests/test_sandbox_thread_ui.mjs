@@ -2926,10 +2926,12 @@ ${fn('startAutoRun')}`, ctx)
   // A mode this site does not offer: a proof instead.
   step('offered.analyze=false')
   r = await run('Check https://arxiv.org/abs/1', { enabled: true, math: true, mode: 'analyze' })
-  assert.deepEqual(r.started, [{ mode: 'formal', kind: 'prove' }])
+  assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
   step('offered.analyze=true')
-  // The judge off or failing: the default (a manuscript is analyzed, else informal + formalization).
+  // The judge off or failing: the default (a manuscript is analyzed, else informal only; formalization only when asked).
   r = await run('Prove 1+1=2.', { enabled: false })
+  assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
+  r = await run('Prove 1+1=2 in Lean.', { enabled: false })
   assert.deepEqual(r.started, [{ mode: 'formal', kind: 'prove' }])
   r = await run('https://arxiv.org/abs/1', null)
   assert.deepEqual(r.started, [{ mode: 'analyze', kind: 'analyze' }])
@@ -2945,7 +2947,7 @@ test('the routing notes are hidden in the thread, like other routine lines', () 
   assert.equal(hidden('Easy request: this turn runs on Plain (one call of the same model, on the same account) instead of Ansatz CGM, as rated by typesafe/jev-1.13: easy with probability 0.84, confidence 0.68. Write “use Ansatz CGM” in a message to have Ansatz CGM work on it.'), true)
   assert.equal(hidden('This turn runs on Ansatz CGM again, rated not easy by typesafe/jev-1.13.'), true)
   assert.equal(hidden('This turn runs on Ansatz CGM again, as asked.'), true)
-  assert.equal(hidden('Auto mode: Informal only (chosen by typesafe/jev-1.13).'), false)
+  assert.equal(hidden('Auto mode: Informal only (chosen by typesafe/jev-1.13).'), true)
   assert.equal(hidden('Feedback queued; it will run automatically as soon as the current harness finishes.'), false)
 })
 
