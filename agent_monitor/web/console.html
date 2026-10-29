@@ -92,6 +92,11 @@ body {
 .run-act { font-size: 10px; }
 .run-item:hover .run-del, .run-item.active .run-del,
 .run-item:hover .run-act, .run-item.active .run-act { opacity: 1; }
+/* A touch screen has no hover: a row's hidden ▶ / ■ / × would still take a
+   tap (a paid Continue, say). There they are on the open run's row only. */
+@media (hover: none) {
+  .run-item:not(.active) .run-del, .run-item:not(.active) .run-act { visibility: hidden; pointer-events: none; }
+}
 .run-del:hover { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
 .run-act.stop:hover { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
 .run-act.cont:hover { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
@@ -447,6 +452,7 @@ html.read-only-run .run-access-note { display: flex; }
 /* Make readable, and why it could not paste the document shown. */
 .proof-toolbar #make-readable-btn { white-space: nowrap; }
 .make-readable-note { max-width: 320px; color: var(--err); font-size: 10.5px; line-height: 1.35; }
+.make-readable-note.busy { color: var(--dim); }
 .make-readable-note:empty { display: none; }
 .writeup-chip[data-status="accepted"] { color: var(--verdict-checked); }
 .writeup-chip[data-status="rejected"] { color: var(--verdict-gap); }
@@ -679,7 +685,7 @@ html.guest-viewer body:not(.analysis-run):not(.readability-run) #sel-pop { displ
 .sandbox-thread .chat-msg.turn-card { align-self: stretch; gap: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--bg); overflow: clip; }
 .sandbox-thread .chat-msg.turn-card .turn-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 8px 14px; background: var(--bg2); border-bottom: 1px solid var(--border); }
 .sandbox-thread .chat-msg.turn-card .turn-head .title { font-size: 12px; font-weight: 700; }
-.sandbox-thread .chat-msg.turn-card .turn-head .sub { flex: 1; min-width: 0; font: 11px var(--mono); color: var(--dim); }
+.sandbox-thread .chat-msg.turn-card .turn-head .sub { flex: 1; min-width: min(12ch, 100%); overflow-wrap: anywhere; font: 11px var(--mono); color: var(--dim); }
 .sandbox-thread .chat-msg.turn-card .turn-dl { padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .sandbox-thread .chat-msg.turn-card .turn-dl:disabled { opacity: .4; cursor: not-allowed; }
 .sandbox-thread .chat-msg.turn-card .msg-text { display: block; white-space: normal; overflow-wrap: break-word; padding: 12px 22px 6px; }
@@ -1873,7 +1879,15 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
   .proof-toolbar .sub { flex-basis: 100%; }
   .lean-toolbar, .dag-toolbar { flex-wrap: wrap; gap: 8px; }
   .lean-body { display: flex; flex-direction: column; overflow-y: auto; }
+  /* Shown, the body is display:grid inline (refreshLeanView): one column here too. */
+  #lean-body[style*="grid"] { display: flex !important; flex-direction: column; }
+  .lean-toolbar select { max-width: 100%; min-width: 0; }
   .lean-editor, .lean-results { min-height: 45dvh; }
+  /* The next turn's model menu takes the short file note's room (Attach files
+     and Send stay on one line). */
+  .chat-compose:has(#dock-model:not([hidden])) .attachment-help-short:not(:empty) { display: none; }
+  .chat-compose .attach-button { white-space: nowrap; }
+  .dock-model select { max-width: min(46vw, 220px); }
   .chat-compose textarea, .lean-chat-compose textarea { font-size: 16px; }
   .guest-allowance { margin-top: 14px; font-size: 11px; }
 }
@@ -2410,7 +2424,7 @@ body { background:var(--bg); }
         <button type="button" class="run-runtime-change" id="run-runtime-change">Change in Settings</button>
       </div>
       <div class="guest-allowance" id="guest-allowance" hidden role="status"></div>
-      <div class="errbox" id="form-error"></div>
+      <div class="errbox" id="form-error" role="status" aria-live="polite"></div>
     </section>
 
     <!-- Session: Sandbox / Monitor -->
@@ -3098,6 +3112,8 @@ function closeRunProfile(restoreFocus=true){
 function modelVisual(id){
   const s=String(id||'').toLowerCase();
   if(s===CGM_MAX_MODEL)return {tone:'267 86% 64%',mark:'MX',glyph:'✦',provider:'Claude Code + Codex'};
+  // vendor/model is an OpenRouter model: it runs on the account's OpenRouter key, whoever made it.
+  if(/^[a-z0-9][\w.-]*\/[\w.:-]+$/.test(s)){ const v=modelVisual(s.split('/').slice(1).join('/')); return {...v,provider:'OpenRouter · '+s.split('/')[0]}; }
   if(s.includes('kimi'))return {tone:'48 96% 56%',mark:'K3',glyph:'🌙',provider:'Kimi K3 API'};
   if(s.includes('chat-latest'))return {tone:'154 48% 40%',mark:'AI',glyph:'◉',provider:'Latest ChatGPT Instant'};
   if(s.includes('deepseek'))return {tone:'188 88% 46%',mark:'DS',glyph:'🟦',provider:'DeepSeek API'};
@@ -3271,7 +3287,13 @@ function modelsForEngine(selected=ENGINES.find(x=>x.id===engine)){
   const mode=engineModelMode(selected);
   let models=mode==='codex_subscription'?[...(SETTINGS?.codex_models||[])]:mode==='claude_subscription'?[...(SETTINGS?.claude_models||[])]:mode==='api_key'?[...(SETTINGS?.api_models||[])]:[];
   if(CURRENT_USER?.guest&&mode==='api_key'&&!models.length)models=[...(SETTINGS?.model_presets||[]),SETTINGS?.default_model].filter(Boolean);
-  if(selected?.id==='kimi')return mode==='api_key'?[GUEST_POLICY?.default_model||'kimi-k3']:[];
+  if(selected?.id==='kimi'){
+    if(mode!=='api_key')return [];
+    // Kimi K3 runs on a Kimi key of the account's own or the sponsored service
+    // (a guest's: the hosted key): an account with neither is not offered it.
+    const usable=!SETTINGS||CURRENT_USER?.guest||SETTINGS.kimi_user_key_set||SETTINGS.sponsored_kimi_available||(SETTINGS.providers||[]).some(p=>p?.id==='kimi'&&p.api_key_set);
+    return usable?[GUEST_POLICY?.default_model||'kimi-k3']:[];
+  }
   // Guests analyze, and make readable, on sponsored Kimi K3 only. Otherwise
   // Readability offers the models Analyze does, unless the mode's policy names
   // the only ones the server runs for this viewer (Kimi K3 in public mode,
@@ -6129,7 +6151,9 @@ function attachmentLinks(items,rid){
   }).join('')+'</div>';
 }
 
-async function startRun(){
+async function startRun(opts){
+  // An Auto start under way: only its own hand-off goes on.
+  if(typeof autoStarting!=='undefined'&&autoStarting&&opts?.fromAuto!==true)return;
   if(CURRENT_USER?.guest&&GUEST_POLICY?.login_required){location.href=pcUrl('/login');return;}
   if((typeof autoActive==='function'&&autoActive())&&!(typeof autoPick!=='undefined'&&autoPick))return startAutoRun();
   if(runKindChoice()==='analyze')return startAnalyzeRun();
@@ -6167,28 +6191,100 @@ async function startRun(){
 /* Auto: Jev rates the request (is it mathematics, which mode), then the run
    starts as that mode would start it, saying in its thread what was chosen.
    A request that is clearly not mathematics starts nothing. */
+// Whether a request asks for a formalization (easy_route.asks_for_formalization):
+// it names Lean (the proof assistant, not "lean" in its English sense),
+// Mathlib or formalizing, in words it does not turn down ("do not use Lean").
+function autoAsksForLean(text){
+  const rest=String(text||'').replace(/\b(?:no|not|without|don'?t|do\s+not|never|skip|avoid|no\s+need\s+(?:for|to))\b[^.;:!?\n]{0,40}?\b(?:formali[sz](?:e|ed|es|ing|ation)|mathlib|lean(?:\s*4)?)\b/gi,' ');
+  return /\b(?:formali[sz](?:e|ed|es|ing|ation)|mathlib|lean\s*4)\b/i.test(rest)||/\b(?:Lean|LEAN)\b/.test(rest);
+}
+// The manuscript an Auto request comes with, and what is asked of it: files
+// (the text is the instruction), a link (alone, or in a sentence: the rest is
+// the instruction), or a pasted manuscript (long, with paragraphs or theorem
+// environments); kind '' when there is none. seen: whether Jev reads the
+// manuscript itself (pasted text), so the request's topic can be judged.
+function autoManuscriptText(text){
+  const value=String(text||'');
+  if(value.length<400)return false;
+  const paragraphs=value.split(/\n\s*\n/).filter(part=>part.trim()).length;
+  const named=(value.match(/\b(?:Theorem|Lemma|Proposition|Corollary|Definition|Claim|Proof)\b/g)||[]).length;
+  const asked=/\b(?:readable|rewrite|referee|review|analy[sz]e|manuscript|paper|notes?|write-?up)\b/i.test(value.slice(0,300));
+  // Jev decides what is asked of it (a long problem stays a proof): only a
+  // text shaped like a manuscript is offered to it as one.
+  return paragraphs>=3||named>=2||asked&&paragraphs>=2||/\\(?:documentclass|section\*?\{|begin\{(?:theorem|lemma|proof|proposition|definition)\})/.test(value);
+}
+// A pasted manuscript's leading instruction ("Make this more readable:" on a
+// line of its own): the instruction, and the rest the manuscript.
+function autoPastedSplit(text){
+  const value=String(text||''), at=value.indexOf('\n');
+  const first=at>0?value.slice(0,at).trim():'';
+  if(first&&first.length<=200&&/[:：]$|\b(?:readable|rewrite|referee|review|analy[sz]e|check)\b/i.test(first)&&!/\b(?:Theorem|Lemma|Proposition|Definition|Claim)\b/.test(first))
+    return {text:value.slice(at+1).trim(),focus:first.replace(/[:：]\s*$/,'')};
+  return {text:value,focus:''};
+}
+function autoSourceOf(text,files){
+  const value=String(text||'').trim();
+  if(files>0)return {kind:'upload',focus:value,seen:false};
+  const whole=analyzeLinkFromText(value);
+  if(whole)return {kind:'url',url:whole,focus:'',seen:false};
+  const found=/(?:https?:\/\/[^\s<>"'`]+|\barXiv:\s*\d{4}\.\d{4,5}(?:v\d{1,3})?)/i.exec(value);
+  const link=found?analyzeLinkFromText(found[0].replace(/[.,;:!?)\]]+$/,'').replace(/^arXiv:\s*/i,'arXiv:')):'';
+  if(link){
+    const focus=(value.slice(0,found.index)+' '+value.slice(found.index+found[0].length)).replace(/\s+/g,' ').replace(/[\s:,(-]+$/,'').trim();
+    return {kind:'url',url:link,focus,seen:false};
+  }
+  if(autoManuscriptText(value)){ const split=autoPastedSplit(value); return {kind:'paste',text:split.text,focus:split.focus,seen:true}; }
+  return {kind:'',focus:'',seen:true};
+}
+// The source an Auto start of Analyze or Readability uses (autoPick.source),
+// checked as analyzeSourceFromComposer checks the composer's.
+function autoComposerSource(source){
+  const copy=manuscriptSourceCopy();
+  if(source.kind==='url'){
+    const known=analyzeResolveCache.get(source.url);
+    if(known?.member_only&&viewerIsGuest())return {error:String(known.error||copy.guest)};
+    if(known&&known.ok===false&&!known.transient)return {error:String(known.error||copy.refused)+copy.change};
+    return {kind:'url',url:source.url};
+  }
+  if(source.kind==='upload')return {kind:'upload'};
+  const text=String(source.text||''), limit=Number(manuscriptPolicy()?.sources?.paste_chars)||20000;
+  if(text.length>limit)return {error:`Pasted manuscripts are limited to ${limit.toLocaleString('en-US')} characters${viewerIsGuest()?' for guests':''}`};
+  const format=guessManuscriptFormat(text);
+  return format?{kind:'paste',text,format}:{kind:'paste',text};
+}
+// One Auto start at a time: a second Start (or Ctrl/⌘+Enter) while Jev rates
+// the request, or while the run it picked starts, starts nothing more.
+let autoStarting=false;
 async function startAutoRun(){
+  if(autoStarting)return;
+  autoStarting=true;
+  try{ await startAutoRunOnce(); }
+  finally{ autoStarting=false; }
+}
+async function startAutoRunOnce(){
   const eb=$('form-error'); eb.style.display='none';
   if(initialAttachments.busy)return;
   const text=$('problem-text').value.trim(), files=initialAttachments.files.length;
   if(!text&&!files){ eb.style.display='block'; eb.textContent='Please enter a problem, paste a link, or attach files.'; return; }
-  const hasSource=!!analyzeLinkFromText(text)||files>0;
+  const source=autoSourceOf(text,files), hasSource=!!source.kind;
   $('start-btn').disabled=true;
   let rated=null;
   try{
-    const r=await fetch('/api/route-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({problem_text:text,has_source:hasSource})});
+    const r=await fetch('/api/route-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({problem_text:text,has_source:hasSource,source:source.kind==='upload'?'files':source.kind==='url'?'link':source.kind==='paste'?'text':''})});
     rated=r.ok?await r.json():null;
   }catch(e){ rated=null; }
   finally{ $('start-btn').disabled=false; }
-  if(rated&&rated.enabled&&rated.math===false){ eb.style.display='block'; eb.textContent=String(rated.message||'Ansätze answers mathematics only.'); return; }
+  if(rated&&rated.enabled&&rated.math===false){ eb.style.display='block'; eb.textContent=String(rated.message||'Ansätze answers mathematics only.'); if(eb.dataset)eb.dataset.refusal='1'; return; }
   // No answer (the judge off or failing): what Auto picks by default.
   // No formalization unless asked for (Lean, Mathlib, formalize): it is slow.
-  const proofMode=/\b(lean|mathlib|formali[sz](e|ed|es|ing|ation))\b/i.test(text)?'formal':'informal';
+  const proofMode=autoAsksForLean(text)?'formal':'informal';
   let mode=rated&&rated.enabled&&rated.mode?String(rated.mode):(hasSource?'analyze':proofMode);
   if((mode==='analyze'||mode==='readability')&&!runKindOffered(mode))mode=proofMode;
   if((mode==='analyze'||mode==='readability')&&!(analyzeLinkFromText(text)||files||text))mode=proofMode;
-  autoPick={mode,kind:mode==='analyze'||mode==='readability'?mode:'prove'};
-  try{ await startRun(); }
+  const manuscript=mode==='analyze'||mode==='readability';
+  // Analyze / Readability read the manuscript Auto found, with the rest of the text as the instruction.
+  autoPick={mode,kind:manuscript?mode:'prove',...(manuscript&&source.kind?{source,focus:String(source.focus||'').slice(0,2000)}:{})};
+  try{ await startRun({fromAuto:true}); }
   finally{ autoPick=null; renderFormalizeSwitch(); syncStartButton(); }
 }
 
@@ -6357,7 +6453,15 @@ async function continueRun(rid){
 const POLL_MIN_MS=2000, POLL_MAX_MS=10000, POLL_BACKOFF=1.6, POLL_SIDE_EVERY=6, RUNS_LIST_MS=5000;
 // pollEnded: the signature of the ended record whose closing reads were queued (once per end).
 // pollTurn: the turn signature (turnSignature) of the record the last poll read.
-let pollDelay=POLL_MIN_MS, pollSig='', pollTurn='', pollQuiet=0, pollActive=false, pollInFlight=false, pollLoop=null, pollListedEnd=null, pollEnded='';
+let pollDelay=POLL_MIN_MS, pollSig='', pollTurn='', pollQuiet=0, pollActive=false, pollInFlight=false, pollLoop=null, pollListedEnd=null, pollEnded='', pollMissing=0;
+// The run shown is gone (deleted in another tab or by an administrator): the
+// page goes back to the composer and says so.
+function runGone(rid){
+  if(runId!==rid)return;
+  runId=null; stopPolling(); resetProofView(); resetSandboxThread(); goLanding();
+  const eb=$('form-error'); if(eb){ eb.style.display='block'; eb.textContent='That run was deleted, so it is no longer shown.'; }
+  loadRuns(); syncRunToMonitor(null);
+}
 function consoleRunSignature(run){
   if(!run||typeof run!=='object')return '';
   const agents=Array.isArray(run.agents)?run.agents:[];
@@ -6387,7 +6491,7 @@ function nextPollDelay(current,changed){
 // chosen, Stop, a question or a re-check asked) starts afresh.
 function startPolling(resume=false){
   stopPolling();
-  pollActive=true; pollDelay=POLL_MIN_MS; pollQuiet=0; pollInFlight=false;
+  pollActive=true; pollDelay=POLL_MIN_MS; pollQuiet=0; pollInFlight=false; pollMissing=0;
   if(!resume){ pollSig=''; pollTurn=''; pollEnded=''; }
   const loop=async()=>{
     if(pollLoop!==loop)return;  // a newer startPolling() owns polling now
@@ -6537,6 +6641,10 @@ async function tick(){
   try{
     const r=await fetch('/api/run/'+encodeURIComponent(rid));
     if(runId!==rid)return true;
+    // A run deleted meanwhile (in another tab, say): twice "not found" in a
+    // row, and the page leaves it, saying so, instead of polling it forever.
+    pollMissing=r.status===404?(typeof pollMissing==='number'?pollMissing:0)+1:0;
+    if(pollMissing>=2&&typeof runGone==='function'){ runGone(rid); return false; }
     if(r.ok){
       run=await r.json();
       if(runId!==rid)return true;
@@ -6551,7 +6659,9 @@ async function tick(){
       pollDelay=nextPollDelay(pollDelay,changed);
       // No periodic refresh while a turn is awaited: its record is the one from before it (a PDF is not drawn anew).
       const refreshSide=changed||(!awaited&&pollQuiet%POLL_SIDE_EVERY===0);
-      $('run-meta').textContent=`${run.run_id} · ${awaited?'continuing':run.status} · $${Number(t.cost_usd||0).toFixed(2)}`;
+      // A cost the provider did not report (OpenRouter's, say) is not shown as $0.00.
+      const cost=t.cost_usd===null||t.cost_usd===undefined||!Number.isFinite(Number(t.cost_usd))?'':` · $${Number(t.cost_usd).toFixed(2)}`;
+      $('run-meta').textContent=`${run.run_id} · ${awaited?'continuing':run.status}${cost}`;
       setPill(run.status,(run.status||'')+' · '+(run.engine||''));
       updateChatStatus(run);
       if(awaited)showTurnAwaited();
@@ -6670,6 +6780,7 @@ function renderAutoPipeline(state){
     ?'<span class="pipeline-harness" title="Views derived from the analysis graph; Lean formalizes statements only">Analyze · derived views</span>'
     :proofEngine?'<span class="pipeline-harness" title="Informal proof engine; Lean and DAG use shared derived tools">Proof · '+escapeHtml(proofEngine)+' · Derived · shared Lean/DAG tools</span>':'';
   // A view still being derived is not shown (its chip appears once it is done, or needs attention).
+  const drawChips=()=>{ for(const chips of document.querySelectorAll?.('#sandbox-thread .turn-tools:not([hidden]) .turn-chips')||[])chips.innerHTML=box.innerHTML; };
   box.innerHTML=harness+stageNames.filter(name=>safeStatus(visualStatus(name))!=='running').map(name=>{
     const stage=stages[name]||{}; const status=safeStatus(visualStatus(name));
     const detail=String(stage.detail||status);
@@ -6679,6 +6790,7 @@ function renderAutoPipeline(state){
       :status;
     return '<span class="pipeline-chip '+status+'" title="'+escapeHtml(labels[name]+': '+stateLabel+(detail&&detail!==stateLabel?' — '+detail:''))+'"><span>'+labels[name]+'</span><span class="chip-state">'+escapeHtml(stateLabel)+'</span></span>';
   }).join('');
+  drawChips();
   const classify=all=>{
     // Stages turned off for an informal-only run, or never run because the
     // run was stopped, neither wait nor fail.
@@ -6733,7 +6845,10 @@ function updateChatStatus(run){
   }else if(readability){
     detail=readabilityUiReady()?readabilityProgressDetail(readabilityRunProgress(run)).slice(0,160):'';
   }else if(out){
-    const lines=out.split('\n').map(s=>s.trim()).filter(Boolean);
+    // The last line that says something: never a bare bracket or the end
+    // marker of an Ansatz CGM reply ("}", "=== END ===").
+    // A JSON reply (an Ansatz CGM stage's) has no line to show.
+    const lines=/^(?:\{\s*(?:"|\}|$)|\[\s*(?:\{|"|-?\d|\]|$))/.test(out)?[]:out.split('\n').map(s=>s.trim()).filter(line=>line&&/[A-Za-z0-9]/.test(line)&&!/^=+\s*[A-Z ]+\s*=+$/.test(line)&&!/^[\[\]{}(),:"'`]+$/.test(line));
     detail=(lines[lines.length-1]||'').slice(0,80);
   }
   $('chat-detail').title=isAnalysisRun(run)||readability?detail:'';
@@ -6742,7 +6857,8 @@ function updateChatStatus(run){
   else if(run.status==='interrupted'){ box.className='chat-status on interrupted'; $('chat-stage').textContent='Interrupted'; $('chat-detail').textContent=run.interruption?.reason||'Worker is no longer active'; }
   // A failed run states its own reason (a timeout, the CLI's error, a usage
   // limit, a reconnect request) rather than the log's last line.
-  else if(run.status==='failed'){ const why=String(run.error||'').trim()||detail; box.className='chat-status on err'; $('chat-stage').textContent='Failed'; $('chat-detail').textContent=why.length>240?why.slice(0,239)+'…':why; $('chat-detail').title=why; }
+  // On screen without the engine's process words ("… exited with code 1:"); the tooltip keeps the run error in full.
+  else if(run.status==='failed'){ const full=String(run.error||'').trim(), why=full.replace(/^[A-Za-z][\w .()-]{0,40} exited with code -?\d+:\s*/,'')||detail; box.className='chat-status on err'; $('chat-stage').textContent='Failed'; $('chat-detail').textContent=why.length>240?why.slice(0,239)+'…':why; $('chat-detail').title=full||why; }
   else { box.className='chat-status on'; $('chat-stage').textContent=label+'…'; $('chat-detail').textContent=detail; }
   // A question about a finished analysis or readable version is answered after the run.
   const recheck=run.analyze?.recheck, ask=run.analyze?.ask||run.readability?.ask;
@@ -6824,7 +6940,7 @@ function updateLiveChips(run){
     const names=recent.length?recent.map(r=>r.name):fallback;
     for(const t of names)chips.push(`<span class="lv tool" title="Recent tool call">⚙ ${escapeHtml(t)}</span>`);
   }
-  if(live.tool_calls)chips.push(`<span class="lv count" title="Tool calls so far">${live.tool_calls} tool calls</span>`);
+  if(live.tool_calls)chips.push(`<span class="lv count" title="Tool calls so far">${live.tool_calls} tool call${Number(live.tool_calls)===1?'':'s'}</span>`);
   if(live.iteration)chips.push(`<span class="lv count" title="Model call / iteration">iter ${live.iteration}</span>`);
   box.innerHTML=chips.join('');
   box.classList.toggle('on', chips.length>0);
@@ -6975,8 +7091,11 @@ function dockModelsFor(run){
     const supported=ENGINES.find(x=>x.id===id)?.supported_models||[];
     if(supported.length)models=models.filter(m=>supported.includes(m));
   }
+  // Its own model first, marked current: a run whose model is not recorded
+  // (or Max's) has no menu, since none of these could be called its own.
   const current=String(run.model||run.requested_model||'').trim();
-  if(current&&!/^max(-api)?$/i.test(current))models=[current,...models];
+  if(!current||/^max(-api)?$/i.test(current))return [];
+  models=[current,...models];
   return [...new Set(models.filter(Boolean).map(String))];
 }
 function syncDockModel(run){
@@ -7177,6 +7296,14 @@ async function saveSandboxProof(force=false){
     sandboxDirty=editor.value!==submitted;
     lastProofMtime=String(data.mtime)+':'+String(data.size||0);
     editorStatus(sandboxDirty?'Unsaved':'Saved',sandboxDirty?'':'saved');
+    // The thread follows the save at once (an earlier proof made the current
+    // one: the newer proof keeps its card), and the run is read again (its
+    // checks are marked stale) even when it no longer runs.
+    if(typeof lastSandboxRun!=='undefined'&&lastSandboxRun&&lastSandboxRun.run_id===runId&&Number.isFinite(Number(data.mtime))){
+      lastSandboxRun.sandbox_preview={...(lastSandboxRun.sandbox_preview||{}),mtime:Number(data.mtime)};
+      if(typeof renderThread==='function')renderThread();
+    }
+    if(typeof startPolling==='function'&&typeof pollActive!=='undefined'&&!pollActive)startPolling(true);
     return !sandboxDirty;
   }catch(error){
     editorStatus(String(error.message||error).slice(0,90),'error');
@@ -7492,7 +7619,11 @@ function applySandboxPreview(run){
   if(isReadabilityRun(run))return readabilityUiReady()?applyReadabilityPreview(run):showReadabilityPending();
   const live=run?.status==='running';
   const box=run?.sandbox_preview||{};
-  const text=String(box.text||liveSandboxText(run)||'').trim();
+  // A run that failed or was stopped before writing a proof has none: its
+  // engine's log lines (errors, a stage's JSON) are never shown, or edited,
+  // as one (they stay in the thread's Engine log).
+  const noProof=!live&&!box.has_proof_md&&!box.has_proof_tex&&['failed','stopped','interrupted'].includes(String(run?.status||''));
+  const text=noProof?'':String(box.text||liveSandboxText(run)||'').trim();
   const incomingRevision=String(box.revision||'missing');
   if(sandboxEditing&&incomingRevision!==sandboxRevision){
     if(sandboxDirty){
@@ -7526,7 +7657,7 @@ function applySandboxPreview(run){
   const pdfComing=!box.has_proof_md&&!!box.has_proof_tex&&!live&&!!text;
   // Named once the page's proof.md is current: the write-up's freshness follows it.
   if(box.has_proof_md) showProofDocFile(run,live);
-  else if(!pdfShown&&!pdfComing) $('proof-label').textContent=text?(live?'streaming…':'draft'):(live?'writing…':'waiting for proof.md…');
+  else if(!pdfShown&&!pdfComing) $('proof-label').textContent=text?(live?'streaming…':'draft'):(live?'writing…':noProof?'no proof written':'waiting for proof.md…');
   syncSandboxEditor();
   if(!sandboxEditing&&!pdfShown&&!pdfComing&&(text||problemItems(run).length))renderMarkdownIntoView(text,live&&!box.has_proof_md,run);
   return !!(text||problemItems(run).length);
@@ -7773,11 +7904,14 @@ function readableProofRun(run){
   return !(typeof isAnalysisRun==='function'&&isAnalysisRun(run))&&!(typeof isReadabilityRun==='function'&&isReadabilityRun(run));
 }
 function makeReadableSource(run){
-  if(!run||run.run_id!==runId||!readableProofRun(run)||run.status!=='finished'||!run.sandbox_preview?.has_proof_md||sandboxEditing)return null;
+  // Not while a turn works on it; a proof left by a turn that failed or was stopped since is still one.
+  if(!run||run.run_id!==runId||!readableProofRun(run)||['running','queued','starting','continuing'].includes(String(run.status||''))||!run.sandbox_preview?.has_proof_md||sandboxEditing)return null;
+  // A run the viewer only reads (another project member's): its thread would never show the card.
+  if(typeof canChangeRun==='function'&&!canChangeRun(run))return null;
   const entry=readabilityEngineEntry(), daily=readabilityPolicy()?.sponsored;
   if(!readabilityOffered()||!entry.available||entry.requires_login||readabilityPolicy().enabled===false)return null;
   if(viewerIsGuest()&&Number(GUEST_POLICY?.runs_remaining)<=0)return null;
-  if(readabilityRouteSponsored(readabilityModelChoice())&&daily&&(daily.available===false||Number(daily.remaining_today)<=0))return null;
+  if(readabilityRouteSponsored(threadReadableModel())&&daily&&(daily.available===false||Number(daily.remaining_today)<=0))return null;
   const writeup=proofDocShown(run)==='writeup'?runWriteup(run):null, text=writeup?writeup.text:sandboxText;
   return text.trim()?{text,name:writeup?'written proof':'proof.md'}:null;
 }
@@ -7804,10 +7938,18 @@ function makeReadable(){
 // policy, the guest's runs, today's sponsored runs), whatever the document.
 function readableFromThreadAllowed(){
   const entry=readabilityEngineEntry(), daily=readabilityPolicy()?.sponsored;
+  const shown=typeof lastSandboxRun!=='undefined'&&lastSandboxRun&&lastSandboxRun.run_id===runId?lastSandboxRun:null;
+  if(shown&&typeof canChangeRun==='function'&&!canChangeRun(shown))return false;
   if(!readabilityOffered()||!entry?.available||entry.requires_login||readabilityPolicy()?.enabled===false)return false;
   if(viewerIsGuest()&&Number(GUEST_POLICY?.runs_remaining)<=0)return false;
-  if(readabilityRouteSponsored(readabilityModelChoice())&&daily&&(daily.available===false||Number(daily.remaining_today)<=0))return false;
+  if(readabilityRouteSponsored(threadReadableModel())&&daily&&(daily.available===false||Number(daily.remaining_today)<=0))return false;
   return true;
+}
+// The model a readable version made from the thread runs on: the run's own
+// API model first (what made the proof), else the one Readability would pick.
+// The sponsored-limit checks and the start use this same one.
+function threadReadableModel(){
+  return (typeof readableRunModel==='function'?readableRunModel(typeof lastSandboxRun!=='undefined'?lastSandboxRun:null):'')||readabilityModelChoice();
 }
 /* The shown run's own API model (an OpenRouter vendor/model, say) when the
    preset list offers Readability none and the account has a provider key. */
@@ -7820,16 +7962,20 @@ function readableRunModel(run){
 /* A readable version of `text` made from the shown run, whose thread shows it
    at the bottom (the server links it: "Readable version: <run id>"). */
 async function startInlineReadable(text,name,button){
-  const rid=String(runId||''), note=$('make-readable-note');
-  const say=message=>{ if(note)note.textContent=message; else threadError(message); };
+  const rid=String(runId||''), tools=button?.closest?.('.turn-tools');
+  // An earlier card's Make readable speaks in that card; the live card's in its toolbar.
+  let note=$('make-readable-note');
+  if(tools){ note=tools.querySelector('.turn-note'); if(!note){ note=analyzeEl('span','turn-note make-readable-note'); note.setAttribute('role','status'); note.setAttribute('aria-live','polite'); tools.append(note); } }
+  const say=(message,busy=false)=>{ if(note){ note.textContent=message; note.classList.toggle('busy',!!busy); } else if(message&&!busy)threadError(message); };
   if(!rid||typeof text!=='string'||!text.trim())return;
   if(!readableFromThreadAllowed())return say('A readable version cannot be made right now.');
   const limit=Number(readabilityPolicy()?.sources?.paste_chars)||20000;
   if(text.length>limit)return say(`The ${name} has ${text.length.toLocaleString('en-US')} characters: too long for Readability (at most ${limit.toLocaleString('en-US')}${viewerIsGuest()?' for guests':''}).`);
-  const sponsoredOnly=readabilitySponsoredOnly(), model=sponsoredOnly?'':(readabilityModelChoice()||readableRunModel(lastSandboxRun));
+  // The run's own API model first (what made this proof), else the one Readability would pick.
+  const sponsoredOnly=readabilitySponsoredOnly(), model=sponsoredOnly?'':threadReadableModel();
   if(!model&&!sponsoredOnly)return say('Choose a model that Readability can use in Settings first.');
   if(button)button.disabled=true;
-  say('Making a readable version…');
+  say('Making a readable version…',true);
   try{
     const tuning=currentRunTuning();
     const request={run_kind:'readability',engine:'readability',model:model||null,auth_route:sponsoredOnly?'api_key':runAuthRoute(),
@@ -7852,6 +7998,8 @@ async function startInlineReadable(text,name,button){
    in its own card), saved as an edit is, and opened in the editor. */
 function restoreTurnProof(card){
   const text=card?._turnText; if(typeof text!=='string'||!text.trim())return;
+  // Never while a turn works on proof.md (its end would write over it).
+  if((typeof RUN_WORKING!=='undefined'&&RUN_WORKING.includes(String(lastSandboxRun?.run_id===runId?lastSandboxRun?.status||'':''))))return;
   const n=String(card.dataset.key||'').split('|')[1]||'';
   if(!window.confirm(`Make turn ${n}'s proof the current proof? The newer proof stays in its own card.`))return;
   if(!sandboxEditing)beginSandboxEdit();
@@ -8382,9 +8530,16 @@ function dagLookup(table,key){
 }
 function dagKindColor(kind,fallback){ return dagLookup(DAG_KIND_COLOR,kind)||dagLookup(DAG_KIND_COLOR,fallback)||'#64748b'; }
 function dagIsCgmEngine(engineId){ return ['kimi','math_harness'].includes(String(engineId||'').trim().toLowerCase()); }
+// Whether the run shown works on Ansatz CGM (its engine, or the engine an
+// easy request answered on Plain came from): else its graph is an execution trace.
+function dagShownRunIsCgm(){
+  const run=typeof lastSandboxRun!=='undefined'&&lastSandboxRun&&lastSandboxRun.run_id===runId?lastSandboxRun:null;
+  return !run||dagIsCgmEngine(run.engine)||dagIsCgmEngine(run.easy_route_home);
+}
 function dagObservationText(mode,view){
   if(mode==='analysis')return 'Verdicts of a model verifier · not a certificate';
   if(mode==='paper-map')return 'The manuscript’s structure, ranked by a model-written reading guide · not a verification';
+  if(mode==='engine'&&typeof dagShownRunIsCgm==='function'&&!dagShownRunIsCgm())return 'Execution trace · agent execution, not proof logic';
   if(mode==='engine')return view==='facts'
     ?'Model-verifier-accepted facts · not a Lean certificate'
     :'CGM search record · not proof logic · not a Lean certificate';
@@ -8401,7 +8556,8 @@ function setDagMode(mode,{refresh=true}={}){
   const engineView=$('dag-engine-view');
   if(engineView)engineView.hidden=dagMode!=='engine';
   const title=$('dag-title');
-  if(title)title.textContent={engine:'Informal · CGM',informal:'Informal outline',formal:'Formal · Lean graph',compiler:'Compiler facts',analysis:'Manuscript','paper-map':'Paper map'}[dagMode];
+  const cgm=typeof dagShownRunIsCgm!=='function'||dagShownRunIsCgm();
+  if(title)title.textContent={engine:cgm?'Informal · CGM':'Execution trace',informal:'Informal outline',formal:'Formal · Lean graph',compiler:'Compiler facts',analysis:'Manuscript','paper-map':'Paper map'}[dagMode];
   setDagObservation(['engine','compiler','analysis','paper-map'].includes(dagMode),dagObservationText(dagMode,dagEngineView));
   const filters=$('dag-filters'); if(filters&&dagMode!=='analysis')filters.hidden=true;
   closeDagDetail();
@@ -8531,6 +8687,8 @@ function showDagUnavailable(state){
 }
 async function refreshDagView(){
   const requestedRunId=runId, requestedMode=dagMode, requestedEngineView=dagEngineView, refreshToken=++dagRefreshSeq;
+  // The engine view's name follows the run shown (another run may be shown in the same mode).
+  const dagTitle=$('dag-title'); if(dagTitle&&requestedMode==='engine'&&typeof dagShownRunIsCgm==='function')dagTitle.textContent=dagShownRunIsCgm()?'Informal · CGM':'Execution trace';
   setDagObservation(['engine','compiler','analysis','paper-map'].includes(requestedMode),dagObservationText(requestedMode,requestedEngineView));
   if(!requestedRunId){ dagDisplayedRunId=''; dagDisplayedMode=''; dagDisplayedEngineView=''; $('dag-empty').style.display='block'; $('dag-stage').style.display='none'; dagStatus('select a run'); return; }
   if(dagDisplayedRunId!==requestedRunId||dagDisplayedMode!==requestedMode||(requestedMode==='engine'&&dagDisplayedEngineView!==requestedEngineView)){
@@ -8564,10 +8722,16 @@ async function refreshDagView(){
   dagRunKey='';
   $('dag-empty').style.display='block'; $('dag-stage').style.display='none';
   const stage=requestedMode==='engine'?null:lastSandboxRun?.auto_pipeline?.stages?.[requestedMode==='informal'?'informal_dag':'formal_dag'];
-  // A run stopped before its draft builds no graph by itself.
+  // A run stopped before its draft builds no graph by itself; nor one that
+  // failed, or whose pass skipped the graph (nothing to graph), once it no
+  // longer works: nothing is coming then.
+  const runWorks=['running','queued','starting','continuing'].includes(String(lastSandboxRun?.status||''));
+  const nothingComing=stage&&!runWorks&&['skipped','error','failed'].includes(String(stage.status||''))&&lastSandboxRun?.auto_pipeline?.status!=='running';
   $('dag-empty').innerHTML=stage?.status==='stopped'
     ?'<div style="font-size:28px;opacity:.4">◇</div><div>'+(lastSandboxRun.auto_pipeline.run_kind==='analyze'?'Analysis stopped · no report to graph.':'Run stopped · no proof draft to graph.')+'</div>'
-    :'<div style="font-size:28px;opacity:.4">◆</div><div>Generating the proof graph automatically…<br/>No manual action is needed.</div>';
+    :nothingComing
+      ?'<div style="font-size:28px;opacity:.4">◇</div><div>'+(lastSandboxRun.auto_pipeline.run_kind==='analyze'?'No report to graph.':'No proof draft to graph.')+(stage.detail?'<br/>'+escapeHtml(String(stage.detail)):'')+'</div>'
+      :'<div style="font-size:28px;opacity:.4">◆</div><div>Generating the proof graph automatically…<br/>No manual action is needed.</div>';
   dagStatus(stage?.detail||(requestedMode==='engine'?'waiting for engine activity':'waiting for automatic generation'));
 }
 function dagLayers(graph){
@@ -9378,12 +9542,21 @@ function syncLeanPipelineEmptyState(state){
   }
   if(!['error','skipped','stale'].includes(status))return false;
   const detail=String(stage.detail||'The translator stopped before producing Proof.lean');
+  const sentence=detail.replace(/[.\s]+$/,'')+'.';
+  const title=$('lean-progress-title'), message=$('lean-progress-detail');
+  // Skipped for a run that left no proof draft: nothing failed, there was nothing to formalize.
+  const noDraft=status==='skipped'&&!outcome&&['failed','stopped','interrupted'].includes(String(lastSandboxRun?.status||''));
+  if(noDraft){
+    setLeanBadge('none'); leanStatus(sentence);
+    if(title)title.textContent='Nothing to formalize';
+    if(message)message.textContent=sentence+' Lean runs on a proof draft; this run has none.';
+    return true;
+  }
   setLeanBadge('failed');
   leanStatus('✗ '+detail);
-  const title=$('lean-progress-title'), message=$('lean-progress-detail');
   const beforeSource=['error','skipped','stale'].includes(lifecycle)&&!outcome;
   if(title)title.textContent=beforeSource?'Formal translation failed':'Formal verification failed';
-  if(message)message.textContent=(beforeSource?'No Proof.lean was produced. ':'Lean did not verify this proof. ')+detail+(viewerIsAdmin()||viewerHasFullAccess()?' Retry Verify, or choose an available Harness.':' Retry Verify.');
+  if(message)message.textContent=(beforeSource?'No Proof.lean was produced. ':'Lean did not verify this proof. ')+sentence+(viewerIsAdmin()||viewerHasFullAccess()?' Retry Verify, or choose an available Harness.':' Retry Verify.');
   return true;
 }
 function leanEditorText(){ return $('lean-code')?.value||''; }
@@ -10039,6 +10212,23 @@ function threadChatNodes(){ const {above,below}=threadChatBoxes(); return [...(a
    or else the first line after it ended. Without turns (an older run), the
    chat is split at its first message sent after the problem (threadSplit). */
 function threadLayout(items,run,kind){
+  const parts=threadLayoutParts(items,run,kind);
+  // Under the card, whenever they came: a readable version (made from the
+  // thread as it stands: the bottom of the thread), and an analysis's closing
+  // summary (it speaks of the report the card shows). In time order with
+  // whatever is there.
+  const under=item=>item.kind==='readable'||(kind==='analyze'&&item.kind==='notice'&&/^Analysis (?:finished|stopped|failed)\b/.test(String(item.text||'')));
+  const moving=parts.above.filter(under);
+  if(!moving.length)return parts;
+  const time=ts=>{ const t=Date.parse(ts||''); return Number.isFinite(t)?t:NaN; };
+  const below=[...parts.below];
+  for(const item of moving){
+    const at=below.findIndex(other=>time(other.ts)>time(item.ts));
+    below.splice(at<0?below.length:at,0,item);
+  }
+  return {above:parts.above.filter(item=>!under(item)),below};
+}
+function threadLayoutParts(items,run,kind){
   const turns=kind==='prove'&&Array.isArray(run?.proof_turns)?run.proof_turns.filter(t=>t&&typeof t==='object'&&Number.isFinite(Number(t.n))):[];
   if(!turns.length){ const [above,below]=threadSplit(items); return {above,below}; }
   const time=ts=>{ const t=Date.parse(ts||''); return Number.isFinite(t)?t:NaN; };
@@ -10046,17 +10236,27 @@ function threadLayout(items,run,kind){
   // The live card is the latest turn that works on the proof; an answer-only
   // turn (easy_route: Plain answering about a proof Ansatz CGM wrote) leaves
   // the proof as it was, so its answer is a card of its own.
-  const live=turns.filter(t=>!t.answer_only).pop()||turns[turns.length-1];
+  // A turn that ended without a proof of its own (stopped or failed before
+  // writing one, or one that left it as it was) neither is the live card nor
+  // has a card: the live card stays with the last turn that made the proof.
+  const proofTurns=turns.filter(t=>!t.answer_only);
+  const live=[...proofTurns].reverse().find(t=>t.file||!t.finished_at)||proofTurns[proofTurns.length-1]||turns[turns.length-1];
+  // proof.md written after that turn ended, outside any turn (an earlier
+  // proof made the current one, or an edit): that turn's own proof keeps a
+  // card of its own, and the live card shows proof.md as it is now.
+  const written=Number(run?.sandbox_preview?.mtime||0)*1000, liveEnd=time(live.finished_at);
+  const duringTurn=turns.some(t=>t!==live&&written>=time(t.started_at)&&(!Number.isFinite(time(t.finished_at))||written<=time(t.finished_at)+2000));
+  const edited=Number.isFinite(liveEnd)&&written>liveEnd+2000&&!duringTurn;
   const cards=[];
   for(const [i,t] of turns.entries()){
-    if(t===live||!t.file)continue;
+    if(!t.file||(t===live&&!edited))continue;
     let at=firstAfter(items,time(t.started_at),true);
     const ended=firstAfter(items,time(t.finished_at),false);
     if(at<0||ended>=0&&ended<at)at=ended;
     // The proof a run had before its turns were kept (proof_turns "earlier"):
     // just before the message that started the next turn.
     const nextAt=t.earlier?time(turns[i+1]?.started_at):NaN;
-    if(Number.isFinite(nextAt)){ let sent=-1; items.forEach((item,k)=>{ if(item.kind==='user'&&time(item.ts)<=nextAt)sent=k; }); if(sent>=0)at=sent; }
+    if(Number.isFinite(nextAt)){ const after=time(t.finished_at); let sent=-1; items.forEach((item,k)=>{ if(item.kind==='user'&&time(item.ts)<=nextAt&&!(time(item.ts)<after))sent=k; }); if(sent>=0)at=sent; }
     if(at<0)at=items.length;
     cards.push({at,item:{key:'turn|'+t.n+'|'+t.file+'|'+(t.chars||0),kind:'turn',n:Number(t.n),ts:String(t.finished_at||''),file:String(t.file),status:String(t.status||''),answer:!!t.answer_only,label:t.answer_only?'Answer':'Proof',text:'',url:'',attachments:[]}});
   }
@@ -10111,9 +10311,14 @@ function derivedTurnWait(run){
   const pass=Date.parse(pipe?.started_at||'');
   if(Number.isFinite(pass)&&pass>=start)return null;
   if(RUN_WORKING.includes(String(run.status||''))&&!live.finished_at)return {n:Number(live.n),working:true};
-  // Ended: only a new proof this turn wrote, that no pass has taken up yet.
-  const written=Number(run.sandbox_preview?.mtime||0)*1000;
-  if(pipe&&pipe.proof_current===false&&String(pipe.status||'')!=='stale'&&written>=start)return {n:Number(live.n),working:false};
+  // Ended: only a new proof this turn wrote, that no pass has taken up yet,
+  // and only while one is coming: the server starts one when a turn ends
+  // finished (or failed, having changed the proof), within moments; a turn
+  // stopped or cut by a restart starts none, and after two minutes none is
+  // waited for (the views on hand show, as they are).
+  const written=Number(run.sandbox_preview?.mtime||0)*1000, ended=Date.parse(live.finished_at||'');
+  const coming=['finished','failed'].includes(String(live.status||''))&&Number.isFinite(ended)&&Date.now()-ended<120000;
+  if(coming&&pipe&&pipe.proof_current===false&&String(pipe.status||'')!=='stale'&&written>=start)return {n:Number(live.n),working:false};
   return null;
 }
 // The pipeline state the card's chips and the Lean / DAG dots show: while
@@ -10259,6 +10464,7 @@ function threadReadableNode(item){
   const sub=analyzeEl('span','sub','working…');
   head.append(analyzeEl('span','title','Readable version'),sub);
   const download=analyzeEl('button','turn-dl','⬇ Download'); download.type='button'; download.disabled=true;
+  download.setAttribute('aria-label','Download the readable version'); node.dataset.rid=String(item.rid||'');
   const open=analyzeEl('button','readable-open','Notation & map ↗'); open.type='button';
   open.title='Open the readable version on its own, with its Notation and Map';
   open.onclick=event=>{ event.stopPropagation(); selectRun(item.rid); goSession('sandbox'); };
@@ -10287,7 +10493,9 @@ async function threadReadablePoll(node,item,body,sub,download,round){
       download.disabled=false;
       if(!node.querySelector('.msg-more')&&(text.length>900||text.split('\n').length>14))threadMoreButton(node,body,item.key);
     }else if(!text&&(done||!rec)){
-      body.textContent=''; body.append(analyzeEl('span','turn-wait',!rec?'This readable version could not be read.':status==='finished'?'No readable version was written.':'The readable version did not finish ('+status+').'));
+      // A failed one says why (the run's own error, as its record has it).
+      const why=String(rec?.error||'').replace(/^\s*[A-Za-z][\w .()-]{0,40} exited with code -?\d+:\s*/,'').trim();
+      body.textContent=''; body.append(analyzeEl('span','turn-wait',!rec?'This readable version could not be read.':status==='finished'?'No readable version was written.':'The readable version did not finish ('+status+')'+(why?': '+(why.length>300?why.slice(0,299)+'…':why):'.')));
     }
   });
   if(rec&&!done&&round<720)threadReadablePoll(node,item,body,sub,download,round+1);
@@ -10308,11 +10516,14 @@ function threadTurnNode(item){
   const body=analyzeEl('div','msg-text md-view turn-doc'); body.id='thread-msg-'+(++threadIds);
   body.append(analyzeEl('span','turn-wait','Loading this turn\'s '+what+'…'));
   node.setAttribute('role','article'); node.setAttribute('aria-label',(item.answer?'Answer':'Proof')+', turn '+item.n);
+  // Focusable: Enter or Space shows its tools, as a click does.
+  node.tabIndex=0; node.title='Click for this '+what+'’s tools';
   // Clicked, the card shows the proof card's tools: its status, Make readable,
   // Edit (this proof made the current one) and the run's views.
   const tools=analyzeEl('div','turn-tools'); tools.hidden=true;
   const tool=(cls,label,title)=>{ const b=analyzeEl('button',cls,label); b.type='button'; if(title)b.title=title; return b; };
-  tools.append(analyzeEl('span','turn-chips'),tool('turn-readable','¶ Make readable','A readable version of this '+what+', at the bottom of the thread'));
+  const chips=analyzeEl('span','turn-chips'); chips.title='The checks of the current proof (Lean, the DAG, coverage)';
+  tools.append(chips,tool('turn-readable','¶ Make readable','A readable version of this '+what+', at the bottom of the thread'));
   if(!item.answer)tools.append(tool('turn-restore','✎ Edit','Make turn '+item.n+'\'s proof the current proof, then edit it'));
   for(const [view,label] of [['lean','Lean'],['monitor','Monitor'],['dag','DAG']]){ const b=tool('turn-view',label,'Open '+(view==='lean'?'Lean Verification':label)); b.dataset.gotoView=view; tools.append(b); }
   node.append(head,tools,body);
@@ -10351,7 +10562,7 @@ function threadTurnDownload(button){
   const node=button.closest('.chat-msg.turn-card'), text=node?._turnText; if(typeof text!=='string')return;
   const n=String(node.dataset.key||'').split('|')[1]||'', tex=/\.tex$/i.test(String(node.dataset.key||'').split('|')[2]||'');
   const url=URL.createObjectURL(new Blob([text],{type:tex?'application/x-tex':'text/markdown'}));
-  const a=document.createElement('a'); a.href=url; a.download=node.classList.contains('readable-card')?'readable-version.md':(node.classList.contains('turn-answer')?'answer':'proof')+'-turn-'+n+(tex?'.tex':'.md');
+  const a=document.createElement('a'); a.href=url; a.download=node.classList.contains('readable-card')?'readable-version'+(node.dataset.rid?'-'+String(node.dataset.rid).slice(-10):'')+'.md':(node.classList.contains('turn-answer')?'answer':'proof')+'-turn-'+n+(tex?'.tex':'.md');
   document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function threadMoreButton(node,text,key){
@@ -10740,13 +10951,26 @@ function threadSelPopCheck(){
       }
       // A click on the card (not a link, not a text selection) shows or hides its tools.
       if(event.target.closest?.('a, button, input, textarea, select')||String(window.getSelection?.()||''))return;
+      toggleTurnTools(card);
+    });
+    // From the keyboard: the card itself focused, Enter or Space.
+    sc.addEventListener('keydown',event=>{
+      if(event.key!=='Enter'&&event.key!==' ')return;
+      const card=event.target.closest?.('.chat-msg.turn-card:not(.readable-card)');
+      if(!card||event.target!==card)return;
+      event.preventDefault(); toggleTurnTools(card);
+    });
+    const toggleTurnTools=card=>{
       const tools=card.querySelector('.turn-tools'); if(!tools)return;
       threadRedraw('keep',()=>{
         tools.hidden=!tools.hidden;
         const chips=tools.querySelector('.turn-chips'); if(chips&&!tools.hidden)chips.innerHTML=$('auto-pipeline-status')?.innerHTML||'';
         tools.querySelectorAll('.turn-readable').forEach(b=>{ b.hidden=!readableFromThreadAllowed(); });
+        // While a turn works, it writes proof.md itself: an earlier proof is made the current one after it.
+        const busy=(typeof RUN_WORKING!=='undefined'&&RUN_WORKING.includes(String(lastSandboxRun?.run_id===runId?lastSandboxRun?.status||'':'')));
+        tools.querySelectorAll('.turn-restore').forEach(b=>{ b.disabled=busy; b.title=busy?'A turn is working on the proof: wait for it to end, then make this proof the current one':'Make turn '+(String(card.dataset.key||'').split('|')[1]||'')+'\'s proof the current proof, then edit it'; });
       });
-    });
+    };
     if(typeof ResizeObserver==='function'){
       const observer=new ResizeObserver(threadResized);
       for(const el of [sc,$('thread-problem'),$('chat-msgs'),sc.querySelector('.proof-panel'),$('ask-list'),$('chat-later')])if(el)observer.observe(el);
@@ -10773,7 +10997,8 @@ for(const id of ['chat-input','ask-input'])$(id)?.addEventListener('input',event
 
 /* ── chat ── */
 let lastChatKey='';
-function fmtTs(ts){ try{ const d=new Date(ts); return isNaN(d)?'':d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(e){return '';} }
+// A time in the thread: with its date when it is not today's (a run continued days later reads in order).
+function fmtTs(ts){ try{ const d=new Date(ts); if(isNaN(d))return ''; const time=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}); return d.toDateString()===new Date().toDateString()?time:d.toLocaleDateString([], {month:'short',day:'numeric'})+' '+time;}catch(e){return '';} }
 // The run's chat into the thread. sent: the reply to a message just sent
 // (the server's copy of that message, or true): its message is brought into
 // view, and no read of the chat asked before it is drawn over it.
@@ -10888,7 +11113,7 @@ function setPill(s,t){ const el=$('live-pill'); el.className='pill '+(s||''); el
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 $('start-btn').onclick=startRun;
-$('problem-text').onkeydown=e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='Enter')startRun(); };
+$('problem-text').onkeydown=e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!$('start-btn').disabled)startRun(); };
 $('engine-select').onchange=()=>{
   const next=ENGINES.find(x=>x.id===$('engine-select').value);
   if(next?.requires_login){$('engine-select').value=engine;showEngineSignIn(next.label);return;}
@@ -11149,7 +11374,11 @@ function applyRunKindComposer(){
   try{ const saved=localStorage.getItem(READABILITY_AUDIENCE_KEY); if([...select.options].some(option=>option.value===saved))select.value=saved; }catch(e){}
   select.onchange=()=>{ try{ localStorage.setItem(READABILITY_AUDIENCE_KEY,select.value); }catch(e){} };
 })();
-$('problem-text').addEventListener('input',()=>{ if(manuscriptMode())refreshAnalyzeSource(); });
+$('problem-text').addEventListener('input',()=>{
+  if(manuscriptMode())refreshAnalyzeSource();
+  // A refusal ("mathematics only") speaks of the text it was given: it goes once the text changes.
+  const eb=$('form-error'); if(eb&&eb.dataset.refusal){ eb.style.display='none'; eb.textContent=''; delete eb.dataset.refusal; }
+});
 for(const id of ['analyze-focus','readability-focus'])$(id).addEventListener('keydown',event=>{ if(event.key==='Enter'){ event.preventDefault(); startRun(); } });
 
 /* A link is one line: an http(s) URL, an arXiv identifier, or a bare
@@ -11178,6 +11407,8 @@ const MANUSCRIPT_SOURCE_COPY={
 function manuscriptSourceCopy(){ return MANUSCRIPT_SOURCE_COPY[runKindChoice()==='readability'?'readability':'analyze']; }
 // The one source of the next analysis (or readable version), or the plain refusal the server would give.
 function analyzeSourceFromComposer(){
+  const auto=(typeof autoPick!=='undefined'&&autoPick)?autoPick.source:null;
+  if(auto&&auto.kind)return autoComposerSource(auto);
   const text=$('problem-text').value, link=analyzeLinkFromText(text), files=initialAttachments.files.length, copy=manuscriptSourceCopy();
   const kinds=[link?'link':'',!link&&text.trim()?'text':'',files?'uploads':''].filter(Boolean);
   if(!kinds.length)return {error:copy.empty};
@@ -11195,6 +11426,12 @@ function analyzeSourceFromComposer(){
   if(text.length>limit)return {error:`Pasted manuscripts are limited to ${limit.toLocaleString('en-US')} characters${viewerIsGuest()?' for guests':''}`};
   const format=guessManuscriptFormat(text);
   return format?{kind:'paste',text,format}:{kind:'paste',text};
+}
+// The instruction an Auto start gives Analyze / Readability (the request's
+// words besides its manuscript), else the mode's own focus box.
+function autoFocusOr(value){
+  const auto=(typeof autoPick!=='undefined'&&autoPick);
+  return String(auto&&typeof auto.focus==='string'?auto.focus:(value||'')).trim();
 }
 function analyzeEl(tag,cls,text){ const node=document.createElement(tag); if(cls)node.className=cls; if(text!==undefined)node.textContent=String(text); return node; }
 const ANALYZE_CONNECTOR_LABEL={arxiv:'arXiv',github:'GitHub',openai_math:'openai/math',https:'File link'};
@@ -11462,7 +11699,7 @@ async function startAnalyzeRun(){
   $('start-btn').disabled=true; setPill('running','starting…');
   initialAttachments.lock(true);
   try{
-    const tuning=currentRunTuning(), focus=$('analyze-focus').value.trim();
+    const tuning=currentRunTuning(), focus=typeof autoFocusOr==='function'?autoFocusOr($('analyze-focus').value):String($('analyze-focus').value||'').trim();
     const request={run_kind:'analyze',engine:'analyze',model:model||null,auth_route:sponsoredOnly?'api_key':runAuthRoute(),
       reasoning_effort:tuning.reasoning_effort,speed_mode:tuning.speed_mode,formalize:$('analyze-formalize').checked===true};
     if(focus)request.analyze={focus};
@@ -11590,7 +11827,7 @@ async function startReadabilityRun(){
   $('start-btn').disabled=true; setPill('running','starting…');
   initialAttachments.lock(true);
   try{
-    const tuning=currentRunTuning(), focus=$('readability-focus').value.trim();
+    const tuning=currentRunTuning(), focus=typeof autoFocusOr==='function'?autoFocusOr($('readability-focus').value):String($('readability-focus').value||'').trim();
     const request={run_kind:'readability',engine:'readability',model:model||null,auth_route:sponsoredOnly?'api_key':runAuthRoute(),
       reasoning_effort:tuning.reasoning_effort,speed_mode:tuning.speed_mode,readability:{audience:readabilityAudience()}};
     if(focus)request.readability.focus=focus;

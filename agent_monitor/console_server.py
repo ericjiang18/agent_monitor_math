@@ -2160,7 +2160,12 @@ def _list_workspace_files(ws: Path) -> list[dict]:
     extracted-text cache ``attachments/.text/``, scratch space)."""
     out = []
     resolved_ws = ws.resolve()
-    for p in sorted(resolved_ws.rglob("*")):
+    try:
+        # A run deleted (or a file removed) while it is listed: what is left.
+        paths = sorted(resolved_ws.rglob("*"))
+    except OSError:
+        paths = []
+    for p in paths:
         if p.is_symlink() or not p.is_file() or p.name.startswith("."):
             continue
         try:
@@ -2176,11 +2181,15 @@ def _list_workspace_files(ws: Path) -> list[dict]:
         # skip bulky binary intermediates except pdf
         if p.suffix in {".aux", ".out", ".synctex.gz", ".fls", ".fdb_latexmk"}:
             continue
+        try:
+            stat = p.stat()
+        except OSError:
+            continue
         out.append(
             {
                 "path": rel,
-                "size": p.stat().st_size,
-                "mtime": p.stat().st_mtime,
+                "size": stat.st_size,
+                "mtime": stat.st_mtime,
                 "kind": "pdf" if p.suffix == ".pdf" else ("text" if p.suffix in _TEXT_SUFFIXES else "binary"),
             }
         )
@@ -4639,8 +4648,12 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 # Off, or a guest past its ratings this hour: Auto takes its default.
                 self._send(200, json.dumps({"enabled": False}))
                 return
+            # The manuscript's kind: pasted text the judge reads with the
+            # request; files or a link it does not (an older page names none).
             rated = easy_route.rate_request(
-                str(body.get("problem_text") or "")[:20_000], has_source=bool(body.get("has_source"))
+                str(body.get("problem_text") or "")[:20_000],
+                has_source=bool(body.get("has_source")),
+                source_seen=str(body.get("source") or "") == "text",
             )
             self._send(200, json.dumps({
                 "enabled": True,

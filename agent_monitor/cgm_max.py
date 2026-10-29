@@ -296,7 +296,8 @@ def plan_for_api(user: Mapping[str, Any] | None) -> dict[str, Any]:
         plan["reason"] = (
             "Max (API) needs both an Anthropic and an OpenAI API key; add your "
             + " and ".join(missing)
-            + " key in Settings"
+            + (" keys" if len(missing) > 1 else " key")
+            + " in Settings"
         )
         return plan
     plan["available"] = True

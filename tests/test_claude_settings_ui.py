@@ -203,8 +203,8 @@ console.log(JSON.stringify([cancelled,SETTINGS.account_runtime,SETTINGS_RUNTIME_
         self.assertEqual(json.loads(result.stdout), [["api", None, 1, 1], "claude", None])
 
     def test_start_run_has_one_declaration_and_one_response_decode(self) -> None:
-        self.assertEqual(HTML.count("async function startRun()"), 1)
-        start = HTML.index("async function startRun()")
+        self.assertEqual(HTML.count("async function startRun(opts)"), 1)
+        start = HTML.index("async function startRun(opts)")
         end = HTML.index("/* ── runs", start)
         fragment = HTML[start:end]
         self.assertEqual(fragment.count("const d=await r.json()"), 1)

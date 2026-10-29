@@ -219,7 +219,7 @@ const CONSOLE_FUNCTIONS = [
   'writeupBody', 'proofDocShown', 'showProofDocFile', 'syncProofDocSwitch', 'chooseProofDoc', 'writeupBannerHtml', 'closureCitedLemmas',
   'renderMarkdownIntoView', 'showProofMd', 'refreshProofPreview', 'showProofPdfDoc',
   // Make readable, and the Readability policy and model choice it follows.
-  'makeReadableSource', 'readableProofRun', 'readableRunModel', 'syncMakeReadable', 'makeReadable', 'dagIsCgmEngine', 'readabilityEngineEntry', 'readabilityPolicy',
+  'makeReadableSource', 'readableProofRun', 'readableRunModel', 'threadReadableModel', 'syncMakeReadable', 'makeReadable', 'dagIsCgmEngine', 'readabilityEngineEntry', 'readabilityPolicy',
   'readabilityOffered', 'viewerIsAdmin', 'viewerIsGuest', 'readabilitySponsoredOnly', 'readabilityRouteSponsored', 'engineModelMode',
   'selectedAccountRuntime', 'readabilityModelChoice', 'modelsForEngine',
 ]
@@ -1065,9 +1065,12 @@ test('Make readable is offered for a finished proof run, as the Readability poli
     return !page.button().hidden
   }
   assert.equal(shown({}), true)
-  // Not while it runs, not without proof.md; any proof harness (an easy request answered on Plain, Codex, Claude Code).
-  assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { status: 'running' })), false)
-  assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { status: 'failed' })), false)
+  // Not while a turn works on it, not without proof.md; any proof harness (an easy request answered on Plain, Codex, Claude Code).
+  for (const status of ['running', 'queued', 'continuing'])
+    assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { status })), false, status)
+  // A proof a later turn left as it was when it failed or was stopped is still one.
+  for (const status of ['failed', 'stopped'])
+    assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { status })), true, status)
   assert.equal(shown({}, cgmRun(undefined, {}, { has_proof_md: false })), false)
   for (const engine of ['math_harness', 'plain', 'codex', 'claude'])
     assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { engine })), true, engine)
@@ -1140,6 +1143,10 @@ test('Make readable on a run of an API model the preset list does not have (an O
   assert.equal(page.context.readableRunModel(null), '')
   page.run('SETTINGS={...SETTINGS,configured_providers:[]}')
   assert.equal(page.context.readableRunModel(run), '')
-  // The page asks for it when Readability's own choice is empty.
-  assert.match(fn('startInlineReadable'), /model=sponsoredOnly\?'':\(readabilityModelChoice\(\)\|\|readableRunModel\(lastSandboxRun\)\)/)
+  // The page uses it first (the model that made the proof), else Readability's own choice: the
+  // start and the sponsored-limit checks use that same one.
+  assert.match(fn('threadReadableModel'), /readableRunModel\(typeof lastSandboxRun!=='undefined'\?lastSandboxRun:null\):''\)\|\|readabilityModelChoice\(\)/)
+  assert.match(fn('startInlineReadable'), /model=sponsoredOnly\?'':threadReadableModel\(\);/)
+  for (const name of ['makeReadableSource', 'readableFromThreadAllowed'])
+    assert.match(fn(name), /readabilityRouteSponsored\(threadReadableModel\(\)\)/, name)
 })

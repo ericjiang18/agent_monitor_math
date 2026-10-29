@@ -142,10 +142,11 @@ def _ensure_audit_disclosure(prompt: str, text: str) -> str:
     requests independent file-backed passes, the wrapper records that those
     passes did not occur instead of letting a polished answer imply compliance.
     """
-    audit_requested = (
-        "candidate audit gate:" in prompt.lower()
-        or "_agent/skills/research-proof-audit/skill.md" in prompt.lower()
-    )
+    # Only a prompt that asks for the audit (the CANDIDATE AUDIT GATE). Every
+    # console prompt lists the starter skills, the audit skill's file among
+    # them: that listing alone asks for nothing, and the line would end every
+    # Plain answer (an easy request answered on Plain, say) as jargon.
+    audit_requested = "candidate audit gate:" in prompt.lower()
     if not audit_requested or "degraded audit:" in text.lower():
         return text
     marker = "ProvingConsole outcome:"

@@ -1138,10 +1138,14 @@ def _write_session_problems(ws: Path, problems: list[Any]) -> None:
     """Keep problem.txt as the full session notebook the agent should honor."""
     chunks: list[str] = []
     serial: list[dict[str, Any]] = []
+    from agent_monitor import easy_route
+
     for i, item in enumerate(problems or [], 1):
         text = _problem_item_text(item)
         if not text:
             continue
+        # "use Ansatz CGM" chose the engine; it is not part of the problem.
+        text = easy_route.strip_cgm_directive(text)
         src = item.get("source") if isinstance(item, dict) else "initial"
         serial.append({"text": text, "source": src or "human", "n": i})
         chunks.append(f"## Problem {i}\n{text}\n")
@@ -1174,6 +1178,9 @@ def ensure_problems(run: dict[str, Any], run_id: str | None = None) -> list[dict
                     original = original.split(sep, 1)[0]
             original = original.strip()
     problems = _seed_problems(original, source="initial")
+    # Backfilled on a read: the problem was asked when the run was made, not now.
+    if problems and run.get("created_at"):
+        problems[0]["ts"] = str(run["created_at"])
     rid = run_id or run.get("run_id")
     if rid:
         seen = {p["text"] for p in problems}
@@ -2763,6 +2770,7 @@ def start_job_routed(**kwargs: Any) -> dict[str, Any]:
         why = "no text"
     elif easy_route.asks_for_cgm(text):
         why = "asked"
+        kwargs = {**kwargs, "problem_text": easy_route.strip_cgm_directive(text)}
     elif isinstance(given_verdict, dict):
         verdict = given_verdict
     else:
@@ -2871,9 +2879,15 @@ def _easy_route_follow_up(
             if not easy_route.enabled() or current not in {home, easy_route.EASY_ENGINE}:
                 return run_data
             text = (message or "").strip()
-            if not text or text.startswith(_BARE_CONTINUE_PREFIX) or has_files:
+            bare = not text or text.startswith(_BARE_CONTINUE_PREFIX)
+            if bare and not has_files and current == easy_route.EASY_ENGINE and _easy_answer_only(ws, run_data):
+                # A bare Continue after Plain answered a question about Ansatz
+                # CGM's proof goes on with that proof, on Ansatz CGM (Plain
+                # would only answer "Continue").
+                target, why = home, "continue"
+            elif bare or has_files:
                 return run_data
-            if easy_route.asks_for_cgm(text):
+            elif easy_route.asks_for_cgm(text):
                 target, why = home, "asked"
             else:
                 problems = ensure_problems(run_data, run_id)
@@ -3082,7 +3096,13 @@ def _continuation_auth_environment(
         cgm_max.apply_models_api(configured, cgm_max.record_plan_api(run_data))
     from agent_monitor.run_tuning import from_record as apply_recorded_tuning
 
-    tuning = apply_recorded_tuning(configured, run_data) or {}
+    try:
+        tuning = apply_recorded_tuning(configured, run_data) or {}
+    except ValueError:
+        # A profile an older record kept that its model or route no longer
+        # offers (the capabilities moved since): the follow-up runs on the
+        # defaults rather than never running.
+        tuning = {}
     _raise_long_effort_timeouts(
         configured, engine=engine, route=route, effort=tuning.get("reasoning_effort")
     )
@@ -8019,6 +8039,14 @@ def _execute_continue(
     except FileNotFoundError:
         run_data = {"run_id": run_id, "problem_id": "continue"}
     previous_run_data = dict(run_data)
+    # The proof as this turn finds it: a turn that fails leaving it as it was
+    # derives nothing again (its pass would only overwrite good views).
+    try:
+        from agent_monitor import auto_pipeline as _pipeline
+
+        proof_before = _pipeline._source_signature(ws, run_data)
+    except Exception:  # noqa: BLE001 - best-effort
+        proof_before = None
     problems = ensure_problems(run_data, run_id)
     bare = message.strip().startswith(_BARE_CONTINUE_PREFIX)
     recorded_here = False
@@ -8045,14 +8073,19 @@ def _execute_continue(
         _problem_item_text(item): i for i, item in enumerate(problems, 1)
         if _problem_item_text(item) in fresh
     }
+    from agent_monitor import easy_route
+
     numbered = []
     for i, item in enumerate(problems, 1):
         text = _problem_item_text(item)
         if not text:
             continue
         tag = "  ← new this turn" if new_positions.get(text) == i else ""
-        numbered.append(f"{i}. {text}{tag}")
+        numbered.append(f"{i}. {easy_route.strip_cgm_directive(text)}{tag}")
     problems_block = "\n".join(numbered) or problem_text
+    # The words that asked for Ansatz CGM chose this turn's engine; the engine
+    # reads the message without them (the chat keeps it as typed).
+    message_for_engine = easy_route.strip_cgm_directive(message) if message else message
 
     response_only = engine in {"kimi", "plain"}
     workspace_instruction = (
@@ -8081,7 +8114,7 @@ def _execute_continue(
     )
     if proof_excerpt:
         continuation += f"CURRENT {proof_name} (preserve this content, then extend it):\n{proof_excerpt}\n\n"
-    continuation += f"HUMAN FEEDBACK — address this now:\n{message}\n"
+    continuation += f"HUMAN FEEDBACK — address this now:\n{message_for_engine}\n"
     answer_only = bool(answer_only) and engine == "plain"
     if answer_only:
         continuation = (
@@ -8091,14 +8124,14 @@ def _execute_continue(
             "the proof: it stays as it is. Your answer is shown to the human as your reply.\n\n"
             f"SESSION PROBLEMS:\n{problems_block}\n\n"
             + (f"CURRENT {proof_name} (for reference only; do not reproduce it):\n{proof_excerpt}\n\n" if proof_excerpt else "")
-            + f"HUMAN FEEDBACK — address this now:\n{message}\n"
+            + f"HUMAN FEEDBACK — address this now:\n{message_for_engine}\n"
         )
         extra_env["AGENT_MONITOR_PLAIN_ANSWER_ONLY"] = "1"
     if engine in _CGM_ENGINES:
         # Each CGM turn is a fresh tool-free pipeline: its own task, and the
         # files' text as SOURCE MATERIAL (_prepare_cgm_sources, below).
         continuation = _cgm_follow_up_task(
-            message=message,
+            message=message_for_engine,
             problems_block=problems_block,
             proof_name=proof_name,
             proof_excerpt=_cgm_proof_excerpt(proof_text),
@@ -8238,8 +8271,17 @@ def _execute_continue(
             "assistant",
             (result_run.get("agents") or [{}])[-1].get("output", "")[:2000] or f"Run {status}.",
         )
-        # An answer-only turn left the proof as it was: nothing to derive again.
-        if _root_proof_artifact(ws) and not answer_only:
+        # An answer-only turn left the proof as it was: nothing to derive again;
+        # nor a failed turn that left it as it was.
+        unchanged_failure = False
+        if status == "failed" and proof_before is not None:
+            try:
+                from agent_monitor import auto_pipeline as _pipeline
+
+                unchanged_failure = _pipeline._source_signature(ws, _load_run_record(run_id)) == proof_before
+            except Exception:  # noqa: BLE001 - best-effort: derive as before
+                unchanged_failure = False
+        if _root_proof_artifact(ws) and not answer_only and not unchanged_failure:
             try:
                 from agent_monitor import auto_pipeline
 

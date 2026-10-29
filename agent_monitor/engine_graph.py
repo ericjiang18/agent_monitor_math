@@ -3132,6 +3132,19 @@ def build(
     """Build the current graph from owned workspace/run artifacts, offline."""
     selected_view = _normalize_view(view)
     engine = str((run_record or {}).get("engine") or "").strip().lower()
+    if engine == "plain":
+        # An easy request Plain answered on a run Ansatz CGM works on
+        # (easy_route): the run's graph is still Ansatz CGM's, when it has one.
+        try:
+            from agent_monitor import easy_route
+
+            home = easy_route.home(workspace)
+        except Exception:  # noqa: BLE001 - the routing record is optional
+            home = ""
+        # Only once Ansatz CGM has run here (its receipt): a run Plain alone
+        # answered keeps its own trace.
+        if home in CGM_GRAPH_ENGINES and _has_project_receipt(Path(workspace)):
+            engine = home
     if engine in CGM_GRAPH_ENGINES and (
         engine == MATH_HARNESS_ENGINE or _has_project_receipt(Path(workspace))
     ):

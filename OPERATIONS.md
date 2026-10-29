@@ -330,7 +330,13 @@ availability and status dots); the top of the page has no tab bar, only
     mode while the turn works, then "Drawing the graph of turn N's proof…"
     in the Outline, Formal and Compiler modes until that stage is done (the
     CGM graph and the execution trace are the new turn's once it ends). A
-    proof edited by hand (the pipeline's `stale`) keeps its own handling.
+    pass is waited for only after a turn that ends finished (or failed
+    having changed the proof: the server starts one then, and none after a
+    failed turn that changed nothing), for two minutes at most; a turn
+    stopped or cut by a restart shows the views on hand. A proof edited by
+    hand (the pipeline's `stale`, which leaves stages turned off as they
+    are) keeps its own handling. The DAG view of a run that never ran Ansatz
+    CGM is titled "Execution trace".
     `proof_current` is whether the pipeline's last `source_signature` is the
     proof there now (`_with_proof_current`, on every read of the run).
   - Clicked, an earlier card shows the proof card's tools: the run's status
@@ -338,12 +344,37 @@ availability and status dots); the top of the page has no tab bar, only
     proof the current proof?"; on yes it becomes proof.md through the
     editor's own save, and the newer proof stays in its own card) and the
     run's Lean, Monitor and DAG views.
-  - Make readable (on the live card or an earlier one, for any finished
-    proof run: Ansatz CGM, an easy request answered on Plain, Codex, Claude
-    Code and the rest; not an analysis or a readable version) never leaves the
-    thread. When Readability's own model list offers none (an account with
-    an OpenRouter key only), it uses the shown run's own API model
-    (`readableRunModel`; never Max). It starts a Readability run with
+  - A turn that ended without a proof of its own (stopped or failed before
+    writing one, or one that left the proof as it was) keeps no copy
+    (`proof_turns.end` compares it with the last kept proof): it has no
+    card, and the live card stays with the last turn that made the proof
+    (messages after that turn go under it). When proof.md is written after
+    that turn ended and outside any turn (an earlier proof made the current
+    one, or an edit), that turn's proof keeps a card of its own too, so
+    Edit on an earlier card never makes the newer proof disappear. Edit on
+    an earlier card is disabled while a turn works on the proof. The turns'
+    files are written through a new file moved into place, never through a
+    link an engine left there.
+  - Under the card, whenever they came: Readable version cards (the bottom
+    of the thread) and an analysis's closing summary ("Analysis finished:
+    …", which speaks of the report the card shows).
+  - A run that failed or was stopped before writing a proof shows none
+    ("no proof written"; never its engine's log lines as a proof, and no
+    Edit); its failure reason drops the engine's process words ("… exited
+    with code 1:"). A run deleted meanwhile (another tab, say) is left: after
+    two "not found" reads the page goes back to the composer and says so.
+  - Thread times carry their date when not today's. An earlier card can be
+    focused; Enter or Space shows its tools, as a click does; its status
+    chips are the current proof's checks and follow them as they move.
+  - Make readable (on the live card or an earlier one, for any proof run
+    that has proof.md and no turn working on it: Ansatz CGM, an easy request
+    answered on Plain, Codex, Claude Code and the rest; not an analysis or a
+    readable version; not for a viewer who only reads the run) never leaves
+    the thread. It runs on the shown run's own API model first (the one that
+    made the proof: an OpenRouter vendor/model too; never Max), else the one
+    Readability would pick (`threadReadableModel`, which the sponsored-limit
+    checks use as well); an earlier card's note is shown in that card. It
+    starts a Readability run with
     `parent_run_id`, whose server writes "Readable version: <run id>" in
     this run's chat (owner or operator only), and the thread shows a
     Readable version card there. The
@@ -1256,7 +1287,18 @@ always gets it, without the judge.
   derived again. The turn keeps the answer as its own (`proof_turns`, with
   `answer_only`). The Sandbox shows it as an **Answer** card after the
   message, and the live card keeps the proof Ansatz CGM wrote. A run that has
-  only ever been on Plain lets Plain write the proof.
+  only ever been on Plain lets Plain write the proof. A bare ▶ Continue after
+  such an answer goes on with that proof on Ansatz CGM (Plain would only
+  answer "Continue"), and the run's CGM graph (Explore / Facts) stays the
+  DAG's while its record names Plain (`engine_graph.build`: Plain on a run
+  whose easy-route home is Ansatz CGM, once Ansatz CGM has run there).
+- **"Use Ansatz CGM" is not the problem.** The words that ask for Ansatz CGM
+  ("use Ansatz CGM", "on the full harness", "Ansatz CGM:") choose the
+  engine; the engine reads the request without them
+  (`easy_route.strip_cgm_directive`: a start's problem text, problem.txt /
+  problems.json and a follow-up's prompt), so they never reach a theorem's
+  statement. The chat keeps the message as typed; a bare "CGM", which may be
+  mathematics, is left alone.
 - **Said where a run is chosen.** With the judge on, the launcher's "Runs on
   …" line for Ansatz CGM (not Max) and Ansatz CGM · Kimi K3 adds: "Easy requests may be rated by an
   external model (OpenRouter · <judge>) and answered with Plain on the same
@@ -1285,11 +1327,32 @@ turn's routing too).
 
 - **Modes.** No formalization by default (Lean is slow): a proof is
   Informal only, or Informal + formalization when the request asks for it
-  (it names Lean, Mathlib or formalizing). With a manuscript: Analyze or
-  Readability when the judge picks it (P ≥ 0.5), Analyze by default, or a
-  proof when the request asks to prove something. A mode this site does not
-  offer becomes a proof. With the judge off or failing, Auto picks the
-  default (Analyze with a manuscript, else a proof).
+  (`easy_route.asks_for_formalization`, and the page's `autoAsksForLean`:
+  it names Lean, the proof assistant ("Lean", "Lean 4", "lean4"; not
+  "lean" in its English sense), Mathlib or formalizing, in words it does
+  not turn down: "do not use Lean", "without formalization" do not count).
+  With a manuscript: Analyze or Readability when the judge picks it
+  (P ≥ 0.5), Analyze by default, or a proof when the request asks to prove
+  something. A mode this site does not offer becomes a proof. With the
+  judge off or failing, Auto picks the default (Analyze with a manuscript,
+  else a proof).
+- **The manuscript and the instruction** (`autoSourceOf`). Attached files
+  are the manuscript and the text is the instruction; a link alone, or in a
+  sentence ("Analyze this paper: <link>"), is the manuscript and the rest of
+  the sentence the instruction; a pasted manuscript (400+ characters shaped
+  like one: paragraphs, named results, theorem environments) is one, with a
+  first line such as "Make this more readable:" as its instruction. The page
+  sends `has_source` and `source` (`files`, `link` or `text`) to
+  `/api/route-request`; Analyze and Readability then start on that source
+  with the instruction as their focus (at most 2,000 characters), never
+  refused as "one source at a time". A request whose manuscript the judge
+  cannot read (files, a link) is never refused as not mathematics; pasted
+  text is rated as usual, and the judge is asked whether it is a manuscript
+  to check or rewrite or only a long problem (a proof unless it is fairly
+  sure, P ≥ 0.6).
+- **One start at a time.** A second Start or Ctrl/⌘+Enter while the judge
+  rates a request (or the run it picked starts) starts nothing more; a
+  refusal goes from the composer once its text changes.
 - **Mathematics only.** A request the judge rates `not_math` with probability
   at least 0.8 is refused with "Ansätze answers mathematics only …": a new
   proof start (`/api/runs`, 400 with `not_math`, before any run start is
