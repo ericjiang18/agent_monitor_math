@@ -262,8 +262,11 @@ Admin view → **Accounts** (`GET /api/admin/accounts`, administrators only;
 ## The Sandbox conversation
 
 The console's Sandbox view is one conversation, read top to bottom in a
-single scrolling column (`#sandbox-thread`); the Lean Verification, Monitor
-and DAG views are unchanged.
+single scrolling column (`#sandbox-thread`). The Lean Verification, Monitor
+and DAG views open from the proof card's toolbar (beside Make readable, Edit
+and Download: `#proof-views`, which follows the hidden tab bar's names,
+availability and status dots); the top of the page has no tab bar, only
+"← Sandbox" while another view is open, beside Share and Stop/Continue.
 
 - **Order.** The run's problem first, as the reader's own message: the
   run's first message when the chat has one (the line, with its files, that

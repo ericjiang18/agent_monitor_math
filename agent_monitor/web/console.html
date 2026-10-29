@@ -294,6 +294,22 @@ button.start:disabled { opacity: .4; }
   padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg2); flex-shrink: 0;
 }
 .session-top .seg-control { grid-column: 2; }
+/* The views are opened from the proof card's toolbar (.proof-views): the top
+   keeps only a way back to the Sandbox from the other views. The tab bar stays
+   in the page, hidden, as the views' state (active, pipeline dots, names). */
+.session-top .seg-control { display: none; }
+.sess-back { grid-column: 1; justify-self: start; border: 1px solid var(--border); background: var(--panel); color: var(--fg);
+  border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.sess-back[hidden] { display: none; }
+.proof-views { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.proof-views button[hidden] { display: none; }
+.proof-views button.pipeline-running::after, .proof-views button.pipeline-done::after,
+.proof-views button.pipeline-warning::after, .proof-views button.pipeline-error::after {
+  content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 999px; vertical-align: 1px; background: var(--warn);
+}
+.proof-views button.pipeline-running::after { animation: pulse 1.15s ease-in-out infinite; }
+.proof-views button.pipeline-done::after { background: var(--ok); }
+.proof-views button.pipeline-error::after { background: var(--err); }
 .session-top .session-side { grid-column: 3; justify-self: end; }
 .seg-control {
   display: inline-flex; padding: 3px; border-radius: 999px; background: var(--panel2);
@@ -2373,6 +2389,7 @@ body { background:var(--bg); }
     <!-- Session: Sandbox / Monitor -->
     <section id="view-session">
       <div class="session-top">
+        <button type="button" class="sess-back" id="sess-back" hidden>← Sandbox</button>
         <div class="seg-control">
           <button class="active" data-view="sandbox">Sandbox</button>
           <button data-view="lean">Lean Verification</button>
@@ -2418,6 +2435,11 @@ body { background:var(--bg); }
                   <button id="proof-save-btn" class="primary" hidden>Save</button>
                   <button id="proof-done-btn" hidden>Done</button>
                   <button id="pdf-dl-btn" disabled>⬇ Download</button>
+                  <div class="proof-views" id="proof-views" role="group" aria-label="This run's other views">
+                    <button type="button" data-goto-view="lean">Lean Verification</button>
+                    <button type="button" data-goto-view="monitor">Monitor</button>
+                    <button type="button" data-goto-view="dag">DAG</button>
+                  </div>
                 </div>
                 <div class="readability-tabs" id="readability-tabs" hidden>
                   <div class="readability-tablist" role="tablist" aria-label="Readability views">
@@ -2844,6 +2866,8 @@ function setWorkspaceView(v){
   document.querySelectorAll('.seg-control button').forEach(b=>{
     b.classList.toggle('active', b.dataset.view===v);
   });
+  // Back to the conversation from another view (the views open from the proof card).
+  const back=$('sess-back'); if(back)back.hidden=v==='sandbox';
   const panes={
     sandbox:$('view-sandbox'),
     monitor:$('view-monitor'),
@@ -2872,6 +2896,22 @@ $('go-home').onclick=()=>{ location.href='/'; };
 $('projects-link').href=pcUrl('/projects');
 $('new-proof-btn').onclick=()=>{ runId=null; jobId=null; stopPolling(); goLanding(); $('problem-text').focus(); };
 document.querySelectorAll('.seg-control button').forEach(b=>b.onclick=()=>setWorkspaceView(b.dataset.view));
+$('sess-back').onclick=()=>setWorkspaceView('sandbox');
+document.querySelectorAll('#proof-views button').forEach(b=>b.onclick=()=>setWorkspaceView(b.dataset.gotoView));
+/* The proof card's view buttons follow the (hidden) tab bar: its names, which
+   views a run has (hidden or disabled) and their pipeline dots. */
+function syncProofViews(){
+  document.querySelectorAll('#proof-views button').forEach(button=>{
+    const tab=document.querySelector(`.seg-control button[data-view="${button.dataset.gotoView}"]`); if(!tab)return;
+    if(button.textContent!==tab.textContent)button.textContent=tab.textContent;
+    button.hidden=tab.hidden||tab.style.display==='none';
+    button.disabled=!!tab.disabled;
+    for(const cls of ['pipeline-running','pipeline-done','pipeline-warning','pipeline-error'])button.classList.toggle(cls,tab.classList.contains(cls));
+    if(tab.title)button.title=tab.title; else button.removeAttribute('title');
+  });
+}
+try{ new MutationObserver(syncProofViews).observe(document.querySelector('.seg-control'),{subtree:true,attributes:true,childList:true,characterData:true}); }catch(e){}
+syncProofViews();
 
 /* ── theme ── */
 function applyTheme(t){ document.documentElement.dataset.theme=t; localStorage.setItem(THEME_KEY,t); $('theme-btn').textContent=t==='light'?'☀':'☾'; syncThemeToMonitor(t); }
