@@ -1158,8 +1158,8 @@ can create a guest identity, each client address also has its own budget:
 ## Easy requests on Plain
 
 A run started on Ansatz CGM (`math_harness`) or on Ansatz CGM · Kimi K3
-(`kimi`) by a signed-in account has each turn rated first by a small judge
-model (`agent_monitor/easy_route.py`). The first run is
+(`kimi`) by a signed-in account or a guest has each turn rated first by a
+small judge model (`agent_monitor/easy_route.py`). The first run is
 rated by its problem, and each follow-up by its message, with the session's
 first problem as context. A turn rated **easy** (a routine exercise, a short
 computation, a definition, a small edit) runs on **Plain**, one call of the
@@ -1188,7 +1188,7 @@ always gets it, without the judge.
   engine's environment. It is never in Settings, the run record or the chat.
   LaTeX previews compile without the server's secrets too. The judge gets the
   request text and nothing else.
-- **What is never moved to Plain.** Guests, Analyze and Readability, runs
+- **What is never moved to Plain.** Analyze and Readability, runs
   started on another engine, Max and Max (API), a start or follow-up for
   which Plain is not allowed (member policy) or would answer with another
   model or on another route (a start that Plain would put on the sponsored
@@ -1240,8 +1240,15 @@ files, `task`), then starts the run as the chosen mode would, with
   proof start (`/api/runs`, 400 with `not_math`, before any run start is
   reserved) and a follow-up message (`/api/runs/<id>/chat`, rated with the
   run's first problem as context; nothing is recorded and the message stays
-  in the box). Any doubt, error or timeout lets the request through. Guests
-  are never rated, and Analyze and Readability manuscripts are not.
+  in the box). Any doubt, error or timeout lets the request through. Analyze
+  and Readability manuscripts are not rated.
+- **Guests too.** A guest's start is rated like an account's: Auto, the
+  mathematics-only refusal (a refused start costs no guest run) and an easy
+  request on Ansatz CGM · Kimi K3 moved to Plain (only while Plain is one of
+  the operator's guest engines; the guest's limits go with it). Guests send no
+  follow-ups. The guest note under the start box says requests are rated by
+  the external model. A guest's Auto ratings are limited to 30 an hour
+  (`GUEST_RATINGS_PER_HOUR`); past that, Auto takes its default.
 
 ## Analyze runs
 

@@ -892,7 +892,10 @@ const isCgmMax=()=>maxOn, isCgmMaxApi=()=>maxApiOn;`, ctx)
   // Ansatz CGM · Kimi K3 (kimi) is rated too.
   step("engine='kimi'")
   assert.match(step('easyRouteNotice()'), /^Easy requests may be rated/)
-  for (const change of ["engine='plain'", "engine='claude'", 'maxOn=true', 'maxApiOn=true', 'CURRENT_USER={guest:true}', 'SETTINGS={easy_route:{enabled:false}}', 'SETTINGS={}']) {
+  // Guests too (the server says whether the judge is on for them).
+  step("CURRENT_USER={guest:true}")
+  assert.match(step('easyRouteNotice()'), /^Easy requests may be rated/)
+  for (const change of ["engine='plain'", "engine='claude'", 'maxOn=true', 'maxApiOn=true', 'SETTINGS={easy_route:{enabled:false}}', 'SETTINGS={}']) {
     step("SETTINGS={easy_route:{enabled:true,model:'typesafe/jev-1.13'}}; CURRENT_USER={id:1}; engine='math_harness'; maxOn=false; maxApiOn=false;" + change)
     assert.equal(step('easyRouteNotice()'), '', change)
   }

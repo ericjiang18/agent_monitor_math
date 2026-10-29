@@ -3383,7 +3383,7 @@ function renderRunRuntime(){
 }
 function easyRouteNotice(){
   const route=SETTINGS?.easy_route;
-  if(!route?.enabled||CURRENT_USER?.guest||!['math_harness','kimi'].includes(engine)||isCgmMax()||isCgmMaxApi())return '';
+  if(!route?.enabled||!['math_harness','kimi'].includes(engine)||isCgmMax()||isCgmMaxApi())return '';
   return `Easy requests may be rated by an external model (OpenRouter · ${route.model||'judge'}) and answered with Plain on the same model.`;
 }
 // keepEngine: a refresh (Settings opened, a refused start, a new login) keeps
@@ -10692,7 +10692,7 @@ const FORMALIZE_KEY='proving-console-formalize-v1', AUTO_MODE_KEY='proving-conso
    the mode it picked for the start in progress (runKindChoice and
    formalizeChoice follow it), and nothing it picks is saved as the choice. */
 let autoPick=null;
-function autoOffered(){ try{ return !!SETTINGS?.easy_route?.enabled&&!viewerIsGuest(); }catch(e){ return false; } }
+function autoOffered(){ try{ return !!SETTINGS?.easy_route?.enabled; }catch(e){ return false; } }
 function autoActive(){
   if(!autoOffered())return false;
   try{ return localStorage.getItem(AUTO_MODE_KEY)!=='0'; }catch(e){ return true; }
@@ -12365,7 +12365,7 @@ function applyGuestUi(){
   const allowance=$('guest-allowance');
   const limit=GUEST_POLICY?.runs_per_session||10, left=GUEST_POLICY?.runs_remaining??limit;
   allowance.hidden=false;
-  allowance.innerHTML=`<span><strong>${Number(left)} of ${Number(limit)} guest runs remaining.</strong> ${GUEST_POLICY?.hosted_guest_available||SETTINGS?.providers?.some(p=>p.id==='kimi'&&p.api_key_set)?'Ansatz CGM on Kimi K3, Lean verification, and the Facts / Explore graphs are ready.':'Add a Kimi API key in Settings to start.'} Sign in to use your own API keys and keep saved history.</span><a href="${pcUrl('/login')}">Sign in →</a>`;
+  allowance.innerHTML=`<span><strong>${Number(left)} of ${Number(limit)} guest runs remaining.</strong> ${GUEST_POLICY?.hosted_guest_available||SETTINGS?.providers?.some(p=>p.id==='kimi'&&p.api_key_set)?'Ansatz CGM on Kimi K3, Lean verification, and the Facts / Explore graphs are ready.':'Add a Kimi API key in Settings to start.'} Sign in to use your own API keys and keep saved history.${SETTINGS?.easy_route?.enabled?` Requests are rated by an external model (OpenRouter · ${escapeHtml(String(SETTINGS.easy_route.model||'judge'))}) to choose the mode and answer easy ones with Plain; requests that are not mathematics are declined.`:''}</span><a href="${pcUrl('/login')}">Sign in →</a>`;
   syncStartButton();
   if(runKindChoice()==='analyze')renderAnalyzeCaps();
   if(runKindChoice()==='readability')renderReadabilityCaps();

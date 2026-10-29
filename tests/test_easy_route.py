@@ -278,8 +278,7 @@ class StartTest(unittest.TestCase):
         self.assertEqual(job["engine"], "math_harness")
 
     def test_unrouted_starts_are_start_job_unchanged(self) -> None:
-        for kw in ({"engine": "plain"}, {"engine": "claude"}, {"engine": "math_harness", "run_kind": "analyze"},
-                   {"engine": "math_harness", "user": {"id": 9, "guest": True}}):
+        for kw in ({"engine": "plain"}, {"engine": "claude"}, {"engine": "math_harness", "run_kind": "analyze"}):
             self.calls.clear()
             user = kw.pop("user", None)
             job, judged = self.start("easy", user=user, **kw)
@@ -656,7 +655,8 @@ class BudgetAndSettingsTest(unittest.TestCase):
             os.environ.pop(easy_route.SWITCH_ENV, None)
             os.environ.pop(easy_route.MODEL_ENV, None)
             self.assertEqual(settings._easy_route_setting({"id": 1}), {"enabled": True, "model": "typesafe/jev-1.13"})
-            self.assertEqual(settings._easy_route_setting({"id": 2, "guest": True}), {"enabled": False, "model": ""})
+            # Guests too: their starts are rated (Auto, mathematics only, easy requests).
+            self.assertEqual(settings._easy_route_setting({"id": 2, "guest": True}), {"enabled": True, "model": "typesafe/jev-1.13"})
             self.assertEqual(settings._easy_route_setting(None), {"enabled": False, "model": ""})
             self.assertNotIn(KEY, json.dumps(settings._easy_route_setting({"id": 1})))
         with patch.dict(os.environ, {easy_route.KEY_ENV: ""}):
@@ -834,17 +834,17 @@ class AutoModeTest(unittest.TestCase):
 
 
 class ServerAutoTest(unittest.TestCase):
-    def test_refusal_is_for_signed_in_accounts_with_text_only(self) -> None:
+    def test_refusal_is_for_accounts_and_guests_with_text_only(self) -> None:
         from agent_monitor import console_server
 
         with patch.dict(os.environ, {easy_route.KEY_ENV: KEY}), \
                 patch.object(easy_route, "topic_refusal", return_value="no") as refuse:
             os.environ.pop(easy_route.SWITCH_ENV, None)
             self.assertEqual(console_server._not_math_refusal({"id": 1}, "Write a poem."), "no")
-            self.assertEqual(console_server._not_math_refusal({"id": 2, "guest": True}, "Write a poem."), "")
+            self.assertEqual(console_server._not_math_refusal({"id": 2, "guest": True}, "Write a poem."), "no")
             self.assertEqual(console_server._not_math_refusal({"id": 1}, "   "), "")
             self.assertEqual(console_server._not_math_refusal({}, "x"), "")
-            self.assertEqual(refuse.call_count, 1)
+            self.assertEqual(refuse.call_count, 2)
         with patch.dict(os.environ, {easy_route.KEY_ENV: ""}):
             self.assertEqual(console_server._not_math_refusal({"id": 1}, "Write a poem."), "")
 
@@ -872,3 +872,46 @@ class ServerAutoTest(unittest.TestCase):
         # The follow-up refusal comes before any run start is reserved.
         chat = source[source.index('refusal = _not_math_refusal(user, body.get("message")'):]
         self.assertLess(chat.index("refusal"), chat.index("_admit_member_message(user)"))
+
+
+class GuestTest(unittest.TestCase):
+    def test_a_guest_start_is_routed_when_plain_is_a_guest_engine(self) -> None:
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(patch.object(jobs, "RUNS_DIR", root / "runs"))
+        self.enterContext(patch.dict(os.environ, {easy_route.KEY_ENV: KEY}))
+        os.environ.pop(easy_route.SWITCH_ENV, None)
+        calls = []
+
+        def start_job(**kwargs):
+            calls.append(kwargs)
+            rid = f"{kwargs['engine']}_adhoc_{len(calls)}"
+            (root / "runs" / "workspaces" / rid).mkdir(parents=True)
+            return {"run_id": rid, "engine": kwargs["engine"]}
+
+        self.enterContext(patch.object(jobs, "start_job", side_effect=start_job))
+        self.enterContext(patch.object(jobs, "_append_chat"))
+        guest = {"id": 9, "guest": True}
+        from agent_monitor import console_server
+
+        for allowed, want in ((frozenset({"kimi", "plain"}), "plain"), (frozenset({"kimi"}), "kimi")):
+            calls.clear()
+            with patch.object(console_server, "guest_engine_allowlist", return_value=allowed), \
+                    patch.object(easy_route, "judge", return_value={"verdict": "easy", "reason": "", "model": "m", "error": ""}):
+                job = jobs.start_job_routed(engine="kimi", problem_text="What is 2+3?", model="kimi-k3",
+                                            auth_route="api_key", user=guest, max_output_tokens=4096)
+            self.assertEqual(job["engine"], want)
+            self.assertEqual(calls[-1]["max_output_tokens"], 4096)  # the guest's limits go with it
+
+    def test_a_guests_auto_ratings_are_bounded(self) -> None:
+        from agent_monitor import console_server
+
+        console_server._GUEST_RATINGS.clear()
+        guest = {"id": 4242, "guest": True}
+        with patch.object(console_server, "GUEST_RATINGS_PER_HOUR", 3):
+            self.assertEqual([console_server._guest_rating_allowed(guest) for _ in range(5)], [True, True, True, False, False])
+            other = {"id": 4243, "guest": True}
+            self.assertTrue(console_server._guest_rating_allowed(other))  # per guest
+            with patch.object(console_server.time, "time", return_value=__import__("time").time() + 3601):
+                self.assertTrue(console_server._guest_rating_allowed(guest))  # an hour later
+        self.assertFalse(console_server._guest_rating_allowed({"guest": True}))  # no id
+        console_server._GUEST_RATINGS.clear()

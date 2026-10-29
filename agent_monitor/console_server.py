@@ -1935,12 +1935,39 @@ def _readability_preview(run_id: str, data: dict) -> dict:
     }
 
 
+_GUEST_RATINGS: dict[int, list[float]] = {}
+_GUEST_RATINGS_LOCK = threading.Lock()
+GUEST_RATINGS_PER_HOUR = 30
+
+
+def _guest_rating_allowed(user: dict) -> bool:
+    """A guest's Auto ratings are bounded (an anonymous session must not spend
+    the judge's key at will): GUEST_RATINGS_PER_HOUR per guest, then Auto
+    takes its default."""
+    try:
+        guest_id = int(user.get("id"))
+    except (TypeError, ValueError):
+        return False
+    now = time.time()
+    with _GUEST_RATINGS_LOCK:
+        recent = [t for t in _GUEST_RATINGS.get(guest_id, []) if now - t < 3600]
+        if len(recent) >= GUEST_RATINGS_PER_HOUR:
+            _GUEST_RATINGS[guest_id] = recent
+            return False
+        recent.append(now)
+        _GUEST_RATINGS[guest_id] = recent
+        if len(_GUEST_RATINGS) > 10_000:  # forget the idle
+            for key in [k for k, v in _GUEST_RATINGS.items() if not v or now - v[-1] >= 3600]:
+                _GUEST_RATINGS.pop(key, None)
+        return True
+
+
 def _not_math_refusal(user: dict, text: object, *, run_id: str = "") -> str:
     """easy_route's refusal of a request that is clearly not mathematics, for
     a signed-in account with the judge on ("" otherwise, and on any doubt)."""
     from agent_monitor import easy_route
 
-    if not user or user.get("guest") or not easy_route.enabled():
+    if not user or not easy_route.enabled():
         return ""
     request = str(text or "").strip()
     if not request:
@@ -4553,7 +4580,8 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             # mode fits it. Signed-in accounts only, with the judge on.
             from agent_monitor import easy_route
 
-            if user.get("guest") or not easy_route.enabled():
+            if not easy_route.enabled() or (user.get("guest") and not _guest_rating_allowed(user)):
+                # Off, or a guest past its ratings this hour: Auto takes its default.
                 self._send(200, json.dumps({"enabled": False}))
                 return
             rated = easy_route.rate_request(
