@@ -2746,7 +2746,6 @@ def start_job_routed(**kwargs: Any) -> dict[str, Any]:
     if (
         kwargs.get("engine") not in easy_route.HOMES
         or kind != "prove"
-        or user.get("guest")
         or not easy_route.enabled()
         # Max and Max (API) are Ansatz CGM's alone.
         or str(kwargs.get("auth_route") or "").strip().lower() == cgm_max.ROUTE
@@ -2785,7 +2784,15 @@ def start_job_routed(**kwargs: Any) -> dict[str, Any]:
 
 
 def _easy_plain_allowed(user: dict[str, Any], kwargs: dict[str, Any]) -> bool:
-    """Whether the account may run Plain for this start (member policy)."""
+    """Whether the account may run Plain for this start (member policy; for a
+    guest, the operator's guest engines)."""
+    if user.get("guest"):
+        try:
+            from agent_monitor.console_server import guest_engine_allowlist
+
+            return "plain" in guest_engine_allowlist()
+        except Exception:  # noqa: BLE001
+            return False
     if not account_policy.is_member(user):
         return True
     try:

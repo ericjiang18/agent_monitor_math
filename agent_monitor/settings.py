@@ -694,7 +694,8 @@ def account_api_models(user: dict[str, Any] | None, *, env: dict[str, str] | Non
 def _easy_route_setting(user: dict[str, Any] | None) -> dict[str, Any]:
     from agent_monitor import easy_route
 
-    enabled = bool(user) and not (user or {}).get("guest") and easy_route.enabled()
+    # Guests too (their starts: Auto, mathematics only, easy requests on Plain).
+    enabled = bool(user) and easy_route.enabled()
     return {"enabled": enabled, "model": easy_route.model() if enabled else ""}
 
 
