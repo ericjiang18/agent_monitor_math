@@ -784,6 +784,8 @@ class PublicKimiApplication:
                     "text": output,
                 }
             )
+        from agent_monitor import usage_ledger
+
         return {
             "run_id": run_id,
             "status": status,
@@ -794,6 +796,9 @@ class PublicKimiApplication:
             "error": error or None,
             "proof": proof,
             "events": events,
+            # What the run used (token counts and cost, numbers only), so the
+            # console books it as the sponsored usage it is.
+            "usage": usage_ledger.reported_usage(record.get("totals")),
         }
 
     def stop(self, *, run_id: str, owner_id: int) -> dict[str, str]:

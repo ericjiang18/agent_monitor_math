@@ -428,6 +428,50 @@ class SponsoredKimiClientTests(unittest.TestCase):
         remote.assert_called_once()
         self.assertTrue(written)
 
+    def test_projection_books_the_usage_the_service_reports(self) -> None:
+        from agent_monitor import usage_ledger
+
+        payload = {
+            "run_id": "plain_adhoc_remote_0123456789",
+            "status": "finished",
+            "engine": "plain",
+            "model": "kimi-k3",
+            "proof": "# Proof\n\nBy reflexivity.",
+            "events": [{"stage": "final", "role": "agent", "text": "By reflexivity."}],
+            # Counts and cost are booked; a negative, a NaN, the service's
+            # latency and any other key are not.
+            "usage": {"input_tokens": 1200, "output_tokens": 345, "cost_usd": 0.0123,
+                      "reasoning_tokens": -5, "cached_input_tokens": float("nan"),
+                      "latency_s": 999.0, "note": "not a metric"},
+        }
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(jobs, "RUNS_DIR", Path(tmp) / "runs"),
+            patch.object(jobs, "CACHE_DIR", Path(tmp) / "cache"),
+            patch.object(sponsored_kimi_client, "run_plain", return_value=payload),
+        ):
+            workspace = Path(tmp) / "runs" / "workspaces" / "plain_local_usage"
+            workspace.mkdir(parents=True)
+            result = jobs._run_sponsored_kimi_plain(
+                run_id="plain_local_usage",
+                problem_id="demo",
+                problem_text="Prove True.",
+                display_problem_text="Prove True.",
+                started=time.time(),
+                workspace=workspace,
+                owner_id=19,
+            )
+            summary = usage_ledger.usage_summary({})
+
+        totals = result["totals"]
+        self.assertEqual((totals["input_tokens"], totals["output_tokens"], totals["cost_usd"]), (1200, 345, 0.0123))
+        self.assertNotIn("reasoning_tokens", totals)
+        self.assertNotIn("cached_input_tokens", totals)
+        self.assertLess(totals["latency_s"], 60)  # the console's own, not the service's
+        sponsored = {row["key"]: row for row in summary["by_billing"]}["sponsored"]
+        self.assertEqual((sponsored["input_tokens"], sponsored["output_tokens"]), (1200, 345))
+        self.assertAlmostEqual(sponsored["cost_usd"], 0.0123)
+
 
 if __name__ == "__main__":
     unittest.main()

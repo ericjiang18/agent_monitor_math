@@ -579,7 +579,13 @@ ends, they are derived again only when something is missing:
   would start has no sponsored credential. ▶ Continue and a chat message are
   refused before anything is recorded or a member's run start kept ("A
   Plain run on the included Kimi K3 can't be continued; start a new Plain
-  run with your feedback").
+  run with your feedback"). (A run started on Ansatz CGM · Kimi K3 whose
+  easy turn Plain answered continues on Ansatz CGM · Kimi K3: see "Easy
+  requests on Plain".)
+- Such a run's usage is what the isolated service reports with its status
+  (`usage`: the token counts and cost, numbers only). The console books it
+  as the run's sponsored usage, as it does for the other engines on the
+  included Kimi K3.
 - A Stop or Delete while a run's attachments are being read (a CGM turn's
   or Plain's PDFs extracted, or waiting for an extraction slot) ends it at
   once: no runner starts, and a deleted run stays deleted. Plain reads its
