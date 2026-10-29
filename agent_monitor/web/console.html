@@ -6961,15 +6961,20 @@ function problemItems(run){
 /* The message box's model menu: the next turn's model, among those of the
    run's own account route (a follow-up keeps its route), the run's current
    model first. Hidden with nothing to choose (Kimi K3, guests, Analyze and
-   Readability, a single model). */
+   Readability, a single model). After a turn Plain answered (easy_route), the
+   next may run on the engine the run started on (run.easy_route_home), so
+   only models both engines run are offered. */
 let dockModelRun='';
 function dockModelsFor(run){
   if(!run||CURRENT_USER?.guest||isAnalysisRun(run)||isReadabilityRun(run))return [];
   const route=String(run.auth_route||'').toLowerCase(), engineId=String(run.engine||'');
-  if(engineId==='kimi'||route==='dual_subscription'||run.route_plan)return [];
+  const home=String(run.easy_route_home||''), engineIds=home&&home!==engineId?[engineId,home]:[engineId];
+  if(engineIds.includes('kimi')||route==='dual_subscription'||run.route_plan)return [];
   let models=route==='codex_subscription'?[...(SETTINGS?.codex_models||[])]:route==='claude_subscription'?[...(SETTINGS?.claude_models||[])]:route==='api_key'?[...(SETTINGS?.api_models||[])]:[];
-  const entry=ENGINES.find(x=>x.id===engineId), supported=entry?.supported_models||[];
-  if((route==='codex_subscription'||route==='claude_subscription')&&supported.length)models=models.filter(m=>supported.includes(m));
+  if(route==='codex_subscription'||route==='claude_subscription')for(const id of engineIds){
+    const supported=ENGINES.find(x=>x.id===id)?.supported_models||[];
+    if(supported.length)models=models.filter(m=>supported.includes(m));
+  }
   const current=String(run.model||run.requested_model||'').trim();
   if(current&&!/^max(-api)?$/i.test(current))models=[current,...models];
   return [...new Set(models.filter(Boolean).map(String))];

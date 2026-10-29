@@ -1206,7 +1206,21 @@ always gets it, without the judge.
   Kimi service is refused and starts Ansatz CGM; Ansatz CGM · Kimi K3 runs
   on that service itself, through Plain, so its easy turns may), a bare
   Continue, and a
-  message with files (each keeps the run's current engine).
+  message with files (each keeps the run's current engine, except after a
+  turn on the included Kimi K3: next item).
+- **After a turn Plain answered on the included Kimi K3.** A Plain run on the
+  sponsored Kimi service cannot be continued, so every follow-up of such a
+  turn (a message, a bare Continue, a message with files) runs on the engine
+  the run started on, Ansatz CGM · Kimi K3, without a rating, and is checked
+  as that engine's before anything is recorded. A run started on Plain itself
+  is still not continued there.
+- **A model chosen for the next turn.** After a turn Plain answered, the next
+  may run on the engine the run started on, so a model chosen in the message
+  box must run on both: one the starting engine cannot run gives way to the
+  run's own model, as one the current engine cannot run does. The message box
+  offers only models both engines run, so none after a turn of Ansatz CGM ·
+  Kimi K3, whose engine runs Kimi K3 alone. The run's GET carries the starting
+  engine as `easy_route_home`.
 - **Failures.** No key, the judge's error or timeout (6 s in all), or an answer
   that is not clearly "easy": the turn runs on Ansatz CGM. Routing never stops
   a run or a follow-up.
