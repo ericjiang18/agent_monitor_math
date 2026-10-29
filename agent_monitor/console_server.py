@@ -5477,6 +5477,14 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                 from agent_monitor import proof_turns
 
                 data["proof_turns"] = proof_turns.summary(ws)
+                # The engine an easy-request rating started the run on
+                # (easy_route): a turn after one Plain answered may run there,
+                # so the message box offers only models both engines run.
+                from agent_monitor import easy_route
+
+                easy_home = easy_route.home(ws) if ws else ""
+                if easy_home in easy_route.HOMES:
+                    data["easy_route_home"] = easy_home
                 if ws:
                     from agent_monitor import auto_pipeline, lean_verify, proof_bridge
 

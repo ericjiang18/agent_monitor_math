@@ -2810,6 +2810,31 @@ def _easy_plain_allowed(user: dict[str, Any], kwargs: dict[str, Any]) -> bool:
         return False
 
 
+def _easy_route_home(ws: Path | None) -> str:
+    """The engine a run's easy-request rating started it on (easy_route), or ""."""
+    from agent_monitor import easy_route
+
+    try:
+        home = easy_route.home(ws)
+    except Exception:  # noqa: BLE001
+        return ""
+    return home if home in easy_route.HOMES else ""
+
+
+def _sponsored_easy_home(run_data: dict[str, Any], ws: Path | None) -> str:
+    """The engine every follow-up of a turn Plain answered on the included
+    Kimi K3 runs on (easy_route): the run's home, since a sponsored Plain run
+    cannot be continued (:data:`SPONSORED_PLAIN_FOLLOW_UP_ERROR`).  "" for any
+    other run, a Plain run started as Plain included."""
+    from agent_monitor import easy_route
+
+    if str(run_data.get("engine") or "") != easy_route.EASY_ENGINE:
+        return ""
+    if str(run_data.get("credential_source") or "").strip() != "sponsored_kimi":
+        return ""
+    return _easy_route_home(ws)
+
+
 def _easy_route_follow_up(
     run_id: str,
     run_data: dict[str, Any],
@@ -2824,32 +2849,40 @@ def _easy_route_follow_up(
     (easy_route): Plain when the judge rates the message easy, Ansatz CGM
     otherwise or when the message asks for it.  A bare Continue, a message
     with files, a Max run, or a turn Plain cannot run on the run's own route
-    and model keeps the run's engine.  Returns the record to continue with
-    (its ``engine`` switched, and the switch said in the chat, when it
-    changes).  Never raises: any failure keeps the run's engine."""
+    and model keeps the run's engine.  A turn Plain answered on the included
+    Kimi K3 is the exception: a sponsored Plain run cannot be continued, so
+    every follow-up of it (a message, a bare Continue, files) runs on the
+    engine the run started on, unrated (:func:`_sponsored_easy_home`).
+    Returns the record to continue with (its ``engine`` switched, and the
+    switch said in the chat, when it changes).  Never raises: any failure
+    keeps the run's engine."""
     from agent_monitor import easy_route
 
     try:
         home = easy_route.home(ws)
-        if not easy_route.enabled() or home not in easy_route.HOMES:
+        if home not in easy_route.HOMES:
             return run_data
         current = str(run_data.get("engine") or "")
-        if current not in {home, easy_route.EASY_ENGINE}:
-            return run_data
-        text = (message or "").strip()
-        if not text or text.startswith(_BARE_CONTINUE_PREFIX) or has_files:
-            return run_data
         verdict: dict[str, Any] | None = None
-        if easy_route.asks_for_cgm(text):
-            target, why = home, "asked"
+        if _sponsored_easy_home(run_data, ws):
+            # Even with the judge switched off since: Plain cannot go on here.
+            target, why = home, "sponsored"
         else:
-            problems = ensure_problems(run_data, run_id)
-            first = _problem_item_text(problems[0]) if problems else str(run_data.get("problem_text") or "")
-            verdict = easy_route.judge(text, problem=first)
-            why = "judged"
-            target = easy_route.EASY_ENGINE if verdict.get("verdict") == "easy" else home
-        if target == easy_route.EASY_ENGINE and not _easy_plain_follow_up_ok(run_id, run_data, user, model):
-            target = home
+            if not easy_route.enabled() or current not in {home, easy_route.EASY_ENGINE}:
+                return run_data
+            text = (message or "").strip()
+            if not text or text.startswith(_BARE_CONTINUE_PREFIX) or has_files:
+                return run_data
+            if easy_route.asks_for_cgm(text):
+                target, why = home, "asked"
+            else:
+                problems = ensure_problems(run_data, run_id)
+                first = _problem_item_text(problems[0]) if problems else str(run_data.get("problem_text") or "")
+                verdict = easy_route.judge(text, problem=first)
+                why = "judged"
+                target = easy_route.EASY_ENGINE if verdict.get("verdict") == "easy" else home
+            if target == easy_route.EASY_ENGINE and not _easy_plain_follow_up_ok(run_id, run_data, user, model):
+                target = home
         easy_route.note_turn(ws, home=home, engine=target, verdict=verdict, why=why)
         if target == current:
             return run_data
@@ -7412,6 +7445,12 @@ def send_human_message(
     except FileNotFoundError:
         recorded = {}
     recorded_engine = str(recorded.get("engine") or run_id.split("_", 1)[0])
+    # A turn Plain answered on the included Kimi K3 (easy_route) is continued
+    # on the engine the run started on, so that engine's checks apply.
+    sponsored_home = _sponsored_easy_home(recorded, ws)
+    if sponsored_home:
+        recorded = {**recorded, "engine": sponsored_home}
+        recorded_engine = sponsored_home
     # Refuse before the message is recorded, so the chat shows nothing unsent.
     from agent_monitor.engines_registry import retired_engine_error
 
@@ -7424,6 +7463,14 @@ def send_human_message(
     if upload_error:
         raise ValueError(upload_error)
     model = _member_continuation_model(user, recorded_engine, recorded, model)
+    # After a turn Plain answered (easy_route), this one may run on the
+    # engine the run started on: a model that engine cannot run gives way to
+    # the run's own, as one its own engine cannot run does just above.
+    from agent_monitor import easy_route
+
+    home = _easy_route_home(ws)
+    if home and recorded_engine == easy_route.EASY_ENGINE and home != recorded_engine:
+        model = _member_continuation_model(user, home, {**recorded, "engine": home}, model)
     if account_policy.is_member(user):
         feedback_error = account_policy.member_feedback_error(
             message,

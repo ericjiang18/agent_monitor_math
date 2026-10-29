@@ -2975,6 +2975,11 @@ ${['dockModelsFor', 'syncDockModel', 'dockModelChoice'].map(fn).join('\n')}`, ct
   step('CURRENT_USER={guest:true}')
   assert.deepEqual(models({ engine: 'plain', auth_route: 'api_key', model: 'kimi-k3' }), [])
   step('CURRENT_USER={id:1}')
+  // After a turn Plain answered (easy_route), the next may run on the engine the run started on:
+  // only models both run, so none after a turn of Ansatz CGM · Kimi K3 (Kimi K3 alone).
+  assert.deepEqual(models({ run_id: 'e', engine: 'plain', easy_route_home: 'math_harness', auth_route: 'codex_subscription', model: 'gpt-6.1-sol' }), ['gpt-6.1-sol', 'gpt-6-astra'])
+  assert.deepEqual(models({ run_id: 'f', engine: 'plain', easy_route_home: 'kimi', auth_route: 'api_key', model: 'kimi-k3' }), [])
+  assert.deepEqual(models({ run_id: 'g', engine: 'math_harness', easy_route_home: 'math_harness', auth_route: 'codex_subscription', model: 'gpt-6.1-sol' }), ['gpt-6.1-sol', 'gpt-6-astra'])
   // Drawn: current first and chosen; another choice is sent only for that run, the current one never.
   step(`syncDockModel(${JSON.stringify({ run_id: 'a', engine: 'math_harness', auth_route: 'codex_subscription', model: 'gpt-6.1-sol' })})`)
   assert.deepEqual([step('wrap.hidden'), step('select.value'), step("dockModelChoice('a')")], [false, 'gpt-6.1-sol', ''])
