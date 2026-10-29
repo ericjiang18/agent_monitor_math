@@ -22,6 +22,7 @@ import contextvars
 import functools
 import json
 import logging
+import math
 import sqlite3
 import threading
 import time
@@ -37,6 +38,31 @@ DB_PATH = DATA_DIR / "usage.db"
 METRICS = ("input_tokens", "output_tokens", "cached_input_tokens", "reasoning_tokens", "cost_usd", "latency_s")
 TERMINAL = {"finished", "failed", "stopped", "cancelled", "interrupted"}
 FAILED = {"failed", "interrupted"}
+# What a Plain run on the included Kimi K3 used, as the isolated service
+# that ran it reports it (public_kimi_server's status, read by
+# jobs._run_sponsored_kimi_plain): the token counts and cost of METRICS.
+# Latency is the console's own.
+REPORTED_METRICS = tuple(name for name in METRICS if name != "latency_s")
+_REPORTED_CEILING = 1e12
+
+
+def reported_usage(values: Any) -> dict[str, int | float]:
+    """The REPORTED_METRICS of ``values`` (a run's totals, or a reported
+    usage) as finite, non-negative numbers below a sane ceiling: token counts
+    as integers, the cost in dollars.  Anything else, and every other key, is
+    left out."""
+    if not isinstance(values, dict):
+        return {}
+    out: dict[str, int | float] = {}
+    for name in REPORTED_METRICS:
+        value = values.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        number = float(value)
+        if not math.isfinite(number) or number < 0 or number > _REPORTED_CEILING:
+            continue
+        out[name] = round(number, 6) if name == "cost_usd" else int(number)
+    return out
 
 _INIT_LOCK = threading.Lock()
 _INITIALIZED: set[str] = set()

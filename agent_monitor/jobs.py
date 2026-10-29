@@ -5408,7 +5408,7 @@ def _run_sponsored_kimi_plain(
     owner_id: int | None,
 ) -> dict[str, Any]:
     """Run Plain through the isolated service and project it into this workspace."""
-    from agent_monitor import sponsored_kimi_client
+    from agent_monitor import sponsored_kimi_client, usage_ledger
 
     stop_event = _stop_event(run_id)
 
@@ -5491,7 +5491,12 @@ def _run_sponsored_kimi_plain(
                     {"from": left["trace_id"], "to": right["trace_id"]}
                     for left, right in zip(agents, agents[1:])
                 ],
-                "totals": {"latency_s": time.time() - started},
+                # The usage the isolated service reports (token counts and
+                # cost only), booked as this run's sponsored usage.
+                "totals": {
+                    "latency_s": time.time() - started,
+                    **usage_ledger.reported_usage(payload.get("usage")),
+                },
                 "runner_result": {
                     "transport": "isolated-sponsored-kimi",
                     "public_run_id": str(payload.get("run_id") or ""),

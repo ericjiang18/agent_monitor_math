@@ -292,13 +292,45 @@ class PublicKimiApplicationTests(unittest.TestCase):
             set(result),
             {
                 "run_id", "status", "engine", "model", "created_at",
-                "updated_at", "error", "proof", "events",
+                "updated_at", "error", "proof", "events", "usage",
             },
         )
         self.assertEqual(result["proof"], "")
+        self.assertEqual(result["usage"], {})  # the record says nothing it used
         self.assertEqual(
             set(result["events"][0]),
             {"stage", "role", "title", "status", "output", "text"},
+        )
+        self.assertNotIn("real-secret-value", json.dumps(result))
+
+    def test_status_reports_the_runs_usage_as_numbers_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app, _fake = self.make_app(root)
+            started = app.start(
+                owner_id=7,
+                session_key="visitor",
+                ip="192.0.2.7",
+                body={"engine": "plain", "problem": "Prove it"},
+            )
+            record = {
+                "status": "finished",
+                "auth_route": "api_key",
+                "totals": {
+                    "input_tokens": 1200, "output_tokens": 345.0, "cost_usd": 0.0123456789,
+                    "cached_input_tokens": 64, "reasoning_tokens": True, "latency_s": 9.5,
+                    "agents": 3, "note": "must not escape", "secret": "real-secret-value",
+                },
+            }
+            with (
+                patch.object(app, "_record", return_value=record),
+                patch.object(agent_monitor, "RUNS_DIR", root / "runs"),
+            ):
+                result = app.status(run_id=started["run_id"], owner_id=7)
+        # The token counts and cost, nothing else of the record (a flag is no count).
+        self.assertEqual(
+            result["usage"],
+            {"input_tokens": 1200, "output_tokens": 345, "cost_usd": 0.012346, "cached_input_tokens": 64},
         )
         self.assertNotIn("real-secret-value", json.dumps(result))
 
