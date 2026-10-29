@@ -919,3 +919,21 @@ class GuestTest(unittest.TestCase):
                 self.assertTrue(console_server._guest_rating_allowed(guest))  # an hour later
         self.assertFalse(console_server._guest_rating_allowed({"guest": True}))  # no id
         console_server._GUEST_RATINGS.clear()
+
+
+class ReadableLinkTest(unittest.TestCase):
+    def test_a_readable_version_is_linked_to_its_proof_run_by_its_owner_only(self) -> None:
+        from agent_monitor import console_server
+
+        notes = []
+
+        handler_cls = next(v for v in vars(console_server).values() if isinstance(v, type) and hasattr(v, "_link_readable_version"))
+        handler = handler_cls.__new__(handler_cls)
+        owners = {"p1": True, "p2": False}
+        handler._is_run_owner = lambda run_id, user: owners.get(run_id, False)
+        with patch.object(console_server.job_manager, "_append_chat", side_effect=lambda rid, role, text: notes.append((rid, role, text))):
+            handler._link_readable_version({"run_id": "readability_r1"}, {"parent_run_id": "p1"}, {"id": 1})
+            handler._link_readable_version({"run_id": "readability_r2"}, {"parent_run_id": "p2"}, {"id": 1})
+            handler._link_readable_version({"run_id": "readability_r3"}, {"parent_run_id": "../x"}, {"id": 1})
+            handler._link_readable_version({"run_id": "readability_r4"}, {}, {"id": 1})
+        self.assertEqual(notes, [("p1", "system", "Readable version: readability_r1")])

@@ -687,6 +687,15 @@ html.guest-viewer body:not(.analysis-run):not(.readability-run) #sel-pop { displ
 .sandbox-thread .chat-msg.turn-card .msg-text.clamped { max-height: 18em; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
 .sandbox-thread .chat-msg.turn-card .turn-wait { color: var(--dim); font-size: 13px; }
 .sandbox-thread .chat-msg.turn-card .msg-more { margin: 2px 0 10px 22px; }
+.sandbox-thread .chat-msg.turn-card:not(.readable-card) .turn-doc { cursor: pointer; }
+.sandbox-thread .chat-msg.turn-card .turn-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 4px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg2); }
+.sandbox-thread .chat-msg.turn-card .turn-tools[hidden], .sandbox-thread .chat-msg.turn-card .turn-tools button[hidden] { display: none; }
+.sandbox-thread .chat-msg.turn-card .turn-chips { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-right: auto; }
+.sandbox-thread .chat-msg.turn-card .turn-chips .pipeline-harness, .sandbox-thread .chat-msg.turn-card .turn-chips .chip-state { display: none; }
+.sandbox-thread .chat-msg.turn-card .turn-tools button, .sandbox-thread .chat-msg.turn-card .readable-open {
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--fg);
+  font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.sandbox-thread .chat-msg.turn-card .turn-tools button:disabled { opacity: .4; cursor: not-allowed; }
 /* A reply that is a chunk of the engine's activity log: one line until it is
    opened, then the log as written, in a box of its own that scrolls sideways. */
 .sandbox-thread .chat-msg.log .msg-log-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 0 4px; }
@@ -7775,15 +7784,61 @@ function makeReadable(){
     $('make-readable-note').textContent=`The ${source.name} has ${source.text.length.toLocaleString('en-US')} characters: too long to paste into Readability (at most ${limit.toLocaleString('en-US')}${viewerIsGuest()?' for guests':''}).`;
     return;
   }
-  // As New does: the run is left for the composer, now in Readability, with
-  // this document its one source (files still attached would be a second).
-  runId=null; jobId=null; stopPolling(); goLanding();
-  chooseMode('readability');
-  if(initialAttachments.files.length)initialAttachments.clear();
-  const input=$('problem-text');
-  input.value=source.text;
-  input.dispatchEvent(new Event('input',{bubbles:true}));
-  input.focus(); input.setSelectionRange(0,0); input.scrollTop=0;
+  // The readable version is made here: a card at the bottom of this thread.
+  startInlineReadable(source.text,source.name,$('make-readable-btn'));
+}
+// Whether this viewer may make a readable version now (the Readability
+// policy, the guest's runs, today's sponsored runs), whatever the document.
+function readableFromThreadAllowed(){
+  const entry=readabilityEngineEntry(), daily=readabilityPolicy()?.sponsored;
+  if(!readabilityOffered()||!entry?.available||entry.requires_login||readabilityPolicy()?.enabled===false)return false;
+  if(viewerIsGuest()&&Number(GUEST_POLICY?.runs_remaining)<=0)return false;
+  if(readabilityRouteSponsored(readabilityModelChoice())&&daily&&(daily.available===false||Number(daily.remaining_today)<=0))return false;
+  return true;
+}
+/* A readable version of `text` made from the shown run, whose thread shows it
+   at the bottom (the server links it: "Readable version: <run id>"). */
+async function startInlineReadable(text,name,button){
+  const rid=String(runId||''), note=$('make-readable-note');
+  const say=message=>{ if(note)note.textContent=message; else threadError(message); };
+  if(!rid||typeof text!=='string'||!text.trim())return;
+  if(!readableFromThreadAllowed())return say('A readable version cannot be made right now.');
+  const limit=Number(readabilityPolicy()?.sources?.paste_chars)||20000;
+  if(text.length>limit)return say(`The ${name} has ${text.length.toLocaleString('en-US')} characters: too long for Readability (at most ${limit.toLocaleString('en-US')}${viewerIsGuest()?' for guests':''}).`);
+  const sponsoredOnly=readabilitySponsoredOnly(), model=sponsoredOnly?'':readabilityModelChoice();
+  if(!model&&!sponsoredOnly)return say('Choose a model that Readability can use in Settings first.');
+  if(button)button.disabled=true;
+  say('Making a readable version…');
+  try{
+    const tuning=currentRunTuning();
+    const request={run_kind:'readability',engine:'readability',model:model||null,auth_route:sponsoredOnly?'api_key':runAuthRoute(),
+      reasoning_effort:tuning.reasoning_effort,speed_mode:tuning.speed_mode,readability:{audience:readabilityAudience()},
+      source:{text,format:'md'},parent_run_id:rid};
+    const response=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+    const started=await response.json().catch(()=>({}));
+    if(started.guest_policy){ GUEST_POLICY=started.guest_policy; applyGuestUi(); }
+    if(!response.ok)throw new Error(String(started.error||('HTTP '+response.status)));
+    if(started.run_id)RUN_KIND_BY_ID.set(String(started.run_id),'readability');
+    say('');
+    if(String(runId||'')===rid)await loadChat();
+    loadRuns().catch(()=>{}); loadEngines().catch(()=>{});
+    const card=[...document.querySelectorAll('#sandbox-thread .readable-card')].pop();
+    if(card&&String(runId||'')===rid)threadReveal(card,'start');
+  }catch(err){ say(String(err?.message||err)); }
+  finally{ if(button)button.disabled=false; }
+}
+/* Edit on an earlier proof: that proof becomes proof.md (the newer one stays
+   in its own card), saved as an edit is, and opened in the editor. */
+function restoreTurnProof(card){
+  const text=card?._turnText; if(typeof text!=='string'||!text.trim())return;
+  const n=String(card.dataset.key||'').split('|')[1]||'';
+  if(!window.confirm(`Make turn ${n}'s proof the current proof? The newer proof stays in its own card.`))return;
+  if(!sandboxEditing)beginSandboxEdit();
+  if(!sandboxEditing)return;
+  const editor=$('notion-editor');
+  editor.value=text;
+  editor.dispatchEvent(new Event('input',{bubbles:true}));
+  const live=document.querySelector('#sandbox-thread .proof-panel'); if(live)threadReveal(live,'start');
 }
 $('make-readable-btn').onclick=makeReadable;
 function writeupBannerHtml(writeup){
@@ -9908,6 +9963,9 @@ function threadModel(msgs,run,kind){
   if(kind!=='readability')for(const m of ordered){
     const text=String(m.content||''), line=text.trim(), files=withFiles(m)?m.attachments:[];
     if(!line&&!files.length)continue;
+    // Make readable from this thread: its readable version is a card at its place.
+    const readable=m.role==='system'&&/^Readable version: ([A-Za-z0-9_.-]+)$/.exec(line);
+    if(readable){ items.push({key:keyOf('readable',readable[1]),kind:'readable',rid:readable[1],label:'Readable version',text:'',url:'',attachments:[],ts:m.ts||'',recovered:false}); continue; }
     let as=m.role==='user'?'user':m.role==='assistant'?(kind==='analyze'||THREAD_ROUTINE_REPLIES.includes(line)?'':'reply'):(threadRoutineLine(text)?'':'notice');
     // A first run's failure is the status line's while the record says the
     // run failed for that reason (or has not arrived yet); after a later turn
@@ -10110,7 +10168,48 @@ function threadNoticeNode(item){
   if(item.ts)node.append(analyzeEl('span','ts',fmtTs(item.ts)));
   return node;
 }
-function threadItemNode(item){ return item.kind==='user'?threadUserNode(item):item.kind==='reply'?threadReplyNode(item):item.kind==='turn'?threadTurnNode(item):threadNoticeNode(item); }
+function threadItemNode(item){ return item.kind==='user'?threadUserNode(item):item.kind==='reply'?threadReplyNode(item):item.kind==='turn'?threadTurnNode(item):item.kind==='readable'?threadReadableNode(item):threadNoticeNode(item); }
+/* A readable version made from this thread (Make readable): its run is
+   followed until it ends, and its readable text drawn here; the full view
+   (Notation, Map) is that run's own. */
+function threadReadableNode(item){
+  const node=analyzeEl('div','chat-msg turn-card readable-card'), head=analyzeEl('div','turn-head');
+  const sub=analyzeEl('span','sub','working…');
+  head.append(analyzeEl('span','title','Readable version'),sub);
+  const download=analyzeEl('button','turn-dl','⬇ Download'); download.type='button'; download.disabled=true;
+  const open=analyzeEl('button','readable-open','Notation & map ↗'); open.type='button';
+  open.title='Open the readable version on its own, with its Notation and Map';
+  open.onclick=event=>{ event.stopPropagation(); selectRun(item.rid); goSession('sandbox'); };
+  head.append(download,open);
+  const body=analyzeEl('div','msg-text md-view turn-doc'); body.id='thread-msg-'+(++threadIds);
+  body.append(analyzeEl('span','turn-wait','Making it readable…'));
+  node.setAttribute('role','article'); node.setAttribute('aria-label','Readable version');
+  node.append(head,body);
+  threadReadablePoll(node,item,body,sub,download,0);
+  return node;
+}
+async function threadReadablePoll(node,item,body,sub,download,round){
+  const rid=String(runId||'');
+  await new Promise(resolve=>setTimeout(resolve,round?5000:0));
+  if(String(runId||'')!==rid||round&&!node.isConnected)return;
+  let rec=null;
+  try{ const response=await fetch('/api/run/'+encodeURIComponent(item.rid)); if(response.ok)rec=await response.json(); }catch(e){ rec=null; }
+  if(String(runId||'')!==rid||!node.isConnected)return;
+  const status=String(rec?.status||''), done=['finished','failed','stopped','interrupted'].includes(status);
+  const text=rec?.sandbox_preview?.has_readable?String(rec.sandbox_preview.text||''):'';
+  threadRedraw('keep',()=>{
+    sub.textContent=!rec?'not available':done?(status==='finished'?'ready':status):'working…';
+    if(text&&text!==node._turnText){
+      node._turnText=text;
+      body.innerHTML='<div class="md-doc">'+mdToHtml(text)+'</div>'; renderMathIn(body);
+      download.disabled=false;
+      if(!node.querySelector('.msg-more')&&(text.length>900||text.split('\n').length>14))threadMoreButton(node,body,item.key);
+    }else if(!text&&(done||!rec)){
+      body.textContent=''; body.append(analyzeEl('span','turn-wait',!rec?'This readable version could not be read.':status==='finished'?'No readable version was written.':'The readable version did not finish ('+status+').'));
+    }
+  });
+  if(rec&&!done&&round<720)threadReadablePoll(node,item,body,sub,download,round+1);
+}
 // An earlier turn's proof, as it was when the turn ended: read-only, typeset
 // as the live card's is, its start until Show more, with its own Download.
 // Its text is read once (threadTurnTexts) through the workspace file endpoint.
@@ -10127,7 +10226,14 @@ function threadTurnNode(item){
   const body=analyzeEl('div','msg-text md-view turn-doc'); body.id='thread-msg-'+(++threadIds);
   body.append(analyzeEl('span','turn-wait','Loading this turn\'s '+what+'…'));
   node.setAttribute('role','article'); node.setAttribute('aria-label',(item.answer?'Answer':'Proof')+', turn '+item.n);
-  node.append(head,body);
+  // Clicked, the card shows the proof card's tools: its status, Make readable,
+  // Edit (this proof made the current one) and the run's views.
+  const tools=analyzeEl('div','turn-tools'); tools.hidden=true;
+  const tool=(cls,label,title)=>{ const b=analyzeEl('button',cls,label); b.type='button'; if(title)b.title=title; return b; };
+  tools.append(analyzeEl('span','turn-chips'),tool('turn-readable','¶ Make readable','A readable version of this '+what+', at the bottom of the thread'));
+  if(!item.answer)tools.append(tool('turn-restore','✎ Edit','Make turn '+item.n+'\'s proof the current proof, then edit it'));
+  for(const [view,label] of [['lean','Lean'],['monitor','Monitor'],['dag','DAG']]){ const b=tool('turn-view',label,'Open '+(view==='lean'?'Lean Verification':label)); b.dataset.gotoView=view; tools.append(b); }
+  node.append(head,tools,body);
   threadTurnLoad(node,item,body,download);
   return node;
 }
@@ -10163,7 +10269,7 @@ function threadTurnDownload(button){
   const node=button.closest('.chat-msg.turn-card'), text=node?._turnText; if(typeof text!=='string')return;
   const n=String(node.dataset.key||'').split('|')[1]||'', tex=/\.tex$/i.test(String(node.dataset.key||'').split('|')[2]||'');
   const url=URL.createObjectURL(new Blob([text],{type:tex?'application/x-tex':'text/markdown'}));
-  const a=document.createElement('a'); a.href=url; a.download=(node.classList.contains('turn-answer')?'answer':'proof')+'-turn-'+n+(tex?'.tex':'.md');
+  const a=document.createElement('a'); a.href=url; a.download=node.classList.contains('readable-card')?'readable-version.md':(node.classList.contains('turn-answer')?'answer':'proof')+'-turn-'+n+(tex?'.tex':'.md');
   document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function threadMoreButton(node,text,key){
@@ -10541,7 +10647,23 @@ function threadSelPopCheck(){
     for(const type of ['pointerdown','keydown','touchstart'])sc.addEventListener(type,()=>{ if(threadPos.open){ threadPos.open=false; threadMark(); } },{passive:true});
     sc.addEventListener('click',event=>{
       const button=event.target.closest?.('.msg-more'); if(button)return threadToggle(button);
-      const download=event.target.closest?.('.turn-dl'); if(download)threadTurnDownload(download);
+      const download=event.target.closest?.('.turn-dl'); if(download)return threadTurnDownload(download);
+      const card=event.target.closest?.('.chat-msg.turn-card:not(.readable-card)'); if(!card)return;
+      const act=event.target.closest?.('.turn-tools button');
+      if(act){
+        if(act.classList.contains('turn-view'))return setWorkspaceView(act.dataset.gotoView);
+        if(act.classList.contains('turn-readable'))return startInlineReadable(card._turnText,card.classList.contains('turn-answer')?'answer':'earlier proof',act);
+        if(act.classList.contains('turn-restore'))return restoreTurnProof(card);
+        return;
+      }
+      // A click on the card (not a link, not a text selection) shows or hides its tools.
+      if(event.target.closest?.('a, button, input, textarea, select')||String(window.getSelection?.()||''))return;
+      const tools=card.querySelector('.turn-tools'); if(!tools)return;
+      threadRedraw('keep',()=>{
+        tools.hidden=!tools.hidden;
+        const chips=tools.querySelector('.turn-chips'); if(chips&&!tools.hidden)chips.innerHTML=$('auto-pipeline-status')?.innerHTML||'';
+        tools.querySelectorAll('.turn-readable').forEach(b=>{ b.hidden=!readableFromThreadAllowed(); });
+      });
     });
     if(typeof ResizeObserver==='function'){
       const observer=new ResizeObserver(threadResized);
