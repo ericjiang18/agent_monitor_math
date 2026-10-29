@@ -3163,7 +3163,7 @@ test('a failed or stopped run with no proof shows none (never its log as a proof
   assert.match(preview, /noProof\?'no proof written':'waiting for proof\.md…'/)
   const tick = fn('tick')
   assert.match(tick, /pollMissing=r\.status===404\?\(typeof pollMissing==='number'\?pollMissing:0\)\+1:0;\n\s*if\(pollMissing>=2&&typeof runGone==='function'\)\{ runGone\(rid\); return false; \}/)
-  assert.match(fn('runGone'), /runId=null; stopPolling\(\); resetProofView\(\); resetSandboxThread\(\); goLanding\(\);/)
+  assert.match(fn('runGone'), /runId=null; stopPolling\(\); resetProofView\(\); resetSandboxThread\(\); if\(typeof rememberOpenRun==='function'\)rememberOpenRun\(''\); goLanding\(\);/)
   assert.match(html, /@media \(hover: none\) \{\n\s*\.run-item:not\(\.active\) \.run-del, \.run-item:not\(\.active\) \.run-act \{ visibility: hidden; pointer-events: none; \}/)
   assert.match(html, /\.chat-compose:has\(#dock-model:not\(\[hidden\]\)\) \.attachment-help-short:not\(:empty\) \{ display: none; \}/)
   assert.match(html, /#lean-body\[style\*="grid"\] \{ display: flex !important; flex-direction: column; \}/)
@@ -3177,4 +3177,68 @@ test('the status line never shows a bare bracket, an end marker or a JSON reply\
   assert.deepEqual(['{"verdict": "accepted"}', '[{"id": 1}]', '[1, 2]', '[agent-monitor] timeout after 600s', '{x} y'].map(t => json.test(t)), [true, true, true, false, false])
   const keep = line => line && /[A-Za-z0-9]/.test(line) && !/^=+\s*[A-Z ]+\s*=+$/.test(line) && !/^[\[\]{}(),:"'`]+$/.test(line)
   assert.deepEqual(['}', '=== END ===', 'Lemma 2 holds.', ']', '"'].filter(keep), ['Lemma 2 holds.'])
+})
+
+test('a reload opens the run this tab had open again (not a deleted one, nor over a catalogue problem or typed text)', async () => {
+  const store = new Map()
+  const ctx = vm.createContext({ console, sessionStorage: { getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) } })
+  vm.runInContext(`let runId=null, screen='landing', selected=[], ok=true; const els={'problem-text':{value:''}}; const $=id=>els[id];
+const fetch=async()=>({ok}); const selectRun=rid=>{ selected.push(rid); runId=rid; };
+${constant('OPEN_RUN_KEY')}
+${['rememberOpenRun', 'restoreOpenRun'].map(fn).join('\n')}`, ctx)
+  const step = code => vm.runInContext(code, ctx)
+  step("rememberOpenRun('r1')")
+  assert.equal(await step('restoreOpenRun()'), true)
+  assert.deepEqual(plain(step('selected')), ['r1'])
+  // Typed meanwhile, or another run open: nothing.
+  step("runId=null; selected=[]; els['problem-text'].value='Prove it.'")
+  assert.equal(await step('restoreOpenRun()'), false)
+  step("els['problem-text'].value=''; runId='r2'")
+  assert.equal(await step('restoreOpenRun()'), false)
+  // A run gone since: forgotten.
+  step("runId=null; ok=false")
+  assert.equal(await step('restoreOpenRun()'), false)
+  assert.equal(store.size, 0)
+  // Left for the composer: forgotten.
+  step("ok=true; rememberOpenRun('r3'); rememberOpenRun('')")
+  assert.equal(await step('restoreOpenRun()'), false)
+  assert.match(script, /const handed=consumeCatalogueProblem\(\);if\(!handed&&typeof restoreOpenRun==='function'\)restoreOpenRun\(\);/)
+  assert.match(fn('selectRun'), /^function selectRun\(rid,jid\)\{\n\s*if\(typeof rememberOpenRun==='function'\)rememberOpenRun\(rid\);/)
+})
+
+test('small follow-ups: Enter in the custom model box stays there, New proof empties a request already started, a readable run opened from a card has its way back, server paths are shortened, guest and Formal DAG wording', () => {
+  assert.match(script, /\$\('model-custom-entry'\)\.onkeydown=e=>\{if\(e\.key==='Enter'\)\{ e\.preventDefault\(\); useCustom\(\); \}\};/)
+  // New proof: the request a start took is emptied; one changed since is kept.
+  const ctx = vm.createContext({ console })
+  vm.runInContext(`const els={'problem-text':{value:'Prove it.',events:0,dispatchEvent(){ this.events++; },focus(){}}}; const $=id=>els[id];
+let runId='r1', jobId='j1', screen='session'; const stopPolling=()=>{}, goLanding=()=>{ screen='landing'; }; var Event=function(t){ this.type=t; };
+let composerStartedText=null;
+${fn('composerStarted')}
+const handler=()=>{ runId=null; jobId=null; stopPolling(); goLanding(); const box=$('problem-text'); if(box&&composerStartedText!==null&&box.value===composerStartedText){ box.value=''; box.dispatchEvent(new Event('input',{bubbles:true})); } composerStartedText=null; };`, ctx)
+  const step = code => vm.runInContext(code, ctx)
+  step('composerStarted(); handler()')
+  assert.equal(step("els['problem-text'].value"), '')
+  step("els['problem-text'].value='Prove it.'; composerStarted(); els['problem-text'].value='Prove it, more slowly.'; handler()")
+  assert.equal(step("els['problem-text'].value"), 'Prove it, more slowly.')
+  assert.ok(script.includes("if(box&&composerStartedText!==null&&box.value===composerStartedText){ box.value=''; box.dispatchEvent(new Event('input',{bubbles:true})); }"))
+  for (const name of ['startRun', 'startAnalyzeRun', 'startReadabilityRun'])
+    assert.match(fn(name), /initialAttachments\.clear\(\); if\(typeof composerStarted==='function'\)composerStarted\(\);/, name)
+  // The readable run's way back.
+  assert.match(html, /<button type="button" class="sess-back" id="sess-parent" hidden title="[^"]+">← Back to the proof<\/button>/)
+  assert.match(fn('threadReadableNode'), /readableParent=\{rid:String\(item\.rid\|\|''\),parent:String\(runId\|\|''\)\}; selectRun\(item\.rid\);/)
+  const back = vm.createContext({ console })
+  vm.runInContext(`let runId='rd1', workspaceView='sandbox'; var readableParent={rid:'rd1',parent:'p1'}; const b={hidden:true}; const $=id=>id==='sess-parent'?b:null;
+${fn('syncParentBack')}`, back)
+  const s2 = code => vm.runInContext(code, back)
+  s2('syncParentBack()'); assert.equal(s2('b.hidden'), false)
+  s2("workspaceView='dag'; syncParentBack()"); assert.equal(s2('b.hidden'), true)
+  s2("workspaceView='sandbox'; runId='other'; syncParentBack()"); assert.equal(s2('b.hidden'), true)
+  // Server paths in a failure: the last part only (never a URL).
+  const shorten = t => t.replace(/(^|[\s'"(=])((?:\/[\w.@+-]+){3,}\/?)/g, (m, pre, path) => pre + '…/' + path.replace(/\/$/, '').split('/').pop())
+  assert.ok(fn('updateChatStatus').includes(String.raw`.replace(/(^|[\s'"(=])((?:\/[\w.@+-]+){3,}\/?)/g,(m,pre,path)=>pre+'…/'+path.replace(/\/$/,'').split('/').pop())`))
+  assert.equal(shorten("found 'codex-cli 0.164.0' at /home/u/.codex/packages/standalone/releases/0.164.0/bin/codex; install it"), "found 'codex-cli 0.164.0' at …/codex; install it")
+  assert.equal(shorten('see https://openrouter.ai/api/v1/models'), 'see https://openrouter.ai/api/v1/models')
+  // Wording.
+  assert.ok(script.includes("'Hosted Kimi K3 is not available right now: add a Kimi API key in Settings to start.'} Sign in to use API keys from more providers and keep saved history."))
+  assert.match(fn('dagUnavailableState'), /if\(mode==='formal'&&payload\?\.status==='none'&&formalStage\?\.status==='off'\)return \{\n\s*status:'formalization off',/)
 })

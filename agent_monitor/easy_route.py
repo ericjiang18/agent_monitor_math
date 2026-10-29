@@ -313,8 +313,13 @@ _NO_LEAN = re.compile(
 )
 
 
+# "the epsilon-delta formalization of limits": a definition, not a request
+# for a Lean formalization (one that names Lean still counts).
+_FORMALIZATION_OF = re.compile(r"\bformali[sz]ations?\s+of\b", re.IGNORECASE)
+
+
 def asks_for_formalization(text: str) -> bool:
-    rest = _NO_LEAN.sub(" ", str(text or ""))
+    rest = _FORMALIZATION_OF.sub(" ", _NO_LEAN.sub(" ", str(text or "")))
     return bool(_ASKS_FOR_LEAN.search(rest) or _ASKS_FOR_LEAN_ANY_CASE.search(rest))
 
 

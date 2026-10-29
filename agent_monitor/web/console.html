@@ -2431,6 +2431,7 @@ body { background:var(--bg); }
     <section id="view-session">
       <div class="session-top">
         <button type="button" class="sess-back" id="sess-back" hidden>← Sandbox</button>
+        <button type="button" class="sess-back" id="sess-parent" hidden title="Back to the run whose proof this readable version was made from">← Back to the proof</button>
         <div class="seg-control">
           <button class="active" data-view="sandbox">Sandbox</button>
           <button data-view="lean">Lean Verification</button>
@@ -2910,6 +2911,7 @@ function setWorkspaceView(v){
   });
   // Back to the conversation from another view (the views open from the proof card).
   const back=$('sess-back'); if(back)back.hidden=v==='sandbox';
+  if(typeof syncParentBack==='function')syncParentBack();
   const panes={
     sandbox:$('view-sandbox'),
     monitor:$('view-monitor'),
@@ -2936,9 +2938,27 @@ function setWorkspaceView(v){
 }
 $('go-home').onclick=()=>{ location.href='/'; };
 $('projects-link').href=pcUrl('/projects');
-$('new-proof-btn').onclick=()=>{ runId=null; jobId=null; stopPolling(); goLanding(); $('problem-text').focus(); };
+// The request a start took from the composer: "+ New proof" opens an empty
+// composer instead of that request again (text changed since is kept).
+let composerStartedText=null;
+function composerStarted(){ composerStartedText=$('problem-text')?.value??null; }
+$('new-proof-btn').onclick=()=>{
+  runId=null; jobId=null; stopPolling(); if(typeof rememberOpenRun==='function')rememberOpenRun(''); goLanding();
+  const box=$('problem-text');
+  if(box&&composerStartedText!==null&&box.value===composerStartedText){ box.value=''; box.dispatchEvent(new Event('input',{bubbles:true})); }
+  composerStartedText=null;
+  box?.focus();
+};
 document.querySelectorAll('.seg-control button').forEach(b=>b.onclick=()=>setWorkspaceView(b.dataset.view));
 $('sess-back').onclick=()=>setWorkspaceView('sandbox');
+// A readable version opened from a proof's thread ("Notation & map ↗"): in its
+// Sandbox, the way back to that proof (this page's memory of where it came from).
+var readableParent=null;  // var: setWorkspaceView may run before this line does
+function syncParentBack(){
+  const button=$('sess-parent'); if(!button)return;
+  button.hidden=!(readableParent&&String(runId||'')===readableParent.rid&&workspaceView==='sandbox');
+}
+$('sess-parent').onclick=()=>{ const parent=readableParent?.parent; if(!parent)return; readableParent=null; selectRun(parent); goSession('sandbox'); syncParentBack(); };
 document.querySelectorAll('#proof-views button').forEach(b=>b.onclick=()=>setWorkspaceView(b.dataset.gotoView));
 /* The proof card's view buttons follow the (hidden) tab bar: its names, which
    views a run has (hidden or disabled) and their pipeline dots. */
@@ -3381,7 +3401,8 @@ function renderModels(){
       sel.value='__custom__'; $('model-custom').value=value; renderModels(); closeChoiceMenus();
     };
     $('model-custom-use').onclick=useCustom;
-    $('model-custom-entry').onkeydown=e=>{if(e.key==='Enter')useCustom();};
+    // Enter applies it; the key itself goes no further (the trigger it focuses would open the menu again).
+    $('model-custom-entry').onkeydown=e=>{if(e.key==='Enter'){ e.preventDefault(); useCustom(); }};
   }
   renderRunTuning();
   renderRunRuntime();
@@ -6178,7 +6199,7 @@ async function startRun(opts){
     const tuning=currentRunTuning();
     const r=await fetch('/api/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({engine,problem_text:text,attachments,model:currentModel()||null,auth_route:runAuthRoute(),reasoning_effort:tuning.reasoning_effort,speed_mode:tuning.speed_mode,formalize:formalizeChoice(),max_iterations:Number(SETTINGS?.max_iterations)||40,use_subagents:false,subagent_model:null,...((typeof autoPick!=='undefined'&&autoPick)?{auto_mode:(typeof autoPick!=='undefined'&&autoPick).mode}:{})})});
     const d=await r.json(); if(d.guest_policy){GUEST_POLICY=d.guest_policy;applyGuestUi();} if(!r.ok){ if(/Unsupported (?:Codex|Claude) account model|conflicts with the selected/i.test(String(d.error||'')))loadSettings({keepEngine:true}); const refused=new Error(d.error||('HTTP '+r.status));refused.refused=true;throw refused;}
-    initialAttachments.clear();
+    initialAttachments.clear(); if(typeof composerStarted==='function')composerStarted();
     selectRun(d.run_id,d.job_id); goSession('sandbox');
   }catch(err){
     eb.style.display='block';eb.textContent=String(err.message);
@@ -6195,7 +6216,7 @@ async function startRun(opts){
 // it names Lean (the proof assistant, not "lean" in its English sense),
 // Mathlib or formalizing, in words it does not turn down ("do not use Lean").
 function autoAsksForLean(text){
-  const rest=String(text||'').replace(/\b(?:no|not|without|don'?t|do\s+not|never|skip|avoid|no\s+need\s+(?:for|to))\b[^.;:!?\n]{0,40}?\b(?:formali[sz](?:e|ed|es|ing|ation)|mathlib|lean(?:\s*4)?)\b/gi,' ');
+  const rest=String(text||'').replace(/\b(?:no|not|without|don'?t|do\s+not|never|skip|avoid|no\s+need\s+(?:for|to))\b[^.;:!?\n]{0,40}?\b(?:formali[sz](?:e|ed|es|ing|ation)|mathlib|lean(?:\s*4)?)\b/gi,' ').replace(/\bformali[sz]ations?\s+of\b/gi,' ');
   return /\b(?:formali[sz](?:e|ed|es|ing|ation)|mathlib|lean\s*4)\b/i.test(rest)||/\b(?:Lean|LEAN)\b/.test(rest);
 }
 // The manuscript an Auto request comes with, and what is asked of it: files
@@ -6350,7 +6371,20 @@ async function loadRuns(){
   return jobs;
 }
 
+// The run open in this tab, so a reload opens it again (this tab's alone:
+// sessionStorage; a new tab starts at the composer).
+const OPEN_RUN_KEY='proving-console-open-run';
+function rememberOpenRun(rid){ try{ if(rid)sessionStorage.setItem(OPEN_RUN_KEY,String(rid)); else sessionStorage.removeItem(OPEN_RUN_KEY); }catch(e){} }
+async function restoreOpenRun(){
+  let rid=''; try{ rid=sessionStorage.getItem(OPEN_RUN_KEY)||''; }catch(e){ rid=''; }
+  if(!rid||runId)return false;
+  try{ const r=await fetch('/api/run/'+encodeURIComponent(rid)); if(!r.ok){ rememberOpenRun(''); return false; } }catch(e){ return false; }
+  // Still on the composer, with nothing typed meanwhile.
+  if(runId||screen!=='landing'||$('problem-text')?.value.trim())return false;
+  selectRun(rid); return true;
+}
 function selectRun(rid,jid){
+  if(typeof rememberOpenRun==='function')rememberOpenRun(rid);
   if(runId!==rid){
     chatAttachments.clear();$('chat-input').value='';const monitorView=$('view-monitor');if(monitorView)monitorView.scrollTop=0;
     // Another run: the admin view's one-time passwords are not kept.
@@ -6381,13 +6415,14 @@ function selectRun(rid,jid){
   if(workspaceView==='dag')refreshDagView();
   if(workspaceView==='lean')refreshLeanView();
   startPolling();
+  if(typeof syncParentBack==='function')syncParentBack();
 }
 
 async function deleteRun(rid){
   if(!confirm('Delete this run?'))return;
   const r=await fetch('/api/runs/'+encodeURIComponent(rid),{method:'DELETE'});
   if(!r.ok){ const d=await r.json().catch(()=>({})); alert(d.error||'Could not delete this run.'); return; }
-  if(runId===rid){runId=null;stopPolling();resetProofView();resetSandboxThread();goLanding();}
+  if(runId===rid){runId=null;stopPolling();resetProofView();resetSandboxThread();if(typeof rememberOpenRun==='function')rememberOpenRun('');goLanding();}
   loadRuns(); syncRunToMonitor(null);
 }
 
@@ -6458,7 +6493,7 @@ let pollDelay=POLL_MIN_MS, pollSig='', pollTurn='', pollQuiet=0, pollActive=fals
 // page goes back to the composer and says so.
 function runGone(rid){
   if(runId!==rid)return;
-  runId=null; stopPolling(); resetProofView(); resetSandboxThread(); goLanding();
+  runId=null; stopPolling(); resetProofView(); resetSandboxThread(); if(typeof rememberOpenRun==='function')rememberOpenRun(''); goLanding();
   const eb=$('form-error'); if(eb){ eb.style.display='block'; eb.textContent='That run was deleted, so it is no longer shown.'; }
   loadRuns(); syncRunToMonitor(null);
 }
@@ -6858,7 +6893,8 @@ function updateChatStatus(run){
   // A failed run states its own reason (a timeout, the CLI's error, a usage
   // limit, a reconnect request) rather than the log's last line.
   // On screen without the engine's process words ("… exited with code 1:"); the tooltip keeps the run error in full.
-  else if(run.status==='failed'){ const full=String(run.error||'').trim(), why=full.replace(/^[A-Za-z][\w .()-]{0,40} exited with code -?\d+:\s*/,'')||detail; box.className='chat-status on err'; $('chat-stage').textContent='Failed'; $('chat-detail').textContent=why.length>240?why.slice(0,239)+'…':why; $('chat-detail').title=full||why; }
+  // A path on the server (a CLI's install, say) shows as its last part only.
+  else if(run.status==='failed'){ const full=String(run.error||'').trim(), why=full.replace(/^[A-Za-z][\w .()-]{0,40} exited with code -?\d+:\s*/,'').replace(/(^|[\s'"(=])((?:\/[\w.@+-]+){3,}\/?)/g,(m,pre,path)=>pre+'…/'+path.replace(/\/$/,'').split('/').pop())||detail; box.className='chat-status on err'; $('chat-stage').textContent='Failed'; $('chat-detail').textContent=why.length>240?why.slice(0,239)+'…':why; $('chat-detail').title=full||why; }
   else { box.className='chat-status on'; $('chat-stage').textContent=label+'…'; $('chat-detail').textContent=detail; }
   // A question about a finished analysis or readable version is answered after the run.
   const recheck=run.analyze?.recheck, ask=run.analyze?.ask||run.readability?.ask;
@@ -8648,6 +8684,12 @@ function dagUnavailableState(mode,payload,view,runEngine){
   if(mode==='formal'&&isCompilerFactsGraph(payload?.graph))return {
     status:'structural Formal · Lean DAG unavailable',
     html:'<div style="font-size:28px;opacity:.4">∎</div><div><strong>The structural Formal · Lean DAG is unavailable.</strong><br/>The response contains observational compiler facts only; open <strong>Compiler facts</strong> to inspect them.</div>',
+  };
+  // Formalization off for the run: nothing is generated by itself.
+  const formalStage=typeof lastSandboxRun!=='undefined'&&lastSandboxRun?.run_id===runId?lastSandboxRun?.auto_pipeline?.stages?.formal_dag:null;
+  if(mode==='formal'&&payload?.status==='none'&&formalStage?.status==='off')return {
+    status:'formalization off',
+    html:'<div style="font-size:28px;opacity:.4">∎</div><div><strong>Formalization is off for this run.</strong><br/>'+escapeHtml(String(formalStage.detail||'Press ∎ Verify in the Lean tab to formalize it.'))+'</div>',
   };
   if(mode==='formal'&&payload?.status==='none')return {
     status:'no Lean source yet',
@@ -10467,7 +10509,7 @@ function threadReadableNode(item){
   download.setAttribute('aria-label','Download the readable version'); node.dataset.rid=String(item.rid||'');
   const open=analyzeEl('button','readable-open','Notation & map ↗'); open.type='button';
   open.title='Open the readable version on its own, with its Notation and Map';
-  open.onclick=event=>{ event.stopPropagation(); selectRun(item.rid); goSession('sandbox'); };
+  open.onclick=event=>{ event.stopPropagation(); readableParent={rid:String(item.rid||''),parent:String(runId||'')}; selectRun(item.rid); goSession('sandbox'); if(typeof syncParentBack==='function')syncParentBack(); };
   head.append(download,open);
   const body=analyzeEl('div','msg-text md-view turn-doc'); body.id='thread-msg-'+(++threadIds);
   body.append(analyzeEl('span','turn-wait','Making it readable…'));
@@ -11715,7 +11757,7 @@ async function startAnalyzeRun(){
       const refused=new Error(response.status===429&&!/tomorrow/i.test(message)?limitMessage(message,response):message);
       refused.refused=true; throw refused;
     }
-    initialAttachments.clear();
+    initialAttachments.clear(); if(typeof composerStarted==='function')composerStarted();
     RUN_KIND_BY_ID.set(String(started.run_id),'analyze');
     selectRun(started.run_id,started.job_id); goSession('sandbox');
     loadEngines().catch(()=>{});  // today's sponsored count moved
@@ -11843,7 +11885,7 @@ async function startReadabilityRun(){
       const refused=new Error(response.status===429&&!/tomorrow/i.test(message)?limitMessage(message,response):message);
       refused.refused=true; throw refused;
     }
-    initialAttachments.clear();
+    initialAttachments.clear(); if(typeof composerStarted==='function')composerStarted();
     RUN_KIND_BY_ID.set(String(started.run_id),'readability');
     selectRun(started.run_id,started.job_id); goSession('sandbox');
     loadEngines().catch(()=>{});  // today's sponsored count moved
@@ -12863,7 +12905,7 @@ function applyGuestUi(){
   const allowance=$('guest-allowance');
   const limit=GUEST_POLICY?.runs_per_session||10, left=GUEST_POLICY?.runs_remaining??limit;
   allowance.hidden=false;
-  allowance.innerHTML=`<span><strong>${Number(left)} of ${Number(limit)} guest runs remaining.</strong> ${GUEST_POLICY?.hosted_guest_available||SETTINGS?.providers?.some(p=>p.id==='kimi'&&p.api_key_set)?'Ansatz CGM on Kimi K3, Lean verification, and the Facts / Explore graphs are ready.':'Add a Kimi API key in Settings to start.'} Sign in to use your own API keys and keep saved history.${SETTINGS?.easy_route?.enabled?` Requests are rated by an external model (OpenRouter · ${escapeHtml(String(SETTINGS.easy_route.model||'judge'))}) to choose the mode and answer easy ones with Plain; requests that are not mathematics are declined.`:''}</span><a href="${pcUrl('/login')}">Sign in →</a>`;
+  allowance.innerHTML=`<span><strong>${Number(left)} of ${Number(limit)} guest runs remaining.</strong> ${GUEST_POLICY?.hosted_guest_available||SETTINGS?.providers?.some(p=>p.id==='kimi'&&p.api_key_set)?'Ansatz CGM on Kimi K3, Lean verification, and the Facts / Explore graphs are ready.':'Hosted Kimi K3 is not available right now: add a Kimi API key in Settings to start.'} Sign in to use API keys from more providers and keep saved history.${SETTINGS?.easy_route?.enabled?` Requests are rated by an external model (OpenRouter · ${escapeHtml(String(SETTINGS.easy_route.model||'judge'))}) to choose the mode and answer easy ones with Plain; requests that are not mathematics are declined.`:''}</span><a href="${pcUrl('/login')}">Sign in →</a>`;
   syncStartButton();
   if(runKindChoice()==='analyze')renderAnalyzeCaps();
   if(runKindChoice()==='readability')renderReadabilityCaps();
@@ -13016,7 +13058,7 @@ function loadAnalyzeHandoff(item){
   input.focus();
   return true;
 }
-(async()=>{await loadUser();await Promise.all([loadEngines(),loadSettings()]);loadRuns();goLanding();consumeCatalogueProblem();})();
+(async()=>{await loadUser();await Promise.all([loadEngines(),loadSettings()]);loadRuns();goLanding();const handed=consumeCatalogueProblem();if(!handed&&typeof restoreOpenRun==='function')restoreOpenRun();})();
 // The run list, read again every few seconds: only this read follows a run shown that runs again, or ran (followRunAgain).
 setInterval(()=>{ if(!document.hidden)loadRuns().then(followRunAgain).catch(()=>{}); }, RUNS_LIST_MS);
 </script>

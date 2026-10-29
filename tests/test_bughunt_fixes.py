@@ -73,6 +73,10 @@ class FormalizationTest(unittest.TestCase):
             "prove it, no formalization needed": False,
             "I lean towards induction; prove 1+...+n = n(n+1)/2": False,
             "A lean proof of the lemma": False,
+            # A formalization *of* something is its definition, unless Lean is named.
+            "Using the epsilon-delta formalization of limits, prove that the limit of x^2 at 2 is 4.": False,
+            "Give a formalization of this proof in Lean 4.": True,
+            "A 5 m ladder is set to lean against a wall with its foot 3 m away. Prove its top is 4 m up.": False,
         }
         for text, want in cases.items():
             self.assertEqual(easy_route.asks_for_formalization(text), want, text)
@@ -362,3 +366,11 @@ class FileListRaceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SponsoredKimiMessageTest(unittest.TestCase):
+    def test_it_says_what_to_do(self) -> None:
+        import inspect
+
+        source = inspect.getsource(jobs)
+        self.assertIn('"must be available. It is not available right now: add your Kimi API "', source)
