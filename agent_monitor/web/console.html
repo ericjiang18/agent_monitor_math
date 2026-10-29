@@ -2340,7 +2340,7 @@ body { background:var(--bg); }
         <div class="prompt-tools">
           <div id="problem-attachments" class="attachment-composer"></div>
           <div class="formalize-switch" id="formalize-switch" role="radiogroup" aria-label="Mode">
-            <button type="button" role="radio" data-auto="1" aria-checked="false" tabindex="-1" hidden title="Let Jev choose: Informal only, Informal + formalization, Analyze or Readability, from what you wrote and attached. Requests that are not mathematics are declined.">Auto</button>
+            <button type="button" role="radio" data-auto="1" aria-checked="false" tabindex="-1" hidden title="Let Jev choose: Informal only (Informal + formalization when you ask for Lean), Analyze or Readability, from what you wrote and attached. Requests that are not mathematics are declined.">Auto</button>
             <button type="button" role="radio" data-formalize="0" aria-checked="false" title="Write the informal proof only. You can still formalize it later with ∎ Verify in the Lean tab.">Informal only</button>
             <button type="button" role="radio" data-formalize="1" aria-checked="true" title="Also translate the proof to Lean and verify it automatically.">Informal + formalization</button>
             <button type="button" role="radio" data-run-kind="analyze" aria-checked="false" tabindex="-1" hidden title="Analyze an existing manuscript result by result: paste a link (arXiv, GitHub, openai/math, PDF/TeX) or the text, or attach the files. Checked by a model verifier — not a certificate.">Analyze</button>
@@ -6173,9 +6173,11 @@ async function startAutoRun(){
   finally{ $('start-btn').disabled=false; }
   if(rated&&rated.enabled&&rated.math===false){ eb.style.display='block'; eb.textContent=String(rated.message||'Ansätze answers mathematics only.'); return; }
   // No answer (the judge off or failing): what Auto picks by default.
-  let mode=rated&&rated.enabled&&rated.mode?String(rated.mode):(hasSource?'analyze':'formal');
-  if((mode==='analyze'||mode==='readability')&&!runKindOffered(mode))mode='formal';
-  if((mode==='analyze'||mode==='readability')&&!(analyzeLinkFromText(text)||files||text))mode='formal';
+  // No formalization unless asked for (Lean, Mathlib, formalize): it is slow.
+  const proofMode=/\b(lean|mathlib|formali[sz](e|ed|es|ing|ation))\b/i.test(text)?'formal':'informal';
+  let mode=rated&&rated.enabled&&rated.mode?String(rated.mode):(hasSource?'analyze':proofMode);
+  if((mode==='analyze'||mode==='readability')&&!runKindOffered(mode))mode=proofMode;
+  if((mode==='analyze'||mode==='readability')&&!(analyzeLinkFromText(text)||files||text))mode=proofMode;
   autoPick={mode,kind:mode==='analyze'||mode==='readability'?mode:'prove'};
   try{ await startRun(); }
   finally{ autoPick=null; renderFormalizeSwitch(); syncStartButton(); }
@@ -9824,7 +9826,7 @@ const THREAD_FOLLOW_PX=80, THREAD_MARGIN=12;
 const THREAD_ROUTINE_LINES=['▶ ','✓ ','✗ run failed · ','✗ run stopped · ','■ run stopped by user','Run stopped by user.','Continuing run…','Continuing proof with your feedback…',
   'library injected: ','profile skills materialized: ','native SKILL.md profile injected into this harness',
   // easy_route's notes on which engine a turn runs on (kept in the chat record and Monitor).
-  'Easy request: this turn runs on Plain','This turn runs on Ansatz CGM again'];
+  'Easy request: this turn runs on Plain','This turn runs on Ansatz CGM again','Auto mode: '];
 // A follow-up's reply when its turn left no output ("Run finished." / "Run failed."): the status line says it.
 const THREAD_ROUTINE_REPLIES=['Run finished.','Run failed.','Run stopped.'];
 // A line of a run's activity log (agent_monitor/cli_events.py): the CLI and
