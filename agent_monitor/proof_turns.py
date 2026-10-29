@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,11 +60,25 @@ def _folder(ws: Path) -> Path:
     return folder
 
 
+def _write(folder: Path, name: str, text: str) -> None:
+    """``folder/name`` holds ``text``, written through a new file of its own
+    (``mkstemp`` never follows a link) moved into place: a symlink left at
+    either name by an engine is replaced, never written through."""
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".tmp-", suffix=".part")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, folder / name)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _save(ws: Path, turns: list[dict[str, Any]]) -> None:
-    folder = _folder(ws)
-    tmp = folder / (INDEX + ".tmp")
-    tmp.write_text(json.dumps({"turns": turns[-MAX_TURNS:]}, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, folder / INDEX)
+    _write(_folder(ws), INDEX, json.dumps({"turns": turns[-MAX_TURNS:]}, ensure_ascii=False))
 
 
 # Not named like a proof ("proof", "solution", "answer"): jobs._promote_proof_artifact
@@ -107,7 +122,7 @@ def _earlier_turn(ws: Path, started_at: str) -> dict[str, Any] | None:
             written = start
         at = written.isoformat() if written is not None else str(started_at or "")
         name = f"1{suffix}"
-        (_folder(ws) / name).write_text(text, encoding="utf-8")
+        _write(_folder(ws), name, text)
         return {"n": 1, "started_at": at, "finished_at": at, "status": "finished",
                 "file": f"{DIR}/{name}", "chars": len(text), "earlier": True}
     return None
@@ -152,6 +167,25 @@ def begin(
         return None
 
 
+def _last_kept_proof(ws: Path, turns: list[dict[str, Any]], n: int) -> str | None:
+    """The proof the last turn before ``n`` kept (None when none did)."""
+    for turn in reversed(turns):
+        try:
+            number = int(turn.get("n"))
+        except (TypeError, ValueError):
+            continue
+        if number >= n or turn.get("answer_only") or not turn.get("file"):
+            continue
+        path = ws / str(turn.get("file"))
+        try:
+            if path.is_symlink() or not path.is_file() or path.parent.name != DIR:
+                return None
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+    return None
+
+
 def end(ws: Path | str, n: int | None, *, status: str, finished_at: str) -> None:
     """Record turn ``n`` ending with ``status``, keeping a copy of its proof."""
     if not n:
@@ -172,8 +206,13 @@ def end(ws: Path | str, n: int | None, *, status: str, finished_at: str) -> None
                 if text:
                     name = f"{n}{suffix}"
                     break
+            if name and not turn.get("answer_only") and text == _last_kept_proof(ws, turns, n):
+                # The proof as the turn before left it (a turn stopped or
+                # failed before writing one, or that wrote the same proof):
+                # nothing of this turn's own to keep, so no card repeats it.
+                name, text = "", ""
             if name:
-                (_folder(ws) / name).write_text(text, encoding="utf-8")
+                _write(_folder(ws), name, text)
             if turn.get("answer_only"):
                 answer = ws / ANSWER_FILE
                 if answer.is_file() and not answer.is_symlink():

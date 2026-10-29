@@ -112,7 +112,7 @@ class MaxApiPlanTests(unittest.TestCase):
                 self.assertIn(f"add your {named} key in Settings", plan["reason"])
         server, own = _key_sources(server={})
         with server, own:
-            self.assertIn("Anthropic and OpenAI key", cgm_max.plan_for_api(_ADMIN)["reason"])
+            self.assertIn("add your Anthropic and OpenAI keys in Settings", cgm_max.plan_for_api(_ADMIN)["reason"])
 
     def test_restricted_members_guests_and_ownerless_runs_are_refused(self) -> None:
         server, own = _key_sources()

@@ -1938,6 +1938,10 @@ def mark_stale(workspace: Path, detail: str = "proof.md was edited") -> None:
         state.pop("derived_signature", None)
         for name in ("informal_dag", "lean", "formal_dag", "coverage"):
             stage = state.setdefault("stages", {}).setdefault(name, {})
+            # A stage turned off for the run (formalization off) stays off:
+            # nothing of it went stale.
+            if stage.get("status") == "off":
+                continue
             stage.update(
                 {
                     "status": "stale",

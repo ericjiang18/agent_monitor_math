@@ -125,18 +125,20 @@ console.log(JSON.stringify(out));
 """
         out = _run(program)
         full = "codex exited with code 1: " + USAGE_LIMIT
+        # On screen the reason without the engine's process words; the tooltip keeps the run error in full.
         self.assertEqual(
             out["limit"],
-            {"stage": "Failed", "detail": full, "title": full, "box": "chat-status on err"},
+            {"stage": "Failed", "detail": USAGE_LIMIT, "title": full, "box": "chat-status on err"},
         )
         self.assertIn("try again at 10:28 PM.", out["limit"]["detail"])
         self.assertEqual(
             out["reconnect"]["detail"],
-            "Claude Code exited with code 1: Claude Code is signed out. Reconnect Claude Code in Settings.",
+            "Claude Code is signed out. Reconnect Claude Code in Settings.",
         )
         self.assertEqual(out["noError"]["detail"], "[agent-monitor] timeout after 600s — terminated")
         # A very long reason is shortened on screen; the tooltip keeps all of it.
-        self.assertTrue(out["long"]["detail"].startswith("Claude Code exited with code 1: xxx"))
+        self.assertTrue(out["long"]["detail"].startswith("xxx"))
+        self.assertTrue(out["long"]["title"].startswith("Claude Code exited with code 1: xxx"))
         self.assertTrue(out["long"]["detail"].endswith("…"))
         self.assertLess(len(out["long"]["detail"]), 400)
         self.assertEqual(len(out["long"]["title"]), len("Claude Code exited with code 1: ") + 2000)

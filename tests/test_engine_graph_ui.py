@@ -58,7 +58,8 @@ class EngineGraphUiTests(unittest.TestCase):
         self.assertIn('id="dag-title">Informal · CGM', HTML)
         self.assertIn(">Informal · CGM</button>", modes)
         self.assertIn(">Outline</button>", modes)
-        self.assertIn("engine:'Informal · CGM',informal:'Informal outline'", SCRIPT)
+        # A run that never ran Ansatz CGM shows its execution trace there, and says so.
+        self.assertIn("engine:cgm?'Informal · CGM':'Execution trace',informal:'Informal outline'", SCRIPT)
         self.assertIn("other harnesses show their execution trace", modes)
 
         view_start = HTML.index('id="dag-engine-view"')

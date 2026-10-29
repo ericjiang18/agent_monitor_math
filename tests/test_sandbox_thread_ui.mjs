@@ -733,7 +733,7 @@ const $=id=>({'thread-problem':problems,'chat-msgs':msgs}[id]||null);
 const threadRun=()=>null, threadKind=()=>'prove', problemItems=()=>[], threadInView=()=>inView, threadSay=text=>said.push(text);
 const threadAnnounce=(added,note)=>{ if(note)said.push(note); };
 ${['THREAD_ROUTINE_LINES', 'THREAD_ROUTINE_REPLIES'].map(constant).join('\n')}
-${['threadModel', 'threadHash', 'threadRoutineLine', 'threadRequest', 'renderThread', 'threadLayout', 'threadChatBoxes', 'threadSplit', 'threadChatNodes'].map(fn).join('\n')}
+${['threadModel', 'threadHash', 'threadRoutineLine', 'threadRequest', 'renderThread', 'threadLayout', 'threadLayoutParts', 'threadChatBoxes', 'threadSplit', 'threadChatNodes'].map(fn).join('\n')}
 const threadFollowNear=()=>{};
 ${NODES.map(fn).join('\n')}`, ctx)
   const step = code => vm.runInContext(code, ctx)
@@ -762,7 +762,7 @@ const problems=document.createElement('div'), msgs=document.createElement('div')
 const $=id=>({'thread-problem':problems,'chat-msgs':msgs,'chat-later':later}[id]||null);
 const threadRun=()=>null, threadKind=()=>'prove', problemItems=()=>[], threadInView=()=>true, threadAnnounce=()=>{};
 ${['THREAD_ROUTINE_LINES', 'THREAD_ROUTINE_REPLIES'].map(constant).join('\n')}
-${['threadModel', 'threadHash', 'threadRoutineLine', 'threadRequest', 'renderThread', 'threadLayout', 'threadError', 'threadChatBoxes', 'threadSplit', 'threadChatNodes'].map(fn).join('\n')}
+${['threadModel', 'threadHash', 'threadRoutineLine', 'threadRequest', 'renderThread', 'threadLayout', 'threadLayoutParts', 'threadError', 'threadChatBoxes', 'threadSplit', 'threadChatNodes'].map(fn).join('\n')}
 const followed=[], threadFollowNear=()=>followed.push(1);
 ${NODES.map(fn).join('\n')}`, ctx)
   const step = code => vm.runInContext(code, ctx)
@@ -808,7 +808,7 @@ ${NODES.map(fn).join('\n')}`, ctx)
 
 test('one proof per turn: each earlier turn\'s proof is a card before the message sent after it; the live card follows the message that started the latest turn', () => {
   const ctx = vm.createContext({ console })
-  vm.runInContext(`${['threadLayout', 'threadSplit'].map(fn).join('\n')}`, ctx)
+  vm.runInContext(`${['threadLayout', 'threadLayoutParts', 'threadSplit'].map(fn).join('\n')}`, ctx)
   const layout = (items, run, kind = 'prove') => plain(vm.runInContext(`threadLayout(${JSON.stringify(items)},${JSON.stringify(run)},${JSON.stringify(kind)})`, ctx))
   const kinds = part => part.map(item => item.kind === 'turn' ? 'proof' + item.n : item.kind + ':' + (item.text || ''))
   const it = (kind, s, text) => ({ key: kind + s, kind, ts: at(s), text })
@@ -846,7 +846,7 @@ test('one proof per turn: each earlier turn\'s proof is a card before the messag
 
 test('an answer-only turn (easy_route) is an Answer card after its question; the live card stays with the proof it kept', () => {
   const ctx = vm.createContext({ console })
-  vm.runInContext(`${['threadLayout', 'threadSplit'].map(fn).join('\n')}`, ctx)
+  vm.runInContext(`${['threadLayout', 'threadLayoutParts', 'threadSplit'].map(fn).join('\n')}`, ctx)
   const layout = (items, run) => plain(vm.runInContext(`threadLayout(${JSON.stringify(items)},${JSON.stringify(run)},'prove')`, ctx))
   const kinds = part => part.map(item => item.kind === 'turn' ? (item.answer ? 'answer' : 'proof') + item.n : item.kind + ':' + (item.text || ''))
   const it = (kind, s, text) => ({ key: kind + s, kind, ts: at(s), text })
@@ -1592,7 +1592,7 @@ const problems=document.createElement('div'), msgs=document.createElement('div')
 const $=id=>({'thread-problem':problems,'chat-msgs':msgs}[id]||null);
 const threadRun=()=>null, threadKind=()=>'prove', problemItems=()=>[], threadInView=()=>true, threadAnnounce=()=>{};
 ${['THREAD_ROUTINE_LINES', 'THREAD_ROUTINE_REPLIES'].map(constant).join('\n')}
-${['threadModel', 'threadHash', 'threadRoutineLine', 'threadRequest', 'renderThread', 'threadLayout', 'threadError', 'threadChatBoxes', 'threadSplit', 'threadChatNodes'].map(fn).join('\n')}
+${['threadModel', 'threadHash', 'threadRoutineLine', 'threadRequest', 'renderThread', 'threadLayout', 'threadLayoutParts', 'threadError', 'threadChatBoxes', 'threadSplit', 'threadChatNodes'].map(fn).join('\n')}
 const followed=[], threadFollowNear=()=>followed.push(1);
 ${NODES.map(fn).join('\n')}`, ctx)
   const step = code => vm.runInContext(code, ctx)
@@ -2294,7 +2294,7 @@ test('▶ Continue while the record still reads as it ended (the turn being prep
     // Awaited: the run shows as continuing at once (■, no ▶), and is polled; the record read unchanged draws no
     // proof again and queues no closing reads again.
     assert.deepEqual([step('pollActive'), step('bar'), step("$('chat-stage').textContent"), step('pills.at(-1)'), step("$('run-meta').textContent")],
-      [true, 'stop', 'Continuing…', 'continuing…', 'p1 · continuing · $0.00'], 'prep ' + prep)
+      [true, 'stop', 'Continuing…', 'continuing…', 'p1 · continuing'], 'prep ' + prep)
     // The worker writes the record running `prep` ms after the click.
     await advance(8000 + prep - 1)
     step("record={...record,status:'running',updated_at:'t2'}")
@@ -2899,30 +2899,51 @@ test('Auto: Jev picks the mode at Start, a clearly non-mathematics request start
   const ctx = vm.createContext({ console, JSON })
   vm.runInContext(`
 const els={'form-error':{style:{display:'none'},textContent:''},'problem-text':{value:''},'start-btn':{disabled:false}}; const $=id=>els[id];
-let reply=null, posted=[], started=[], offered={analyze:true,readability:true};
-const fetch=async(url,init)=>{ posted.push([url,JSON.parse(init.body)]); return reply===null?{ok:false,json:async()=>({})}:{ok:true,json:async()=>reply}; };
+let reply=null, posted=[], started=[], offered={analyze:true,readability:true}, hold=null;
+const fetch=async(url,init)=>{ posted.push([url,JSON.parse(init.body)]); if(hold)await hold; return reply===null?{ok:false,json:async()=>({})}:{ok:true,json:async()=>reply}; };
 const initialAttachments={busy:false,files:[]};
-const analyzeLinkFromText=t=>(/https:\\/\\/\\S+/.exec(t)||[''])[0];
 const runKindOffered=k=>!!offered[k];
 const renderFormalizeSwitch=()=>{}, syncStartButton=()=>{};
-let autoPick=null;
+let autoPick=null, autoStarting=false;
 const startRun=async()=>{ started.push(JSON.parse(JSON.stringify(autoPick))); };
-${fn('startAutoRun')}`, ctx)
+${['startAutoRun', 'startAutoRunOnce', 'autoSourceOf', 'autoManuscriptText', 'autoPastedSplit', 'autoAsksForLean', 'analyzeLinkFromText'].map(fn).join('\n')}`, ctx)
   const step = code => vm.runInContext(code, ctx)
   const run = async (text, rep, files = 0) => { step(`els['problem-text'].value=${JSON.stringify(text)}; initialAttachments.files=new Array(${files}).fill({}); reply=${JSON.stringify(rep)}; posted=[]; started=[]; els['form-error'].style.display='none'; els['form-error'].textContent='';`); await step('startAutoRun()'); return { posted: plain(step('posted')), started: plain(step('started')), error: step("els['form-error'].style.display==='block'?els['form-error'].textContent:''"), pick: step('autoPick') } }
   // Not mathematics: refused with the server's words, nothing started.
   let r = await run('Write me a poem.', { enabled: true, math: false, mode: '', message: 'Ansätze answers mathematics only, …' })
   assert.deepEqual([r.started, r.error], [[], 'Ansätze answers mathematics only, …'])
-  assert.deepEqual(r.posted, [['/api/route-request', { problem_text: 'Write me a poem.', has_source: false }]])
+  assert.deepEqual(r.posted, [['/api/route-request', { problem_text: 'Write me a poem.', has_source: false, source: '' }]])
   // A pick: the start runs as that mode, and then nothing of it is left.
   r = await run('Prove that √2 is irrational.', { enabled: true, math: true, mode: 'formal' })
   assert.deepEqual([r.started, r.error, r.pick], [[{ mode: 'formal', kind: 'prove' }], '', null])
   r = await run('Prove RH.', { enabled: true, math: true, mode: 'informal' })
   assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
-  r = await run('Make this readable https://arxiv.org/abs/1', { enabled: true, math: true, mode: 'readability' })
-  assert.deepEqual([r.posted[0][1].has_source, r.started], [true, [{ mode: 'readability', kind: 'readability' }]])
+  // A link in a sentence is the manuscript; the rest of the sentence is the instruction.
+  r = await run('Make this readable: https://arxiv.org/abs/2401.00001.', { enabled: true, math: true, mode: 'readability' })
+  assert.deepEqual(r.posted[0][1], { problem_text: 'Make this readable: https://arxiv.org/abs/2401.00001.', has_source: true, source: 'link' })
+  assert.deepEqual(r.started, [{ mode: 'readability', kind: 'readability', source: { kind: 'url', url: 'https://arxiv.org/abs/2401.00001', focus: 'Make this readable', seen: false }, focus: 'Make this readable' }])
+  r = await run('Analyze this paper: arXiv:2401.00001 and check Lemma 3', { enabled: true, math: true, mode: 'analyze' })
+  assert.deepEqual(r.started[0].source, { kind: 'url', url: 'arXiv:2401.00001', focus: 'Analyze this paper: and check Lemma 3', seen: false })
+  // Files: the manuscript, the text its instruction.
   r = await run('', { enabled: true, math: true, mode: 'analyze' }, 1)
-  assert.deepEqual([r.posted[0][1].has_source, r.started], [true, [{ mode: 'analyze', kind: 'analyze' }]])
+  assert.deepEqual([r.posted[0][1].has_source, r.posted[0][1].source, r.started], [true, 'files', [{ mode: 'analyze', kind: 'analyze', source: { kind: 'upload', focus: '', seen: false }, focus: '' }]])
+  r = await run('Make this more readable for undergraduates', { enabled: true, math: true, mode: 'readability' }, 1)
+  assert.deepEqual(r.started[0].focus, 'Make this more readable for undergraduates')
+  // A file with a request to prove something: a proof run with the file (no manuscript source).
+  r = await run('Prove the main lemma using this', { enabled: true, math: true, mode: 'informal' }, 1)
+  assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
+  // A pasted manuscript (long, with paragraphs) is one too, which Jev reads.
+  const manuscript = 'Theorem 1. Every tree is bipartite.\n\nProof. ' + 'Colour by depth parity. '.repeat(60) + '\n\nLemma 2. A tree has n-1 edges.\n\nProof. Induction. ' + 'x '.repeat(200)
+  r = await run(manuscript, { enabled: true, math: true, mode: 'analyze' })
+  assert.deepEqual([r.posted[0][1].source, r.started[0].source.kind, r.started[0].source.text === manuscript.trim(), r.started[0].focus], ['text', 'paste', true, ''])
+  // A short note with an instruction on its own line: the note is the manuscript, the line its instruction.
+  const note = 'Make this more readable:\nClaim 1. For every n >= 1, 1 + 3 + ... + (2n-1) = n^2.\nProof. By induction on n. The base case n = 1 holds since 1 = 1^2. Assume it for n; adding 2n+1 gives n^2 + 2n + 1 = (n+1)^2.\n\nCorollary 2. Every perfect square is a sum of consecutive odd numbers starting at 1, by Claim 1 read backwards for each n. Remark 3. The same telescoping argument gives the sum of the first n even numbers, n(n+1), which we leave to the reader.'
+  assert.ok(note.length >= 400 && note.length < 700, String(note.length))
+  r = await run(note, { enabled: true, math: true, mode: 'readability' })
+  assert.deepEqual([r.posted[0][1].source, r.started[0].focus, r.started[0].source.text.startsWith('Claim 1.')], ['text', 'Make this more readable', true])
+  // A short problem is never a manuscript.
+  r = await run('Prove that every tree with n vertices has n - 1 edges.', { enabled: true, math: true, mode: 'informal' })
+  assert.deepEqual([r.posted[0][1].has_source, r.started], [false, [{ mode: 'informal', kind: 'prove' }]])
   // A mode this site does not offer: a proof instead.
   step('offered.analyze=false')
   r = await run('Check https://arxiv.org/abs/1', { enabled: true, math: true, mode: 'analyze' })
@@ -2933,11 +2954,24 @@ ${fn('startAutoRun')}`, ctx)
   assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
   r = await run('Prove 1+1=2 in Lean.', { enabled: false })
   assert.deepEqual(r.started, [{ mode: 'formal', kind: 'prove' }])
+  r = await run('Prove 1+1=2. Do not use Lean.', { enabled: false })
+  assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
+  r = await run('I lean towards induction: prove 1+2+...+n = n(n+1)/2.', { enabled: false })
+  assert.deepEqual(r.started, [{ mode: 'informal', kind: 'prove' }])
   r = await run('https://arxiv.org/abs/1', null)
-  assert.deepEqual(r.started, [{ mode: 'analyze', kind: 'analyze' }])
+  assert.deepEqual(r.started, [{ mode: 'analyze', kind: 'analyze', source: { kind: 'url', url: 'https://arxiv.org/abs/1', focus: '', seen: false }, focus: '' }])
   // Nothing to rate: says so, asks nothing.
   r = await run('   ', { enabled: true, math: true, mode: 'formal' })
   assert.deepEqual([r.posted, r.started, /enter a problem/.test(r.error)], [[], [], true])
+  // A second Start while Jev rates the first starts nothing more.
+  step(`els['problem-text'].value='Prove RH.'; reply={enabled:true,math:true,mode:'informal'}; posted=[]; started=[]; var release; hold=new Promise(r=>{ release=r; });`)
+  const first = step('startAutoRun()'), second = step('startAutoRun()')
+  step('release()'); await first; await second
+  assert.deepEqual([plain(step('posted')).length, plain(step('started')).length], [1, 1])
+  step('hold=null')
+  // And Ctrl/⌘+Enter never starts while Start is disabled.
+  assert.match(script, /\$\('problem-text'\)\.onkeydown=e=>\{ if\(\(e\.metaKey\|\|e\.ctrlKey\)&&e\.key==='Enter'&&!\$\('start-btn'\)\.disabled\)startRun\(\); \};/)
+  assert.match(fn('startRun'), /^async function startRun\(opts\)\{\n\s*\/\/[^\n]*\n\s*if\(typeof autoStarting!=='undefined'&&autoStarting&&opts\?\.fromAuto!==true\)return;/)
 })
 
 test('the routing notes are hidden in the thread, like other routine lines', () => {
@@ -2996,7 +3030,7 @@ ${['dockModelsFor', 'syncDockModel', 'dockModelChoice'].map(fn).join('\n')}`, ct
 
 test('an older run\'s proof (kept as turn 1 when its first follow-up began) is a card before that follow-up', () => {
   const ctx = vm.createContext({ console })
-  vm.runInContext(`${['threadLayout', 'threadSplit'].map(fn).join('\n')}`, ctx)
+  vm.runInContext(`${['threadLayout', 'threadLayoutParts', 'threadSplit'].map(fn).join('\n')}`, ctx)
   const layout = (items, run) => plain(vm.runInContext(`threadLayout(${JSON.stringify(items)},${JSON.stringify(run)},'prove')`, ctx))
   const kinds = part => part.map(item => item.kind === 'turn' ? 'proof' + item.n : item.kind + ':' + (item.text || ''))
   const it = (kind, s, text) => ({ key: kind + s, kind, ts: at(s), text })
@@ -3017,7 +3051,9 @@ test('an older run\'s proof (kept as turn 1 when its first follow-up began) is a
 })
 
 test('while a follow-up turn works, and until a pass takes its proof up, the DAG and the chips are not an earlier turn\'s', () => {
-  const ctx = vm.createContext({ console, Date })
+  // "Now" is just after turn 2 ended (at(200)): a pass is still coming.
+  class Now extends Date { static now() { return Date.parse(at(230)) } }
+  const ctx = vm.createContext({ console, Date: Now })
   vm.runInContext(`let lastSandboxRun=null, runId='r1';
 ${constant('RUN_WORKING')}
 ${['derivedTurnWait', 'derivedTurnView', 'dagTurnWaitState'].map(fn).join('\n')}`, ctx)
@@ -3034,8 +3070,14 @@ ${['derivedTurnWait', 'derivedTurnView', 'dagTurnWaitState'].map(fn).join('\n')}
   // Even once it has written its proof: no pass derives it before the turn ends.
   assert.deepEqual(wait({ ...base, sandbox_preview: { mtime: mtime(150) }, auto_pipeline: { ...done, proof_current: false } }), { n: 2, working: true })
   // Ended with a new proof no pass has taken up yet: still not turn 2's.
-  const ended = { ...base, status: 'finished', proof_turns: [turns[0], { ...turns[1], finished_at: at(200) }], sandbox_preview: { mtime: mtime(150) }, auto_pipeline: { ...done, proof_current: false } }
+  const ended = { ...base, status: 'finished', proof_turns: [turns[0], { ...turns[1], finished_at: at(200), status: 'finished' }], sandbox_preview: { mtime: mtime(150) }, auto_pipeline: { ...done, proof_current: false } }
   assert.deepEqual(wait(ended), { n: 2, working: false })
+  // A turn that failed having changed the proof starts a pass too.
+  assert.deepEqual(wait({ ...ended, proof_turns: [turns[0], { ...turns[1], finished_at: at(200), status: 'failed' }] }), { n: 2, working: false })
+  // None is coming for a turn stopped or cut by a restart, nor two minutes after the turn ended.
+  for (const status of ['stopped', 'interrupted'])
+    assert.equal(wait({ ...ended, proof_turns: [turns[0], { ...turns[1], finished_at: at(200), status }] }), null, status)
+  assert.equal(wait({ ...ended, proof_turns: [turns[0], { ...turns[1], finished_at: at(100), status: 'finished' }] }), null)
   // A pass begun since turn 2 started shows its own stages; a proof turn 2 left as it was, or one the pass has, keeps turn 1's views.
   assert.equal(wait({ ...ended, auto_pipeline: { ...done, status: 'running', started_at: at(201), proof_current: true } }), null)
   assert.equal(wait({ ...ended, sandbox_preview: { mtime: mtime(50) } }), null)
@@ -3080,4 +3122,59 @@ test('the DAG view asks dagTurnWaitState before it loads a graph, and the poll d
   assert.ok(refresh.indexOf("if(typeof dagTurnWaitState==='function'&&showDagUnavailable(dagTurnWaitState(requestedMode)))return;") > 0)
   assert.ok(refresh.indexOf('dagTurnWaitState(requestedMode)') < refresh.indexOf("fetch('/api/run/'"))
   assert.match(script, /renderAutoPipeline\(typeof derivedTurnView==='function'\?derivedTurnView\(run\):run\.auto_pipeline\);/)
+})
+
+test('readable versions and an analysis\'s closing summary go under the card; the live card stays with the last turn that made a proof; a restored proof keeps the newer one\'s card', () => {
+  const ctx = vm.createContext({ console })
+  vm.runInContext(`${['threadLayout', 'threadLayoutParts', 'threadSplit'].map(fn).join('\n')}`, ctx)
+  const layout = (items, run, kind = 'prove') => plain(vm.runInContext(`threadLayout(${JSON.stringify(items)},${JSON.stringify(run)},${JSON.stringify(kind)})`, ctx))
+  const kinds = part => part.map(item => item.kind === 'turn' ? 'proof' + item.n : item.kind + ':' + (item.text || item.rid || ''))
+  const it = (kind, s, text, extra = {}) => ({ key: kind + s, kind, ts: at(s), text, ...extra })
+  const turn = (n, s, f, extra = {}) => ({ n, started_at: at(s), finished_at: f === null ? null : at(f), status: f === null ? 'running' : 'finished', file: '.proof_turns/' + n + '.md', chars: 9, ...extra })
+  const mtime = s => Date.parse(at(s)) / 1000
+  // A readable version made after the latest turn, with no message since: under the live card.
+  const chat = [it('reply', 50, 'Engine log'), it('user', 70, 'again'), it('reply', 120, 'Engine log 2'), it('readable', 200, '', { rid: 'rd1' })]
+  let l = layout(chat, { proof_turns: [turn(1, 0, 60), turn(2, 71, 130)], sandbox_preview: { mtime: mtime(125) } })
+  assert.deepEqual([kinds(l.above), kinds(l.below)], [['reply:Engine log', 'proof1', 'user:again', 'reply:Engine log 2'], ['readable:rd1']])
+  // An older run without turns too.
+  l = layout([it('reply', 50, 'Engine log'), it('readable', 200, '', { rid: 'rd1' })], {})
+  assert.deepEqual([kinds(l.above), kinds(l.below)], [['reply:Engine log'], ['readable:rd1']])
+  // An analysis's closing summary comes after the report it speaks of.
+  l = layout([it('notice', 10, 'Reading the manuscript'), it('notice', 90, 'Analysis finished: 3 of 3 results checked.')], {}, 'analyze')
+  assert.deepEqual([kinds(l.above), kinds(l.below)], [['notice:Reading the manuscript'], ['notice:Analysis finished: 3 of 3 results checked.']])
+  // A turn stopped before writing a proof (no copy kept): no card, and the live card stays with turn 2.
+  const stopped = [it('reply', 50, 'Engine log'), it('user', 70, 'again'), it('reply', 120, 'Engine log 2'), it('user', 140, 'use Ansatz CGM'), it('notice', 150, 'Run stopped')]
+  l = layout(stopped, { proof_turns: [turn(1, 0, 60), turn(2, 71, 130), turn(3, 141, 160, { file: '', status: 'stopped' })], sandbox_preview: { mtime: mtime(125) } })
+  assert.deepEqual([kinds(l.above), kinds(l.below)], [['reply:Engine log', 'proof1', 'user:again', 'reply:Engine log 2'], ['user:use Ansatz CGM', 'notice:Run stopped']])
+  // While that turn still works, it is the live card (its proof is coming).
+  l = layout(stopped, { proof_turns: [turn(1, 0, 60), turn(2, 71, 130), turn(3, 141, null, { file: '' })], sandbox_preview: { mtime: mtime(125) } })
+  assert.deepEqual(kinds(l.above), ['reply:Engine log', 'proof1', 'user:again', 'reply:Engine log 2', 'proof2', 'user:use Ansatz CGM', 'notice:Run stopped'])
+  // proof.md written after the latest turn ended (an earlier proof restored, an edit): turn 2's proof keeps a card.
+  l = layout(chat.slice(0, 3), { proof_turns: [turn(1, 0, 60), turn(2, 71, 130)], sandbox_preview: { mtime: mtime(300) } })
+  assert.deepEqual(kinds(l.above), ['reply:Engine log', 'proof1', 'user:again', 'reply:Engine log 2', 'proof2'])
+  // Written by a later turn that kept no copy (the same proof again): no extra card.
+  l = layout(stopped, { proof_turns: [turn(1, 0, 60), turn(2, 71, 130), turn(3, 141, 160, { file: '', status: 'stopped' })], sandbox_preview: { mtime: mtime(155) } })
+  assert.deepEqual(kinds(l.above), ['reply:Engine log', 'proof1', 'user:again', 'reply:Engine log 2'])
+})
+
+test('a failed or stopped run with no proof shows none (never its log as a proof, never editable); a deleted run is left; touch screens never take a tap on a hidden run action', () => {
+  const preview = fn('applySandboxPreview')
+  assert.match(preview, /const noProof=!live&&!box\.has_proof_md&&!box\.has_proof_tex&&\['failed','stopped','interrupted'\]\.includes\(String\(run\?\.status\|\|''\)\);\n\s*const text=noProof\?'':/)
+  assert.match(preview, /noProof\?'no proof written':'waiting for proof\.md…'/)
+  const tick = fn('tick')
+  assert.match(tick, /pollMissing=r\.status===404\?\(typeof pollMissing==='number'\?pollMissing:0\)\+1:0;\n\s*if\(pollMissing>=2&&typeof runGone==='function'\)\{ runGone\(rid\); return false; \}/)
+  assert.match(fn('runGone'), /runId=null; stopPolling\(\); resetProofView\(\); resetSandboxThread\(\); goLanding\(\);/)
+  assert.match(html, /@media \(hover: none\) \{\n\s*\.run-item:not\(\.active\) \.run-del, \.run-item:not\(\.active\) \.run-act \{ visibility: hidden; pointer-events: none; \}/)
+  assert.match(html, /\.chat-compose:has\(#dock-model:not\(\[hidden\]\)\) \.attachment-help-short:not\(:empty\) \{ display: none; \}/)
+  assert.match(html, /#lean-body\[style\*="grid"\] \{ display: flex !important; flex-direction: column; \}/)
+})
+
+test('the status line never shows a bare bracket, an end marker or a JSON reply\'s tail', () => {
+  const status = fn('updateChatStatus')
+  const json = /^(?:\{\s*(?:"|\}|$)|\[\s*(?:\{|"|-?\d|\]|$))/
+  assert.ok(status.includes(String.raw`const lines=/^(?:\{\s*(?:"|\}|$)|\[\s*(?:\{|"|-?\d|\]|$))/.test(out)?[]:out.split('\n')`))
+  // A JSON reply has no line to show; a log line in brackets is no JSON.
+  assert.deepEqual(['{"verdict": "accepted"}', '[{"id": 1}]', '[1, 2]', '[agent-monitor] timeout after 600s', '{x} y'].map(t => json.test(t)), [true, true, true, false, false])
+  const keep = line => line && /[A-Za-z0-9]/.test(line) && !/^=+\s*[A-Z ]+\s*=+$/.test(line) && !/^[\[\]{}(),:"'`]+$/.test(line)
+  assert.deepEqual(['}', '=== END ===', 'Lemma 2 holds.', ']', '"'].filter(keep), ['Lemma 2 holds.'])
 })
