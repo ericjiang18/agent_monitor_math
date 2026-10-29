@@ -314,7 +314,8 @@ def _apply_sponsored_kimi_route(
     if not sponsored_kimi_client.configured():
         raise ValueError(
             "Kimi K3 requires your own API key, or the sponsored Kimi service "
-            "must be available"
+            "must be available. It is not available right now: add your Kimi API "
+            "key in Settings, or try again later."
         )
     env["AGENT_MONITOR_SPONSORED_KIMI"] = "1"
     env["AGENT_MONITOR_SPONSORED_KIMI_URL"] = sponsored_kimi_client.endpoint()
