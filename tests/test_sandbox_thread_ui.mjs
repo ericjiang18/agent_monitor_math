@@ -2934,3 +2934,52 @@ ${fn('startAutoRun')}`, ctx)
   r = await run('   ', { enabled: true, math: true, mode: 'formal' })
   assert.deepEqual([r.posted, r.started, /enter a problem/.test(r.error)], [[], [], true])
 })
+
+test('the routing notes are hidden in the thread, like other routine lines', () => {
+  const ctx = vm.createContext({ console })
+  vm.runInContext(`${constant('THREAD_ROUTINE_LINES')}\n${fn('threadRoutineLine')}`, ctx)
+  const hidden = text => vm.runInContext(`threadRoutineLine(${JSON.stringify(text)})`, ctx)
+  assert.equal(hidden('Easy request: this turn runs on Plain (one call of the same model, on the same account) instead of Ansatz CGM, as rated by typesafe/jev-1.13: easy with probability 0.84, confidence 0.68. Write “use Ansatz CGM” in a message to have Ansatz CGM work on it.'), true)
+  assert.equal(hidden('This turn runs on Ansatz CGM again, rated not easy by typesafe/jev-1.13.'), true)
+  assert.equal(hidden('This turn runs on Ansatz CGM again, as asked.'), true)
+  assert.equal(hidden('Auto mode: Informal only (chosen by typesafe/jev-1.13).'), false)
+  assert.equal(hidden('Feedback queued; it will run automatically as soon as the current harness finishes.'), false)
+})
+
+test('the message box offers the models of the run\'s own route, its current model first; hidden with nothing to choose', () => {
+  const ctx = vm.createContext({ console })
+  vm.runInContext(DOM + `
+let CURRENT_USER={id:1}, SETTINGS={codex_models:['gpt-6.1-sol','gpt-6-astra','gpt-5.6-sol'],claude_models:['opus','sonnet'],api_models:['claude-opus-5-5','kimi-k3']};
+const ENGINES=[{id:'math_harness',supported_models:['gpt-6.1-sol','gpt-6-astra','opus','sonnet']},{id:'plain'}];
+const isAnalysisRun=r=>r.run_kind==='analyze', isReadabilityRun=r=>r.run_kind==='readability';
+const wrap=document.createElement('label'); wrap.hidden=true; const select=document.createElement('select');
+Object.defineProperty(select,'options',{get(){ return this.children; }});
+select.replaceChildren=(...nodes)=>{ select.children=[]; nodes.forEach(n=>select.append(n)); };
+Object.defineProperty(select,'selectedIndex',{get(){ return this.children.findIndex(o=>o.value===this.value); }});
+const $=id=>id==='dock-model'?wrap:id==='chat-model'?select:null;
+let dockModelRun='';
+${['dockModelsFor', 'syncDockModel', 'dockModelChoice'].map(fn).join('\n')}`, ctx)
+  const step = code => vm.runInContext(code, ctx)
+  const models = run => plain(step(`dockModelsFor(${JSON.stringify(run)})`))
+  assert.deepEqual(models({ run_id: 'a', engine: 'math_harness', auth_route: 'codex_subscription', model: 'gpt-6.1-sol' }), ['gpt-6.1-sol', 'gpt-6-astra'])
+  assert.deepEqual(models({ run_id: 'b', engine: 'plain', auth_route: 'claude_subscription', model: 'sonnet' }), ['sonnet', 'opus'])
+  assert.deepEqual(models({ run_id: 'c', engine: 'plain', auth_route: 'api_key', model: 'kimi-k3' }), ['kimi-k3', 'claude-opus-5-5'])
+  for (const run of [{ engine: 'kimi', auth_route: 'api_key', model: 'kimi-k3' }, { engine: 'math_harness', auth_route: 'dual_subscription', model: 'max' },
+    { engine: 'analyze', run_kind: 'analyze', auth_route: 'api_key' }, { engine: 'readability', run_kind: 'readability', auth_route: 'api_key' }])
+    assert.deepEqual(models(run), [], JSON.stringify(run))
+  step('CURRENT_USER={guest:true}')
+  assert.deepEqual(models({ engine: 'plain', auth_route: 'api_key', model: 'kimi-k3' }), [])
+  step('CURRENT_USER={id:1}')
+  // Drawn: current first and chosen; another choice is sent only for that run, the current one never.
+  step(`syncDockModel(${JSON.stringify({ run_id: 'a', engine: 'math_harness', auth_route: 'codex_subscription', model: 'gpt-6.1-sol' })})`)
+  assert.deepEqual([step('wrap.hidden'), step('select.value'), step("dockModelChoice('a')")], [false, 'gpt-6.1-sol', ''])
+  step("select.value='gpt-6-astra'")
+  assert.deepEqual([step("dockModelChoice('a')"), step("dockModelChoice('other')")], ['gpt-6-astra', ''])
+  // A poll of the same run keeps the choice; another run starts on its own model; nothing to choose hides it.
+  step(`syncDockModel(${JSON.stringify({ run_id: 'a', engine: 'math_harness', auth_route: 'codex_subscription', model: 'gpt-6.1-sol' })})`)
+  assert.equal(step('select.value'), 'gpt-6-astra')
+  step(`syncDockModel(${JSON.stringify({ run_id: 'b', engine: 'plain', auth_route: 'claude_subscription', model: 'sonnet' })})`)
+  assert.equal(step('select.value'), 'sonnet')
+  step(`syncDockModel(${JSON.stringify({ run_id: 'k', engine: 'kimi', auth_route: 'api_key', model: 'kimi-k3' })})`)
+  assert.deepEqual([step('wrap.hidden'), step("dockModelChoice('k')")], [true, ''])
+})

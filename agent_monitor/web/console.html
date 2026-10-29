@@ -395,6 +395,20 @@ html.read-only-run .run-access-note { display: flex; }
 .proof-panel.turn-pending .cite-strip, .proof-panel.turn-pending #readability-tabs, .proof-panel.turn-pending #proof-doc-switch,
 .proof-panel.turn-pending #proof-edit-btn, .proof-panel.turn-pending #pdf-dl-btn, .proof-panel.turn-pending #make-readable-btn { display: none !important; }
 .proof-pending { display: flex; align-items: center; gap: 10px; padding: 18px 28px 20px; color: var(--dim); font-size: 13.5px; }
+/* A compact toolbar: one row of smaller controls where it fits, wrapping
+   (never hiding a control) where it does not. The derived-tools label is the status
+   strip's tooltip. (.proof-panel scopes it over the narrow-screen wrap rule.) */
+.proof-panel .proof-toolbar { flex-wrap: wrap; gap: 5px 4px; padding: 6px 10px; }
+.proof-panel .proof-toolbar > * { flex: none; }
+/* The file label (proof.md · live) is left out: the status line under the thread says how the run stands. */
+.proof-panel .proof-toolbar .sub { display: none; }
+.proof-panel .proof-toolbar .title { margin-right: 2px; }
+.proof-panel .proof-toolbar .auto-pipeline-status { flex-wrap: wrap; justify-content: flex-start; margin-right: auto; gap: 3px; }
+.proof-panel .proof-toolbar .pipeline-harness { display: none; }
+.proof-panel .proof-toolbar .pipeline-chip { padding: 3px 6px; gap: 4px; }
+.proof-panel .proof-toolbar .pipeline-chip .chip-state { display: none; }  /* the dot says it; the tooltip names it */
+.proof-panel .proof-toolbar button { padding: 4px 8px; font-size: 11.5px; border-radius: 7px; white-space: nowrap; }
+.proof-panel .proof-toolbar .proof-views { display: contents; }  /* its buttons wrap one by one */
 .proof-pending[hidden] { display: none; }
 .proof-pending::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--warn, var(--accent)); animation: pulse 1.2s infinite; }
 .proof-toolbar button {
@@ -422,7 +436,7 @@ html.read-only-run .run-access-note { display: flex; }
 /* The written proof of a CGM run: a two-way switch beside the file name and a
    status banner above the write-up. Colours follow the model verifier's
    verdicts (blue accepted, amber problems); green stays reserved for Lean. */
-.proof-toolbar:has(> .proof-doc-switch:not([hidden])), .proof-toolbar:has(> #make-readable-btn:not([hidden])) { flex-wrap: wrap; row-gap: 8px; }
+/* (The toolbar wraps only where it does not fit: .proof-panel .proof-toolbar.) */
 .proof-doc-switch { display: inline-flex; flex-shrink: 0; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel2); }
 .proof-doc-switch[hidden] { display: none; }
 .proof-toolbar .proof-doc-switch button { border: 0; border-radius: 7px; background: transparent; color: var(--dim); padding: 4px 10px; font-weight: 500; white-space: nowrap; }
@@ -762,6 +776,9 @@ html.guest-viewer body:not(.analysis-run):not(.readability-run) #sel-pop { displ
 .chat-compose .attachment-list { grid-area: list; margin-top: 4px; max-height: 116px; overflow-y: auto; overscroll-behavior: contain; }
 .chat-compose .attachment-error { grid-area: error; margin-top: 2px; }
 .chat-compose .row { grid-area: send; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+.dock-model[hidden] { display: none; }
+.dock-model select { max-width: 220px; padding: 5px 26px 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel);
+  color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-overflow: ellipsis; }
 .chat-compose #chat-send {
   background: var(--accent); color:var(--on-accent); border: 0; border-radius: 999px; padding: 7px 16px;
   font-size: 12px; font-weight: 700; cursor: pointer;
@@ -2504,6 +2521,7 @@ body { background:var(--bg); }
                 <textarea id="chat-input" rows="1" aria-label="Message to the prover" placeholder="e.g. Make the base case more explicit, or try induction on n…"></textarea>
                 <div id="chat-attachments" class="attachment-composer"></div>
                 <div class="row">
+                  <label class="dock-model" id="dock-model" hidden title="The model of the next turn (on this run's account route)"><span class="sr-only">Model for the next turn</span><select id="chat-model"></select></label>
                   <span class="hint">Enter to send · Shift+Enter newline</span>
                   <button id="chat-send" disabled>Send</button>
                 </div>
@@ -2904,11 +2922,13 @@ document.querySelectorAll('#proof-views button').forEach(b=>b.onclick=()=>setWor
 function syncProofViews(){
   document.querySelectorAll('#proof-views button').forEach(button=>{
     const tab=document.querySelector(`.seg-control button[data-view="${button.dataset.gotoView}"]`); if(!tab)return;
-    if(button.textContent!==tab.textContent)button.textContent=tab.textContent;
+    // "Lean Verification" reads "Lean" on the card (the full name is its tooltip).
+    const name=button.dataset.gotoView==='lean'?tab.textContent.replace(/\s+Verification$/,''):tab.textContent;
+    if(button.textContent!==name)button.textContent=name;
     button.hidden=tab.hidden||tab.style.display==='none';
     button.disabled=!!tab.disabled;
     for(const cls of ['pipeline-running','pipeline-done','pipeline-warning','pipeline-error'])button.classList.toggle(cls,tab.classList.contains(cls));
-    if(tab.title)button.title=tab.title; else button.removeAttribute('title');
+    button.title=tab.title||tab.textContent;
   });
 }
 try{ new MutationObserver(syncProofViews).observe(document.querySelector('.seg-control'),{subtree:true,attributes:true,childList:true,characterData:true}); }catch(e){}
@@ -6633,18 +6653,20 @@ function renderAutoPipeline(state){
     return pipelineStageVisualStatus(name,stage);
   };
   box.hidden=false;
+  box.title=analysis?'Analyze · derived views':(String(state.proof_engine||state.selected_harness||'')?'Proof · '+String(state.proof_engine||state.selected_harness)+' · Derived · shared Lean/DAG tools':'');
   const proofEngine=String(state.proof_engine||state.selected_harness||'');
   const harness=analysis
     ?'<span class="pipeline-harness" title="Views derived from the analysis graph; Lean formalizes statements only">Analyze · derived views</span>'
     :proofEngine?'<span class="pipeline-harness" title="Informal proof engine; Lean and DAG use shared derived tools">Proof · '+escapeHtml(proofEngine)+' · Derived · shared Lean/DAG tools</span>':'';
-  box.innerHTML=harness+stageNames.map(name=>{
+  // A view still being derived is not shown (its chip appears once it is done, or needs attention).
+  box.innerHTML=harness+stageNames.filter(name=>safeStatus(visualStatus(name))!=='running').map(name=>{
     const stage=stages[name]||{}; const status=safeStatus(visualStatus(name));
     const detail=String(stage.detail||status);
     const leanState=String(stage?.result?.status||'');
     const stateLabel=name==='lean'&&leanState
       ?(statementsOnly(stage)?({incomplete:'compiled',verified:'compiled',unfaithful:'fidelity flagged',failed:'did not compile',toolchain_missing:'no checker'}[leanState]||leanState):leanState)
       :status;
-    return '<span class="pipeline-chip '+status+'" title="'+escapeHtml(detail)+'"><span>'+labels[name]+'</span><span class="chip-state">'+escapeHtml(stateLabel)+'</span></span>';
+    return '<span class="pipeline-chip '+status+'" title="'+escapeHtml(labels[name]+': '+stateLabel+(detail&&detail!==stateLabel?' — '+detail:''))+'"><span>'+labels[name]+'</span><span class="chip-state">'+escapeHtml(stateLabel)+'</span></span>';
   }).join('');
   const classify=all=>{
     // Stages turned off for an informal-only run, or never run because the
@@ -6925,9 +6947,42 @@ function problemItems(run){
   if(!out.length) add(run?.problem_text);
   return out;
 }
+/* The message box's model menu: the next turn's model, among those of the
+   run's own account route (a follow-up keeps its route), the run's current
+   model first. Hidden with nothing to choose (Kimi K3, guests, Analyze and
+   Readability, a single model). */
+let dockModelRun='';
+function dockModelsFor(run){
+  if(!run||CURRENT_USER?.guest||isAnalysisRun(run)||isReadabilityRun(run))return [];
+  const route=String(run.auth_route||'').toLowerCase(), engineId=String(run.engine||'');
+  if(engineId==='kimi'||route==='dual_subscription'||run.route_plan)return [];
+  let models=route==='codex_subscription'?[...(SETTINGS?.codex_models||[])]:route==='claude_subscription'?[...(SETTINGS?.claude_models||[])]:route==='api_key'?[...(SETTINGS?.api_models||[])]:[];
+  const entry=ENGINES.find(x=>x.id===engineId), supported=entry?.supported_models||[];
+  if((route==='codex_subscription'||route==='claude_subscription')&&supported.length)models=models.filter(m=>supported.includes(m));
+  const current=String(run.model||run.requested_model||'').trim();
+  if(current&&!/^max(-api)?$/i.test(current))models=[current,...models];
+  return [...new Set(models.filter(Boolean).map(String))];
+}
+function syncDockModel(run){
+  const wrap=$('dock-model'), select=$('chat-model'); if(!wrap||!select)return;
+  const models=dockModelsFor(run), rid=String(run?.run_id||'');
+  if(models.length<2){ wrap.hidden=true; select.replaceChildren(); dockModelRun=rid; return; }
+  const keep=dockModelRun===rid&&models.includes(select.value)?select.value:models[0];
+  if([...select.options].map(o=>o.value).join('\n')!==models.join('\n')){
+    select.replaceChildren(...models.map((m,i)=>{ const o=document.createElement('option'); o.value=m; o.textContent=i===0?m+' (current)':m; return o; }));
+  }
+  select.value=keep; wrap.hidden=false; dockModelRun=rid;
+}
+// The model chosen for the next turn of `rid`, when it is not the run's own.
+function dockModelChoice(rid){
+  const wrap=$('dock-model'), select=$('chat-model');
+  if(!wrap||wrap.hidden||!select||dockModelRun!==String(rid||''))return '';
+  return select.selectedIndex>0?select.value:'';
+}
 function updateProblemStrip(run){
   const row=$('problem-message-row'); if(row) row.style.display='none';
   lastSandboxRun=run;
+  try{ if(typeof syncDockModel==='function')syncDockModel(run); }catch(e){}
   /* The Lean controls follow the run's pipeline state, and every change
      control who may change the run. */
   syncLeanControls(); syncRunAccess();
@@ -9767,7 +9822,9 @@ const THREAD_FOLLOW_PX=80, THREAD_MARGIN=12;
 // given. A first run's failure ("✗ run failed: …") is the status line's only
 // while it is the run's own state (threadModel).
 const THREAD_ROUTINE_LINES=['▶ ','✓ ','✗ run failed · ','✗ run stopped · ','■ run stopped by user','Run stopped by user.','Continuing run…','Continuing proof with your feedback…',
-  'library injected: ','profile skills materialized: ','native SKILL.md profile injected into this harness'];
+  'library injected: ','profile skills materialized: ','native SKILL.md profile injected into this harness',
+  // easy_route's notes on which engine a turn runs on (kept in the chat record and Monitor).
+  'Easy request: this turn runs on Plain','This turn runs on Ansatz CGM again'];
 // A follow-up's reply when its turn left no output ("Run finished." / "Run failed."): the status line says it.
 const THREAD_ROUTINE_REPLIES=['Run finished.','Run failed.','Run stopped.'];
 // A line of a run's activity log (agent_monitor/cli_events.py): the CLI and
@@ -10553,7 +10610,7 @@ async function sendChat(){
     let before='';
     if(typeof pollActive==='boolean'&&!pollActive){ try{ const b=await fetch('/api/run/'+encodeURIComponent(targetRun)); if(b.ok)before=turnSignature(await b.json()); }catch(e){} }
     let r=null;
-    try{ r=await fetch('/api/runs/'+encodeURIComponent(targetRun)+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,attachments})}); }
+    try{ r=await fetch('/api/runs/'+encodeURIComponent(targetRun)+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,attachments,...(typeof dockModelChoice==='function'&&dockModelChoice(targetRun)?{model:dockModelChoice(targetRun)}:{})})}); }
     catch(e){ throw new Error('The message could not be sent: the server could not be reached. Try again.'); }
     // The server's own words when it says why (a limit, a refusal); a reply
     // that is no JSON (a proxy's error page) or says nothing, by its status.
