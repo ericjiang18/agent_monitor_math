@@ -1271,6 +1271,23 @@ def _bootstrap_guest_pipeline(
             _release_guest_derived_action(owner_id)
 
 
+def _with_proof_current(
+    state: dict[str, Any] | None, workspace: Path, run_record: dict[str, Any]
+) -> dict[str, Any] | None:
+    """``state`` with ``proof_current``: whether its last pass took up the
+    proof the run has now (so the Sandbox never shows an earlier turn's DAG,
+    Lean and coverage as this turn's).  Without a pass's source, unchanged."""
+    if not isinstance(state, dict) or not state.get("source_signature"):
+        return state
+    from agent_monitor import auto_pipeline
+
+    try:
+        current = auto_pipeline._source_signature(workspace, run_record)
+    except Exception:  # noqa: BLE001 - informational only
+        return state
+    return {**state, "proof_current": state.get("source_signature") == current}
+
+
 def _guest_run_completed(run_id: str, owner_id: int, workspace: Path) -> None:
     """Start a finished guest run's bounded derived pipeline immediately.
 
@@ -5506,7 +5523,9 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
                     from agent_monitor import auto_pipeline, lean_verify, proof_bridge
 
                     data["lean_verification"] = lean_verify.monitor_summary(ws)
-                    data["auto_pipeline"] = _bootstrap_guest_pipeline(user, run_id, ws, data)
+                    data["auto_pipeline"] = _with_proof_current(
+                        _bootstrap_guest_pipeline(user, run_id, ws, data), ws, data
+                    )
                     data["proof_coverage"] = proof_bridge.load_cached(ws)
                 else:
                     data["auto_pipeline"] = None

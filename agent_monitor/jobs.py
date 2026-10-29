@@ -6502,6 +6502,24 @@ def _chat_file(run_id: str) -> Path:
     return RUNS_DIR / "workspaces" / run_id / "human_chat.jsonl"
 
 
+# The notes on which engine or mode a turn runs on (easy_route, Auto mode):
+# kept in the chat file for the operator, never sent to a page, so even a
+# page opened before the Sandbox learned to hide them never shows them.
+_ROUTING_NOTE_PREFIXES = (
+    "Easy request: this turn runs on Plain",
+    "This turn runs on Ansatz CGM again",
+    "Auto mode: ",
+)
+
+
+def _routing_note(message: Any) -> bool:
+    return (
+        isinstance(message, dict)
+        and message.get("role") == "system"
+        and str(message.get("content") or "").lstrip().startswith(_ROUTING_NOTE_PREFIXES)
+    )
+
+
 def list_chat(run_id: str) -> list[dict[str, Any]]:
     path = _chat_file(run_id)
     msgs: list[dict[str, Any]] = []
@@ -6511,9 +6529,11 @@ def list_chat(run_id: str) -> list[dict[str, Any]]:
             if not line:
                 continue
             try:
-                msgs.append(json.loads(line))
+                message = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not _routing_note(message):
+                msgs.append(message)
 
     # Older/evaluation continuations could persist reviewer guidance in the
     # session problem ledger without first emitting a user chat event. Keep
@@ -6608,7 +6628,9 @@ def _track_worker(job_id: str, run_id: str, thread: Any) -> None:
             _WORKERS[job_id] = (run_id, thread)
 
 
-def _proof_turn_begin(run_id: str, ws: Path, *, answer_only: bool = False) -> int | None:
+def _proof_turn_begin(
+    run_id: str, ws: Path, *, answer_only: bool = False, follow_up: bool = False
+) -> int | None:
     """A proof turn starting (proof_turns): never for a deleted run, whose
     workspace must not come back.  Best-effort: it never raises, so keeping
     a turn's copy can never fail the turn."""
@@ -6617,7 +6639,7 @@ def _proof_turn_begin(run_id: str, ws: Path, *, answer_only: bool = False) -> in
             return None
         from agent_monitor import proof_turns
 
-        return proof_turns.begin(ws, started_at=_now(), answer_only=answer_only)
+        return proof_turns.begin(ws, started_at=_now(), answer_only=answer_only, follow_up=follow_up)
     except Exception as exc:  # noqa: BLE001 - a turn's copy is best-effort
         print(f"[proof_turns] a turn start was not recorded: {type(exc).__name__}", file=sys.stderr, flush=True)
         return None
@@ -8091,7 +8113,7 @@ def _execute_continue(
     # Only a proof run's follow-ups are turns (an analysis or a readable
     # version has no proof to keep).
     turn = (
-        _proof_turn_begin(run_id, ws, answer_only=answer_only)
+        _proof_turn_begin(run_id, ws, answer_only=answer_only, follow_up=True)
         if engine not in {_ANALYZE_ENGINE, _READABILITY_ENGINE}
         and str(run_data.get("run_kind") or "") not in {"analyze", "readability"}
         else None

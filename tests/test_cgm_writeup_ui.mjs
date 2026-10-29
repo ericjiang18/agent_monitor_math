@@ -219,7 +219,7 @@ const CONSOLE_FUNCTIONS = [
   'writeupBody', 'proofDocShown', 'showProofDocFile', 'syncProofDocSwitch', 'chooseProofDoc', 'writeupBannerHtml', 'closureCitedLemmas',
   'renderMarkdownIntoView', 'showProofMd', 'refreshProofPreview', 'showProofPdfDoc',
   // Make readable, and the Readability policy and model choice it follows.
-  'makeReadableSource', 'syncMakeReadable', 'makeReadable', 'dagIsCgmEngine', 'readabilityEngineEntry', 'readabilityPolicy',
+  'makeReadableSource', 'readableProofRun', 'readableRunModel', 'syncMakeReadable', 'makeReadable', 'dagIsCgmEngine', 'readabilityEngineEntry', 'readabilityPolicy',
   'readabilityOffered', 'viewerIsAdmin', 'viewerIsGuest', 'readabilitySponsoredOnly', 'readabilityRouteSponsored', 'engineModelMode',
   'selectedAccountRuntime', 'readabilityModelChoice', 'modelsForEngine',
 ]
@@ -1058,19 +1058,20 @@ test('Make readable says when the document is longer than the viewer may paste, 
   assert.match(page.note(), /^The proof\.md has [\d,]+ characters: too long to paste into Readability \(at most 100 for guests\)\.$/)
 })
 
-test('Make readable is offered only for a finished CGM run, as the Readability policy allows the viewer', () => {
+test('Make readable is offered for a finished proof run, as the Readability policy allows the viewer', () => {
   const shown = (setup, record = cgmRun(writeupBlock('accepted'))) => {
     const page = readablePage(setup)
     page.context.applySandboxPreview(record)
     return !page.button().hidden
   }
   assert.equal(shown({}), true)
-  // Not while it runs, not for another harness, not without proof.md.
+  // Not while it runs, not without proof.md; any proof harness (an easy request answered on Plain, Codex, Claude Code).
   assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { status: 'running' })), false)
   assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { status: 'failed' })), false)
-  assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { engine: 'plain' })), false)
   assert.equal(shown({}, cgmRun(undefined, {}, { has_proof_md: false })), false)
-  assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { engine: 'math_harness' })), true)
+  for (const engine of ['math_harness', 'plain', 'codex', 'claude'])
+    assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { engine })), true, engine)
+  assert.equal(shown({}, cgmRun(writeupBlock('accepted'), { engine: '' })), false)
   // Only where Readability would start: offered, set up, open to this viewer.
   assert.equal(shown({ engine: readabilityEngine({ entry: { requires_login: true } }) }), false)
   assert.equal(shown({ engine: readabilityEngine({ policy: { enabled: false, reason: 'off' } }) }), false)
@@ -1122,4 +1123,23 @@ test('at the sponsored limit Make readable follows the model Readability would s
   // And the other way: where Readability does not read on sponsored Kimi K3, it selects the
   // member's own model, which does not need the pool.
   assert.equal(shown({ settings: { ...OWN_OPENAI, sponsored_kimi_engines: ['kimi', 'plain'] }, model: 'kimi-k3' }), true)
+})
+
+test('Make readable on a run of an API model the preset list does not have (an OpenRouter vendor/model) uses that model', () => {
+  const OPENROUTER = { account_runtime: 'api', sponsored_kimi_available: false, kimi_user_key_set: false, api_models: [],
+    sponsored_kimi_engines: [], default_model: '', configured_providers: ['openrouter'] }
+  const page = readablePage({ settings: OPENROUTER, model: '' })
+  const run = { run_id: 'r1', auth_route: 'api_key', model: 'openai/gpt-5-mini', engine: 'plain' }
+  assert.equal(page.context.readabilityModelChoice(), '')
+  assert.equal(page.context.readableRunModel(run), 'openai/gpt-5-mini')
+  // Never Max, another route's model, or one without a provider key of the account's.
+  assert.equal(page.context.readableRunModel({ ...run, model: 'max' }), '')
+  assert.equal(page.context.readableRunModel({ ...run, model: 'max-api' }), '')
+  assert.equal(page.context.readableRunModel({ ...run, auth_route: 'codex_subscription' }), '')
+  assert.equal(page.context.readableRunModel({ ...run, model: '', requested_model: 'moonshotai/kimi-k2' }), 'moonshotai/kimi-k2')
+  assert.equal(page.context.readableRunModel(null), '')
+  page.run('SETTINGS={...SETTINGS,configured_providers:[]}')
+  assert.equal(page.context.readableRunModel(run), '')
+  // The page asks for it when Readability's own choice is empty.
+  assert.match(fn('startInlineReadable'), /model=sponsoredOnly\?'':\(readabilityModelChoice\(\)\|\|readableRunModel\(lastSandboxRun\)\)/)
 })

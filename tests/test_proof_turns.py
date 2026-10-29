@@ -114,6 +114,84 @@ class ProofTurnsModuleTest(unittest.TestCase):
         self.assertIsNotNone(console_server._workspace_target(self.ws, ".proof_turns/1.md"))
 
 
+class EarlierProofTest(unittest.TestCase):
+    """A follow-up on a run with no turn recorded keeps the proof it has as turn 1."""
+
+    def setUp(self) -> None:
+        self.ws = Path(self.enterContext(tempfile.TemporaryDirectory()))
+
+    def _proof(self, text: str, when: str, name: str = "proof.md") -> None:
+        import os
+        from datetime import datetime
+
+        (self.ws / name).write_text(text, encoding="utf-8")
+        stamp = datetime.fromisoformat(when).timestamp()
+        os.utime(self.ws / name, (stamp, stamp))
+
+    def test_the_proof_an_older_run_has_is_turn_one_and_the_follow_up_turn_two(self) -> None:
+        self._proof("# Even\n\nThe sum of two even integers is even.\n", "2026-09-27T20:26:20+00:00")
+        n = proof_turns.begin(self.ws, started_at="2026-10-29T06:14:24.510000+00:00", follow_up=True)
+        self.assertEqual(n, 2)
+        earlier, live = proof_turns.summary(self.ws)
+        self.assertEqual(
+            (earlier["n"], earlier["status"], earlier["earlier"], earlier["file"], earlier["chars"]),
+            (1, "finished", True, ".proof_turns/1.md", len("# Even\n\nThe sum of two even integers is even.\n")),
+        )
+        # Its time is when that proof was written: the card goes before the follow-up.
+        self.assertEqual(earlier["started_at"], "2026-09-27T20:26:20+00:00")
+        self.assertEqual(earlier["finished_at"], "2026-09-27T20:26:20+00:00")
+        self.assertEqual((self.ws / ".proof_turns" / "1.md").read_text(encoding="utf-8"), "# Even\n\nThe sum of two even integers is even.\n")
+        self.assertEqual((live["n"], live["status"], live["earlier"], live["finished_at"]), (2, "running", False, None))
+        # The follow-up's own proof is kept when it ends; the earlier one stays.
+        (self.ws / "proof.md").write_text("# P vs NP\n\nOpen.\n", encoding="utf-8")
+        proof_turns.end(self.ws, n, status="finished", finished_at="2026-10-29T06:15:45+00:00")
+        self.assertEqual((self.ws / ".proof_turns" / "2.md").read_text(encoding="utf-8"), "# P vs NP\n\nOpen.\n")
+        self.assertIn("sum of two even", (self.ws / ".proof_turns" / "1.md").read_text(encoding="utf-8"))
+        # Later follow-ups number on.
+        self.assertEqual(proof_turns.begin(self.ws, started_at="2026-10-29T07:00:00+00:00", follow_up=True), 3)
+        self.assertEqual([t["n"] for t in proof_turns.summary(self.ws)], [1, 2, 3])
+
+    def test_its_time_is_never_after_the_follow_up_starts(self) -> None:
+        self._proof("A proof.\n", "2026-10-29T08:00:00+00:00")
+        proof_turns.begin(self.ws, started_at="2026-10-29T07:00:00+00:00", follow_up=True)
+        earlier = proof_turns.summary(self.ws)[0]
+        self.assertEqual((earlier["started_at"], earlier["finished_at"]), ("2026-10-29T07:00:00+00:00",) * 2)
+
+    def test_a_latex_proof_is_kept_as_latex(self) -> None:
+        self._proof("\\begin{proof}x\\end{proof}", "2026-10-28T10:00:00+00:00", name="proof.tex")
+        proof_turns.begin(self.ws, started_at="2026-10-29T07:00:00+00:00", follow_up=True)
+        self.assertEqual(proof_turns.summary(self.ws)[0]["file"], ".proof_turns/1.tex")
+
+    def test_an_answer_only_follow_up_keeps_the_proof_as_turn_one_too(self) -> None:
+        self._proof("Kept proof.\n", "2026-10-28T10:00:00+00:00")
+        n = proof_turns.begin(self.ws, started_at="2026-10-29T07:00:00+00:00", follow_up=True, answer_only=True)
+        self.assertEqual(n, 2)
+        turns = proof_turns.summary(self.ws)
+        self.assertEqual([(t["n"], t["earlier"], t["answer_only"]) for t in turns], [(1, True, False), (2, False, True)])
+
+    def test_nothing_more_is_kept_for_a_first_run_a_run_with_turns_or_no_proof(self) -> None:
+        # A first run: proof.md there already (a run started from one) is not an earlier turn.
+        self._proof("Seed.\n", "2026-10-28T10:00:00+00:00")
+        self.assertEqual(proof_turns.begin(self.ws, started_at="2026-10-29T07:00:00+00:00"), 1)
+        self.assertEqual([t["earlier"] for t in proof_turns.summary(self.ws)], [False])
+        # Turns recorded already: a follow-up is just the next one.
+        proof_turns.end(self.ws, 1, status="finished", finished_at="2026-10-29T07:01:00+00:00")
+        self.assertEqual(proof_turns.begin(self.ws, started_at="2026-10-29T07:02:00+00:00", follow_up=True), 2)
+        self.assertEqual([t["earlier"] for t in proof_turns.summary(self.ws)], [False, False])
+        # No proof (blank, or missing): the follow-up is turn 1.
+        other = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (other / "proof.md").write_text("  \n", encoding="utf-8")
+        self.assertEqual(proof_turns.begin(other, started_at="2026-10-29T07:00:00+00:00", follow_up=True), 1)
+        self.assertEqual(len(proof_turns.summary(other)), 1)
+
+    def test_a_symlinked_proof_is_never_read(self) -> None:
+        outside = Path(self.enterContext(tempfile.TemporaryDirectory())) / "secret.md"
+        outside.write_text("secret\n", encoding="utf-8")
+        (self.ws / "proof.md").symlink_to(outside)
+        self.assertEqual(proof_turns.begin(self.ws, started_at="2026-10-29T07:00:00+00:00", follow_up=True), 1)
+        self.assertFalse((self.ws / ".proof_turns" / "1.md").exists())
+
+
 class ProofTurnsWorkerTest(unittest.TestCase):
     """A follow-up turn records itself, and ends before queued feedback starts."""
 
@@ -164,9 +242,11 @@ class ProofTurnsWorkerTest(unittest.TestCase):
             seen["at_launch"] = proof_turns.summary(self.workspace)
 
         self._follow_up(engine, launched)
-        self.assertEqual([(t["n"], t["status"]) for t in seen["during"]], [(1, "running")])
-        self.assertEqual([(t["n"], t["status"]) for t in seen["at_launch"]], [(1, "finished")])
-        kept = proof_turns.summary(self.workspace)[0]
+        # A run with a proof and no turn recorded (an older run): its proof is kept as turn 1 first.
+        self.assertEqual([(t["n"], t["status"], t["earlier"]) for t in seen["during"]], [(1, "finished", True), (2, "running", False)])
+        self.assertEqual([(t["n"], t["status"]) for t in seen["at_launch"]], [(1, "finished"), (2, "finished")])
+        earlier, kept = proof_turns.summary(self.workspace)
+        self.assertEqual((self.workspace / earlier["file"]).read_text(encoding="utf-8"), "# Proof\n\nTurn one.\n")
         self.assertTrue(kept["finished_at"])
         self.assertEqual((self.workspace / kept["file"]).read_text(encoding="utf-8"), (self.workspace / "proof.md").read_text(encoding="utf-8"))
 
@@ -175,7 +255,8 @@ class ProofTurnsWorkerTest(unittest.TestCase):
             raise RuntimeError("provider call failed")
 
         self._follow_up(engine, lambda *a, **k: None)
-        self.assertEqual([t["status"] for t in proof_turns.summary(self.workspace)], ["failed"])
+        # The run's earlier proof (turn 1), then the follow-up that failed.
+        self.assertEqual([t["status"] for t in proof_turns.summary(self.workspace)], ["finished", "failed"])
 
     def test_an_error_while_keeping_the_turn_never_keeps_the_worker(self) -> None:
         # _proof_turn_end runs in the worker's finally just before _end_worker:
