@@ -6562,7 +6562,7 @@ async function tick(){
       // A node re-check runs after its analysis finished, a question after its
       // analysis or readable version was published: keep polling for them.
       const pipelineRunning=run.auto_pipeline?.status==='running'||run.analyze?.recheck?.status==='running'||run.analyze?.ask?.status==='running'||run.readability?.ask?.status==='running';
-      renderAutoPipeline(run.auto_pipeline);
+      renderAutoPipeline(typeof derivedTurnView==='function'?derivedTurnView(run):run.auto_pipeline);
       applySandboxPreview(run);
       if(refreshSide){
         await refreshProofPreview(!running&&changed&&turned, run);
@@ -7758,16 +7758,22 @@ document.querySelectorAll('#proof-doc-switch [role="radio"]').forEach(button=>{
     threadFocus(document.querySelector('#proof-doc-switch [aria-checked="true"]'));
   };
 });
-/* Make readable: the document a finished CGM run shows (the written proof
-   when it is on screen, else proof.md) becomes the pasted source of a new
-   readable version in the composer; nothing runs until that is started. It is
-   offered as the server's Readability policy allows this viewer, while the
+/* Make readable: the document a finished proof run shows (the written proof
+   when it is on screen, else proof.md) is made readable in this thread, a
+   card at its bottom (startInlineReadable). It is offered as the server's Readability policy allows this viewer, while the
    viewer's guest runs and, for a run that would go to sponsored Kimi K3 (as
    the composer reckons it for the model Readability would select: always a
    guest's, else Kimi K3 without a Kimi key of the account's own), today's
    sponsored runs leave room for one. */
+// Any proof run's document can be made readable (not an analysis's report,
+// nor a readable version).
+function readableProofRun(run){
+  const engineId=String(run?.engine||'').toLowerCase();
+  if(!engineId||engineId==='analyze'||engineId==='readability')return false;
+  return !(typeof isAnalysisRun==='function'&&isAnalysisRun(run))&&!(typeof isReadabilityRun==='function'&&isReadabilityRun(run));
+}
 function makeReadableSource(run){
-  if(!run||run.run_id!==runId||!dagIsCgmEngine(run.engine)||run.status!=='finished'||!run.sandbox_preview?.has_proof_md||sandboxEditing)return null;
+  if(!run||run.run_id!==runId||!readableProofRun(run)||run.status!=='finished'||!run.sandbox_preview?.has_proof_md||sandboxEditing)return null;
   const entry=readabilityEngineEntry(), daily=readabilityPolicy()?.sponsored;
   if(!readabilityOffered()||!entry.available||entry.requires_login||readabilityPolicy().enabled===false)return null;
   if(viewerIsGuest()&&Number(GUEST_POLICY?.runs_remaining)<=0)return null;
@@ -7803,6 +7809,14 @@ function readableFromThreadAllowed(){
   if(readabilityRouteSponsored(readabilityModelChoice())&&daily&&(daily.available===false||Number(daily.remaining_today)<=0))return false;
   return true;
 }
+/* The shown run's own API model (an OpenRouter vendor/model, say) when the
+   preset list offers Readability none and the account has a provider key. */
+function readableRunModel(run){
+  const model=String(run?.model||run?.requested_model||'').trim();
+  if(!model||/^max(-api)?$/i.test(model)||String(run?.auth_route||'')!=='api_key')return '';
+  if(engineModelMode(readabilityEngineEntry())!=='api_key'||!(SETTINGS?.configured_providers||[]).length)return '';
+  return model;
+}
 /* A readable version of `text` made from the shown run, whose thread shows it
    at the bottom (the server links it: "Readable version: <run id>"). */
 async function startInlineReadable(text,name,button){
@@ -7812,7 +7826,7 @@ async function startInlineReadable(text,name,button){
   if(!readableFromThreadAllowed())return say('A readable version cannot be made right now.');
   const limit=Number(readabilityPolicy()?.sources?.paste_chars)||20000;
   if(text.length>limit)return say(`The ${name} has ${text.length.toLocaleString('en-US')} characters: too long for Readability (at most ${limit.toLocaleString('en-US')}${viewerIsGuest()?' for guests':''}).`);
-  const sponsoredOnly=readabilitySponsoredOnly(), model=sponsoredOnly?'':readabilityModelChoice();
+  const sponsoredOnly=readabilitySponsoredOnly(), model=sponsoredOnly?'':(readabilityModelChoice()||readableRunModel(lastSandboxRun));
   if(!model&&!sponsoredOnly)return say('Choose a model that Readability can use in Settings first.');
   if(button)button.disabled=true;
   say('Making a readable version…');
@@ -8485,6 +8499,25 @@ function dagUnavailableState(mode,payload,view,runEngine){
   };
   return null;
 }
+/* A proof run's DAG view while its latest turn's graph is on its way: the
+   graph on hand is an earlier turn's (derivedTurnWait), or the automatic
+   pipeline is deriving this turn's proof and this view's stage is not done. */
+function dagTurnWaitState(mode){
+  const run=lastSandboxRun&&lastSandboxRun.run_id===runId?lastSandboxRun:null;
+  if(!run||!['engine','informal','formal','compiler'].includes(mode)||typeof derivedTurnWait!=='function')return null;
+  const turns=(Array.isArray(run.proof_turns)?run.proof_turns:[]).filter(t=>t&&typeof t==='object'&&!t.answer_only);
+  if(turns.length<2)return null;
+  const wait=derivedTurnWait(run), n=Number(wait?.n||turns[turns.length-1].n);
+  const box=(head,body)=>'<div style="font-size:28px;opacity:.4">◇</div><div><strong>'+head+'</strong><br/>'+body+'</div>';
+  if(wait?.working)return {status:'turn '+n+' is working',html:box('Turn '+n+' is working on a new proof.','Its graph appears here when the turn ends. The earlier turns’ graphs are not shown meanwhile.')};
+  // The CGM graph and the execution trace are rewritten when the turn ends.
+  if(mode==='engine')return null;
+  const pipe=run.auto_pipeline&&typeof run.auto_pipeline==='object'?run.auto_pipeline:null;
+  const stage=pipe?.stages?.[mode==='informal'?'informal_dag':mode==='formal'?'formal_dag':'lean'];
+  const deriving=pipe?.status==='running'&&['waiting','running'].includes(String(stage?.status||''));
+  if(wait||deriving)return {status:'drawing turn '+n+'’s graph',html:box('Drawing the graph of turn '+n+'’s proof…','It appears here when it is ready. No manual action is needed.')};
+  return null;
+}
 function showDagUnavailable(state){
   if(!state)return false;
   dagRunKey='';
@@ -8505,6 +8538,8 @@ async function refreshDagView(){
     $('dag-empty').innerHTML='<div style="font-size:28px;opacity:.4">◇</div><div>Loading the selected proof graph…</div>';
     dagStatus(requestedMode==='engine'?'loading CGM '+(requestedEngineView==='facts'?'Facts':'Explore')+' graph':requestedMode==='compiler'?'loading compiler facts':requestedMode==='analysis'?'loading the Manuscript DAG':requestedMode==='paper-map'?'loading the Paper map':'loading '+(requestedMode==='formal'?'Formal · Lean DAG':'informal outline'));
   }
+  // A new turn's graph on its way: no earlier turn's graph meanwhile.
+  if(typeof dagTurnWaitState==='function'&&showDagUnavailable(dagTurnWaitState(requestedMode)))return;
   // readability.js draws the Paper map, and refreshes this view once it has loaded.
   if(requestedMode==='paper-map'&&!readabilityUiReady()){
     if(readabilityUiMissing){ $('dag-empty').innerHTML='<div style="font-size:28px;opacity:.4">◇</div><div>The Paper map could not be loaded. Reload the page to try again.</div>'; dagStatus('paper map unavailable'); }
@@ -10013,11 +10048,15 @@ function threadLayout(items,run,kind){
   // the proof as it was, so its answer is a card of its own.
   const live=turns.filter(t=>!t.answer_only).pop()||turns[turns.length-1];
   const cards=[];
-  for(const t of turns){
+  for(const [i,t] of turns.entries()){
     if(t===live||!t.file)continue;
     let at=firstAfter(items,time(t.started_at),true);
     const ended=firstAfter(items,time(t.finished_at),false);
     if(at<0||ended>=0&&ended<at)at=ended;
+    // The proof a run had before its turns were kept (proof_turns "earlier"):
+    // just before the message that started the next turn.
+    const nextAt=t.earlier?time(turns[i+1]?.started_at):NaN;
+    if(Number.isFinite(nextAt)){ let sent=-1; items.forEach((item,k)=>{ if(item.kind==='user'&&time(item.ts)<=nextAt)sent=k; }); if(sent>=0)at=sent; }
     if(at<0)at=items.length;
     cards.push({at,item:{key:'turn|'+t.n+'|'+t.file+'|'+(t.chars||0),kind:'turn',n:Number(t.n),ts:String(t.finished_at||''),file:String(t.file),status:String(t.status||''),answer:!!t.answer_only,label:t.answer_only?'Answer':'Proof',text:'',url:'',attachments:[]}});
   }
@@ -10053,6 +10092,42 @@ function threadTurnNote(run,kind){
   if(note.textContent!==text||!!panel?.classList.contains('turn-pending')!==!!text){
     threadRedraw('keep',()=>{ note.textContent=text; note.hidden=!text; panel?.classList.toggle('turn-pending',!!text); });
   }
+}
+/* The derived views (DAG, Lean, coverage) on hand while a follow-up turn
+   works on a new proof, and until a pass of the automatic pipeline takes that
+   proof up, are an earlier turn's: they are not shown as this turn's.
+   {n, working} while that lasts (working: the turn itself is still going),
+   else null. auto_pipeline.proof_current: the server's word on whether the
+   pipeline's last pass was of the proof there now. */
+const RUN_WORKING=['running','queued','starting','continuing'];
+function derivedTurnWait(run){
+  if(!run||typeof run!=='object'||(typeof isAnalysisRun==='function'&&isAnalysisRun(run))||(typeof isReadabilityRun==='function'&&isReadabilityRun(run)))return null;
+  const turns=(Array.isArray(run.proof_turns)?run.proof_turns:[]).filter(t=>t&&typeof t==='object'&&!t.answer_only&&Number.isFinite(Number(t.n)));
+  if(turns.length<2)return null;
+  const live=turns[turns.length-1], start=Date.parse(live.started_at||'');
+  if(!Number.isFinite(start))return null;
+  const pipe=run.auto_pipeline&&typeof run.auto_pipeline==='object'?run.auto_pipeline:null;
+  // A pass begun since this turn started is of its proof: its own stages show.
+  const pass=Date.parse(pipe?.started_at||'');
+  if(Number.isFinite(pass)&&pass>=start)return null;
+  if(RUN_WORKING.includes(String(run.status||''))&&!live.finished_at)return {n:Number(live.n),working:true};
+  // Ended: only a new proof this turn wrote, that no pass has taken up yet.
+  const written=Number(run.sandbox_preview?.mtime||0)*1000;
+  if(pipe&&pipe.proof_current===false&&String(pipe.status||'')!=='stale'&&written>=start)return {n:Number(live.n),working:false};
+  return null;
+}
+// The pipeline state the card's chips and the Lean / DAG dots show: while
+// derivedTurnWait holds, every stage that runs for this run is waiting.
+function derivedTurnView(run){
+  const state=run?.auto_pipeline, wait=derivedTurnWait(run);
+  if(!wait||!state||typeof state!=='object'||!state.stages)return state;
+  const detail='Waiting for turn '+wait.n+'’s proof';
+  const stages={};
+  for(const [name,stage] of Object.entries(state.stages)){
+    const off=['off','stopped'].includes(String(stage?.status||''));
+    stages[name]=off?stage:{...stage,status:'waiting',detail,result:undefined,outcome:undefined};
+  }
+  return {...state,status:'running',stages,updated_at:'turn-'+wait.n+(wait.working?'-working':'-drawing')};
 }
 function renderThread({fresh=false,sent=false}={}){
   const problemBox=$('thread-problem'), {above:box,below}=threadChatBoxes(); if(!problemBox||!box)return;

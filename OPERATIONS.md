@@ -308,21 +308,45 @@ availability and status dots); the top of the page has no tab bar, only
     like the live card, with its own Download (`proof-turn-N.md`). Its text is
     read once through the workspace file endpoint. A turn that kept no proof
     (it failed before writing one) has no card.
+  - A run from before turns were kept (or whose first turn went
+    unrecorded) gets its proof kept as turn 1 when its first follow-up
+    starts (`proof_turns.begin(follow_up=True)`: an "earlier" turn, timed
+    when that proof was last written, never after the follow-up). Its card
+    sits just before the message that started the next turn, so an older
+    run reads you → proof → you → proof too. A run whose first follow-up
+    ran before this has no copy of its first proof: it cannot be recovered.
   - While a later turn works and has not rewritten `proof.md` yet (some
     engines write it only at the end), the live card shows no proof: the
     turn before's is already in its own card above. It shows "Turn N is
     working on a new proof…" (no Edit, Download or readable tabs) until the
     proof is rewritten, the turn ends or the run stops working, or the
     editor is open. An answer-only turn never hides the proof.
+  - The derived views follow the turn too. The automatic pipeline derives a
+    follow-up's proof only after the turn ends, so until a pass takes up the
+    new proof (`derivedTurnWait`: the turn works, or it wrote a new proof and
+    the run record's `auto_pipeline.proof_current` is false) the card's chips
+    and the Lean / DAG dots show every stage waiting, and the DAG view shows
+    no earlier turn's graph: "Turn N is working on a new proof." in every
+    mode while the turn works, then "Drawing the graph of turn N's proof…"
+    in the Outline, Formal and Compiler modes until that stage is done (the
+    CGM graph and the execution trace are the new turn's once it ends). A
+    proof edited by hand (the pipeline's `stale`) keeps its own handling.
+    `proof_current` is whether the pipeline's last `source_signature` is the
+    proof there now (`_with_proof_current`, on every read of the run).
   - Clicked, an earlier card shows the proof card's tools: the run's status
     chips, Make readable (of that proof), Edit (for a proof: "Make turn N's
     proof the current proof?"; on yes it becomes proof.md through the
     editor's own save, and the newer proof stays in its own card) and the
     run's Lean, Monitor and DAG views.
-  - Make readable (on the live card or an earlier one) never leaves the
-    thread: it starts a Readability run with `parent_run_id`, whose server
-    writes "Readable version: <run id>" in this run's chat (owner or
-    operator only), and the thread shows a Readable version card there. The
+  - Make readable (on the live card or an earlier one, for any finished
+    proof run: Ansatz CGM, an easy request answered on Plain, Codex, Claude
+    Code and the rest; not an analysis or a readable version) never leaves the
+    thread. When Readability's own model list offers none (an account with
+    an OpenRouter key only), it uses the shown run's own API model
+    (`readableRunModel`; never Max). It starts a Readability run with
+    `parent_run_id`, whose server writes "Readable version: <run id>" in
+    this run's chat (owner or operator only), and the thread shows a
+    Readable version card there. The
     card follows that run every 5 s until it ends, shows its readable text
     with Download, and opens the run itself for Notation and Map.
   - A turn ends (its proof kept) before any feedback queued for the next
@@ -1251,8 +1275,13 @@ hand turns it off, and choosing Auto again turns it back on). On Start the page
 asks `POST /api/route-request` (`easy_route.rate_request`: one Decisions API
 call with the question `topic` and, with a manuscript link or files,
 `task`), then starts the run as the chosen mode would, with `auto_mode` in
-the request (the chat record keeps "Auto mode: … (chosen by …)"; the thread
-hides it, as it hides easy_route's routing notes).
+the request (the run's chat file keeps "Auto mode: … (chosen by …)" for the
+operator; like easy_route's routing notes, "Easy request: this turn runs on
+Plain…" and "This turn runs on Ansatz CGM again…", it is never sent to a page:
+`jobs.list_chat` leaves those system lines out of every read of the chat, the
+Sandbox, the Monitor, the send results and the run's log download, so even a
+page opened before an update never shows them; `.easy_route.json` keeps each
+turn's routing too).
 
 - **Modes.** No formalization by default (Lean is slow): a proof is
   Informal only, or Informal + formalization when the request asks for it

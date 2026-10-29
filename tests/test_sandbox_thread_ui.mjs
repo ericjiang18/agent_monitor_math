@@ -2993,3 +2993,91 @@ ${['dockModelsFor', 'syncDockModel', 'dockModelChoice'].map(fn).join('\n')}`, ct
   step(`syncDockModel(${JSON.stringify({ run_id: 'k', engine: 'kimi', auth_route: 'api_key', model: 'kimi-k3' })})`)
   assert.deepEqual([step('wrap.hidden'), step("dockModelChoice('k')")], [true, ''])
 })
+
+test('an older run\'s proof (kept as turn 1 when its first follow-up began) is a card before that follow-up', () => {
+  const ctx = vm.createContext({ console })
+  vm.runInContext(`${['threadLayout', 'threadSplit'].map(fn).join('\n')}`, ctx)
+  const layout = (items, run) => plain(vm.runInContext(`threadLayout(${JSON.stringify(items)},${JSON.stringify(run)},'prove')`, ctx))
+  const kinds = part => part.map(item => item.kind === 'turn' ? 'proof' + item.n : item.kind + ':' + (item.text || ''))
+  const it = (kind, s, text) => ({ key: kind + s, kind, ts: at(s), text })
+  // The run wrote its proof at 40 s and replied at 50 s; "Try p vs np" (1000 s) started turn 2 (1000.5 s).
+  const earlier = { n: 1, started_at: at(40), finished_at: at(40), status: 'finished', file: '.proof_turns/1.md', chars: 90, earlier: true }
+  const chat = [it('reply', 50, 'Engine log'), it('user', 1000, 'Try p vs np'), it('notice', 1001, 'Applying 1 queued human message')]
+  const live = { n: 2, started_at: at(1000.5), finished_at: null, status: 'running', file: '', chars: 0 }
+  let l = layout(chat, { proof_turns: [earlier, live] })
+  // You → engine → proof 1 → you → the live card (turn 2): one proof per turn, as for a newer run.
+  assert.deepEqual([kinds(l.above), kinds(l.below)], [['reply:Engine log', 'proof1', 'user:Try p vs np', 'notice:Applying 1 queued human message'], []])
+  // Later turns go on as usual.
+  const more = [...chat, it('user', 2000, 'Try harder')]
+  l = layout(more, { proof_turns: [earlier, { ...live, finished_at: at(1500), file: '.proof_turns/2.md' }, { n: 3, started_at: at(2000.5), finished_at: null, status: 'running', file: '' }] })
+  assert.deepEqual(kinds(l.above), ['reply:Engine log', 'proof1', 'user:Try p vs np', 'notice:Applying 1 queued human message', 'proof2', 'user:Try harder'])
+  // Without the flag (a page reading an older record), the card goes where its time puts it, before the engine's reply.
+  l = layout(chat, { proof_turns: [{ ...earlier, earlier: false }, live] })
+  assert.deepEqual(kinds(l.above), ['proof1', 'reply:Engine log', 'user:Try p vs np', 'notice:Applying 1 queued human message'])
+})
+
+test('while a follow-up turn works, and until a pass takes its proof up, the DAG and the chips are not an earlier turn\'s', () => {
+  const ctx = vm.createContext({ console, Date })
+  vm.runInContext(`let lastSandboxRun=null, runId='r1';
+${constant('RUN_WORKING')}
+${['derivedTurnWait', 'derivedTurnView', 'dagTurnWaitState'].map(fn).join('\n')}`, ctx)
+  const step = code => plain(vm.runInContext(code, ctx))
+  const mtime = s => Date.parse(at(s)) / 1000
+  const turns = [{ n: 1, started_at: at(0), finished_at: at(60), file: '.proof_turns/1.md' }, { n: 2, started_at: at(100), finished_at: null }]
+  const done = { status: 'done', started_at: at(61), source_signature: 'proof.md:old', proof_current: true,
+    stages: { informal_dag: { status: 'done', finished_at: at(70) }, lean: { status: 'done', result: { status: 'verified' } }, formal_dag: { status: 'off' }, coverage: { status: 'off' } } }
+  const base = { run_id: 'r1', engine: 'codex', status: 'running', proof_turns: turns, sandbox_preview: { mtime: mtime(50) }, auto_pipeline: done }
+  const wait = run => step(`derivedTurnWait(${JSON.stringify(run)})`)
+  const dag = (run, mode) => { vm.runInContext(`lastSandboxRun=${JSON.stringify(run)}; runId=${JSON.stringify(run.run_id)}`, ctx); return step(`dagTurnWaitState(${JSON.stringify(mode)})`) }
+  // Turn 2 working: the views on hand are turn 1's.
+  assert.deepEqual(wait(base), { n: 2, working: true })
+  // Even once it has written its proof: no pass derives it before the turn ends.
+  assert.deepEqual(wait({ ...base, sandbox_preview: { mtime: mtime(150) }, auto_pipeline: { ...done, proof_current: false } }), { n: 2, working: true })
+  // Ended with a new proof no pass has taken up yet: still not turn 2's.
+  const ended = { ...base, status: 'finished', proof_turns: [turns[0], { ...turns[1], finished_at: at(200) }], sandbox_preview: { mtime: mtime(150) }, auto_pipeline: { ...done, proof_current: false } }
+  assert.deepEqual(wait(ended), { n: 2, working: false })
+  // A pass begun since turn 2 started shows its own stages; a proof turn 2 left as it was, or one the pass has, keeps turn 1's views.
+  assert.equal(wait({ ...ended, auto_pipeline: { ...done, status: 'running', started_at: at(201), proof_current: true } }), null)
+  assert.equal(wait({ ...ended, sandbox_preview: { mtime: mtime(50) } }), null)
+  assert.equal(wait({ ...ended, auto_pipeline: done }), null)
+  // A proof edited by hand (the pipeline marks it stale) is not this; nor a first turn, an answer-only turn, an analysis, no pipeline after the turn.
+  assert.equal(wait({ ...ended, auto_pipeline: { ...done, status: 'stale', proof_current: false } }), null)
+  assert.equal(wait({ ...base, proof_turns: [{ n: 1, started_at: at(0), finished_at: null }] }), null)
+  assert.equal(wait({ ...base, proof_turns: [turns[0], { ...turns[1], answer_only: true }] }), null)
+  assert.equal(wait({ ...ended, auto_pipeline: null }), null)
+  vm.runInContext('var isAnalysisRun=run=>run.engine===\'analyze\'', ctx)
+  assert.equal(wait({ ...base, engine: 'analyze' }), null)
+  // The chips: every stage that runs waits for turn 2's proof (one turned off stays off); otherwise as the pipeline says.
+  const view = step(`derivedTurnView(${JSON.stringify(base)})`)
+  assert.deepEqual(Object.fromEntries(Object.entries(view.stages).map(([k, v]) => [k, v.status])), { informal_dag: 'waiting', lean: 'waiting', formal_dag: 'off', coverage: 'off' })
+  assert.equal(view.stages.lean.detail, 'Waiting for turn 2’s proof')
+  assert.equal(view.stages.lean.result, undefined)
+  assert.equal(view.updated_at, 'turn-2-working')
+  assert.equal(step(`derivedTurnView(${JSON.stringify(ended)}).updated_at`), 'turn-2-drawing')
+  assert.deepEqual(step(`derivedTurnView(${JSON.stringify({ ...base, status: 'finished', proof_turns: [turns[0], { ...turns[1], finished_at: at(200) }] })})`), done)
+  // The DAG view: while turn 2 works, no graph in any of a proof run's modes.
+  for (const mode of ['engine', 'informal', 'formal', 'compiler']) assert.match(dag(base, mode).html, /Turn 2 is working on a new proof\./, mode)
+  assert.equal(dag(base, 'analysis'), null)
+  assert.equal(dag(base, 'paper-map'), null)
+  // Ended: the CGM graph and the trace are turn 2's; the derived graphs are drawn anew.
+  assert.equal(dag(ended, 'engine'), null)
+  for (const mode of ['informal', 'formal', 'compiler']) assert.match(dag(ended, mode).html, /Drawing the graph of turn 2’s proof…/, mode)
+  // A pass of turn 2's proof: a view whose stage is not done yet is drawn anew; a done one shows.
+  const pass = { ...ended, auto_pipeline: { ...done, status: 'running', started_at: at(201), proof_current: true,
+    stages: { informal_dag: { status: 'done', finished_at: at(260) }, lean: { status: 'running' }, formal_dag: { status: 'waiting' }, coverage: { status: 'waiting' } } } }
+  assert.equal(dag(pass, 'informal'), null)
+  assert.match(dag(pass, 'formal').html, /Drawing the graph of turn 2’s proof…/)
+  assert.match(dag(pass, 'compiler').html, /Drawing the graph of turn 2’s proof…/)
+  assert.equal(dag({ ...pass, auto_pipeline: { ...pass.auto_pipeline, status: 'done' } }, 'formal'), null)
+  // A first turn's pass, another run shown, or no run: as before.
+  assert.equal(dag({ ...pass, proof_turns: [turns[0]] }, 'formal'), null)
+  vm.runInContext("lastSandboxRun={run_id:'other'}; runId='r1'", ctx)
+  assert.equal(step("dagTurnWaitState('informal')"), null)
+})
+
+test('the DAG view asks dagTurnWaitState before it loads a graph, and the poll draws the chips from derivedTurnView', () => {
+  const refresh = fn('refreshDagView')
+  assert.ok(refresh.indexOf("if(typeof dagTurnWaitState==='function'&&showDagUnavailable(dagTurnWaitState(requestedMode)))return;") > 0)
+  assert.ok(refresh.indexOf('dagTurnWaitState(requestedMode)') < refresh.indexOf("fetch('/api/run/'"))
+  assert.match(script, /renderAutoPipeline\(typeof derivedTurnView==='function'\?derivedTurnView\(run\):run\.auto_pipeline\);/)
+})

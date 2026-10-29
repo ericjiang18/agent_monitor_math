@@ -548,8 +548,11 @@ class AnswerOnlyTest(unittest.TestCase):
         self.assertIn("The proof Ansatz CGM wrote.", seen["problem_text"])
         pipeline.assert_not_called()
         self.assertEqual((self.ws / "proof.md").read_text(encoding="utf-8"), self.cgm_proof)
-        turn = proof_turns.summary(self.ws)[-1]
-        self.assertEqual((turn["answer_only"], turn["status"], turn["file"]), (True, "finished", ".proof_turns/1.md"))
+        # The run had its proof and no turn recorded: that proof is kept first (turn 1), the answer is turn 2.
+        earlier, turn = proof_turns.summary(self.ws)
+        self.assertEqual((earlier["earlier"], earlier["answer_only"]), (True, False))
+        self.assertEqual((self.ws / earlier["file"]).read_text(encoding="utf-8"), self.cgm_proof)
+        self.assertEqual((turn["answer_only"], turn["status"], turn["file"]), (True, "finished", ".proof_turns/2.md"))
         self.assertEqual((self.ws / turn["file"]).read_text(encoding="utf-8"), "Step 3 holds because $x^2 \\ge 0$.\n")
         self.assertFalse((self.ws / proof_turns.ANSWER_FILE).exists())
 

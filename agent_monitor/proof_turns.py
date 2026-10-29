@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -70,18 +71,68 @@ def _save(ws: Path, turns: list[dict[str, Any]]) -> None:
 ANSWER_FILE = ".turn_reply.md"
 
 
-def begin(ws: Path | str, *, started_at: str, answer_only: bool = False) -> int | None:
+def _read_proof(ws: Path, source: str) -> str:
+    """The kept part of ``ws/source`` ('' when missing, a symlink or blank).
+    Only that part is read: a runaway proof is never loaded whole (a UTF-8
+    character is at most 4 bytes)."""
+    path = ws / source
+    if not path.is_file() or path.is_symlink():
+        return ""
+    with path.open("rb") as fh:
+        raw = fh.read(MAX_CHARS * 4)
+    text = raw.decode("utf-8", errors="replace")[:MAX_CHARS]
+    return text if text.strip() else ""
+
+
+def _earlier_turn(ws: Path, started_at: str) -> dict[str, Any] | None:
+    """The proof a run already has when its first recorded turn is a
+    follow-up (a run from before turns were kept, or whose first turn went
+    unrecorded): kept as turn 1, "earlier", so the thread still reads one
+    proof per turn.  Its time is when that proof was last written (never
+    after the follow-up starts)."""
+    for source, suffix in (("proof.md", ".md"), ("proof.tex", ".tex")):
+        text = _read_proof(ws, source)
+        if not text:
+            continue
+        try:
+            written = datetime.fromtimestamp((ws / source).stat().st_mtime, timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            written = None
+        try:
+            start = datetime.fromisoformat(started_at)
+            start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            start = None
+        if written is None or (start is not None and written >= start):
+            written = start
+        at = written.isoformat() if written is not None else str(started_at or "")
+        name = f"1{suffix}"
+        (_folder(ws) / name).write_text(text, encoding="utf-8")
+        return {"n": 1, "started_at": at, "finished_at": at, "status": "finished",
+                "file": f"{DIR}/{name}", "chars": len(text), "earlier": True}
+    return None
+
+
+def begin(
+    ws: Path | str, *, started_at: str, answer_only: bool = False, follow_up: bool = False
+) -> int | None:
     """Record a turn starting; returns its number (1 for the first run).
 
     An ``answer_only`` turn (an easy question about a proof Ansatz CGM wrote:
     easy_route) answers without touching proof.md: what it keeps is its
-    answer (``ANSWER_FILE``), not the proof."""
+    answer (``ANSWER_FILE``), not the proof.  A ``follow_up`` on a run with
+    no turn recorded first keeps the proof the run already has as turn 1
+    (``_earlier_turn``)."""
     ws = Path(ws)
     try:
         if not ws.is_dir():
             return None
         with _LOCK:
             turns = _load(ws)
+            if follow_up and not turns:
+                earlier = _earlier_turn(ws, started_at)
+                if earlier:
+                    turns.append(earlier)
             # A turn left running (a restart lost its worker) ended unrecorded.
             for turn in turns:
                 if turn.get("finished_at") is None:
@@ -117,17 +168,10 @@ def end(ws: Path | str, n: int | None, *, status: str, finished_at: str) -> None
             name, text = "", ""
             sources = ((ANSWER_FILE, ".md"),) if turn.get("answer_only") else (("proof.md", ".md"), ("proof.tex", ".tex"))
             for source, suffix in sources:
-                path = ws / source
-                if path.is_file() and not path.is_symlink():
-                    # Only the part kept is read: a runaway proof.md is never
-                    # loaded whole (a UTF-8 character is at most 4 bytes).
-                    with path.open("rb") as fh:
-                        raw = fh.read(MAX_CHARS * 4)
-                    text = raw.decode("utf-8", errors="replace")[:MAX_CHARS]
-                    if text.strip():
-                        name = f"{n}{suffix}"
-                        break
-                    text = ""
+                text = _read_proof(ws, source)
+                if text:
+                    name = f"{n}{suffix}"
+                    break
             if name:
                 (_folder(ws) / name).write_text(text, encoding="utf-8")
             if turn.get("answer_only"):
@@ -159,5 +203,6 @@ def summary(ws: Path | str | None) -> list[dict[str, Any]]:
             "file": str(turn.get("file") or ""),
             "chars": int(turn.get("chars") or 0),
             "answer_only": bool(turn.get("answer_only")),
+            "earlier": bool(turn.get("earlier")),
         })
     return out
