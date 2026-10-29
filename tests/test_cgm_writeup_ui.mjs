@@ -999,44 +999,36 @@ function readablePage({ engine = readabilityEngine(), user = { id: 4 }, guestPol
   page.run(`ENGINES=ENGINE_FOR_TEST; SETTINGS=${JSON.stringify(settings)}; CURRENT_USER=${JSON.stringify(user)}; GUEST_POLICY=${JSON.stringify(guestPolicy)}; composerModel=${JSON.stringify(model)};`)
   page.button = () => page.$('make-readable-btn')
   page.note = () => page.$('make-readable-note').textContent
+  // Make readable starts the readable version in this thread (startInlineReadable): recorded here.
+  page.run('var inlineCalls=[]; startInlineReadable=(text,name)=>{ inlineCalls.push([text,name]); };')
+  page.inline = () => JSON.parse(page.run('JSON.stringify(inlineCalls)'))
   return page
 }
 
-test('Make readable pastes the document on screen into Readability, as written, and starts nothing', () => {
+test('Make readable makes the readable version of the document on screen in this thread, as written', () => {
   // The button sits in the proof toolbar, hidden until a finished CGM run shows its document.
   assert.match(TOOLBAR, /<span class="make-readable-note" id="make-readable-note" role="status" aria-live="polite"><\/span>\s*<button type="button" id="make-readable-btn" hidden title="[^"]+">¶ Make readable<\/button>/)
   let page = readablePage(), { context, $, calls } = page
   context.applySandboxPreview(cgmRun(writeupBlock('accepted')))
   assert.equal(page.button().hidden, false)
   page.button().dispatch('click')
-  // As New does: the run is left (no more polling) for the composer, now in Readability.
-  assert.deepEqual(calls.left, ['stop polling', 'composer', 'mode readability'])
-  assert.equal(page.run('runId'), null)
-  const input = $('problem-text')
-  // The written proof as the file has it (its header says how it was checked).
-  assert.equal(input.value, WRITEUP)
-  assert.deepEqual(input.events, ['input (bubbles)'])
-  assert.deepEqual(input.selection, [0, 0])
-  assert.equal(page.document.activeElement, input)
-
+  // The run stays (no composer, no new session): the written proof, as the file has it, is made readable here.
+  assert.deepEqual(calls.left, [])
+  assert.equal(page.run('runId'), 'r1')
+  assert.deepEqual(page.inline(), [[WRITEUP, 'written proof']])
+  assert.equal($('problem-text').value ?? '', '')
   // With the verified facts on screen, proof.md.
   page = readablePage(); ({ context, $, calls } = page)
   context.applySandboxPreview(cgmRun(writeupBlock('accepted')))
   context.chooseProofDoc('facts')
   page.button().dispatch('click')
-  assert.equal($('problem-text').value, CLOSURE.trim())
+  assert.deepEqual(page.inline(), [[CLOSURE.trim(), 'proof.md']])
   // A run without a write-up offers its proof.md.
   page = readablePage(); ({ context, $ } = page)
   context.applySandboxPreview(cgmRun(undefined))
   assert.equal(page.button().hidden, false)
   page.button().dispatch('click')
-  assert.equal($('problem-text').value, CLOSURE.trim())
-  // The document becomes the composer's one source: files still attached there would be a second.
-  page = readablePage(); ({ context, $, calls } = page)
-  context.applySandboxPreview(cgmRun(writeupBlock('accepted')))
-  page.run("initialAttachments.files=[{file:{name:'notes.tex'}}];")
-  page.button().dispatch('click')
-  assert.deepEqual([calls.left, page.run('initialAttachments.files.length'), $('problem-text').value], [['stop polling', 'composer', 'mode readability', 'attachments cleared'], 0, WRITEUP])
+  assert.deepEqual(page.inline(), [[CLOSURE.trim(), 'proof.md']])
 })
 
 test('Make readable pressed after it stopped applying pastes nothing, and the button goes', () => {

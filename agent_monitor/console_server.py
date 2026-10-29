@@ -3023,7 +3023,24 @@ class Handler(RunSharingMixin, ProjectsMixin, ResearchMixin, BaseHTTPRequestHand
             self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
             return
         _note_auto_mode(job, body)
+        self._link_readable_version(job, body, user)
         self._send(200, json.dumps(job))
+
+    def _link_readable_version(self, job: dict, body: dict, user: dict) -> None:
+        """Make readable from a proof's thread: the readable version is shown
+        at the bottom of that thread, through a line in its chat ("Readable
+        version: <run id>"). Only the proof run's owner (or the operator)
+        links one."""
+        parent = str((body or {}).get("parent_run_id") or "").strip()
+        rid = str((job or {}).get("run_id") or "")
+        if not parent or not rid or not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", parent):
+            return
+        try:
+            if not self._is_run_owner(parent, user):
+                return
+            job_manager._append_chat(parent, "system", f"Readable version: {rid}")
+        except Exception:  # noqa: BLE001 - the link is a convenience
+            return
 
     def _start_manuscript_ask(self, rid: str, body: dict, user: dict, kind: str) -> None:
         """``POST /api/run/<id>/readability/ask`` (``kind`` ``"readability"``)

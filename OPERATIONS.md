@@ -314,6 +314,17 @@ availability and status dots); the top of the page has no tab bar, only
     working on a new proof…" (no Edit, Download or readable tabs) until the
     proof is rewritten, the turn ends or the run stops working, or the
     editor is open. An answer-only turn never hides the proof.
+  - Clicked, an earlier card shows the proof card's tools: the run's status
+    chips, Make readable (of that proof), Edit (for a proof: "Make turn N's
+    proof the current proof?"; on yes it becomes proof.md through the
+    editor's own save, and the newer proof stays in its own card) and the
+    run's Lean, Monitor and DAG views.
+  - Make readable (on the live card or an earlier one) never leaves the
+    thread: it starts a Readability run with `parent_run_id`, whose server
+    writes "Readable version: <run id>" in this run's chat (owner or
+    operator only), and the thread shows a Readable version card there. The
+    card follows that run every 5 s until it ends, shows its readable text
+    with Download, and opens the run itself for Notation and Map.
   - A turn ends (its proof kept) before any feedback queued for the next
     turn starts. A turn left running by a restart is marked `interrupted`
     when the next one starts. A deleted run records nothing. A symlinked
