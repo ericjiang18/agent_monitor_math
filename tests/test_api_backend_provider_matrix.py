@@ -6,7 +6,7 @@ import traceback
 from typing import Any
 from unittest.mock import patch
 
-from agent_monitor import settings
+from agent_monitor import kimi_k3, settings
 from agent_monitor.runners import api_backend
 
 
@@ -639,9 +639,11 @@ class ApiBackendPerCallParameterTests(unittest.TestCase):
 
     def test_sponsored_retry_policy_reads_the_explicit_env(self) -> None:
         attempts: list[dict[str, str]] = []
+        waits: list[float] = []
 
         def failing_http(url, **kwargs):
             attempts.append(dict(kwargs["headers"]))
+            waits.append(kwargs["timeout"])
             return 503, {"error": {"message": "busy"}}
 
         with (
@@ -659,17 +661,28 @@ class ApiBackendPerCallParameterTests(unittest.TestCase):
                     env=self._kimi_env(AGENT_MONITOR_SPONSORED_KIMI="1"),
                 )
             # An ambiguous (untyped) sponsored failure is never replayed, and
-            # the broker is told the call's whole timeout.
+            # the broker is told the call's whole timeout: without one set,
+            # as long as the broker may take, as for every sponsored caller.
             self.assertEqual(len(attempts), 1, "sponsored calls are never replayed")
-            self.assertEqual(attempts[0]["X-Ansatze-Timeout"], "240")
+            self.assertEqual(attempts[0]["X-Ansatze-Timeout"], str(kimi_k3.SPONSORED_TIMEOUT_SECONDS))
+            self.assertEqual(waits, [kimi_k3.SPONSORED_TIMEOUT_SECONDS])
 
             # The explicit env, not the process environment, decides: a
             # user-key run keeps its bounded retries and sends no header.
             attempts.clear()
+            waits.clear()
             with self.assertRaises(api_backend.APIBackendError):
                 api_backend.api_chat("system", "user", model="kimi-k3", env=self._kimi_env())
             self.assertEqual(len(attempts), 3)
             self.assertNotIn("X-Ansatze-Timeout", attempts[0])
+            self.assertEqual(waits[0], api_backend._DEFAULT_TIMEOUT)
+
+            # A timeout the caller sets is kept, on either route.
+            attempts.clear()
+            with self.assertRaises(api_backend.APIBackendError):
+                api_backend.api_chat("system", "user", model="kimi-k3", timeout=100,
+                                     env=self._kimi_env(AGENT_MONITOR_SPONSORED_KIMI="1"))
+            self.assertEqual(attempts[0]["X-Ansatze-Timeout"], "100")
 
     def test_invalid_effort_or_max_tokens_fail_before_any_request(self) -> None:
         with (
