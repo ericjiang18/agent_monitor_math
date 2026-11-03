@@ -959,10 +959,11 @@ ceilings, so an environment value can only lower them.
   runs out, returns HTTP 429, and such a call never reached the provider. The
   sponsored clients may send such a call again (next item).
 - Sponsored Kimi clients (the CGM runner, derived Formal/DAG and Lean calls,
-  the news summarizer) send their whole remaining timeout as
+  Plain, the news summarizer) send their whole remaining timeout as
   `X-Ansatze-Timeout`, so the broker and gateway can only answer sooner;
   CGM, Formal/DAG and Lean calls wait 630 s (a CGM call less near the run's
-  deadline), the news summarizer 90 s. A sponsored call is retried only when
+  deadline), Plain's one call too but ending 30 s before its runner's own
+  limit (570 s in the isolated Kimi service), the news summarizer 90 s. A sponsored call is retried only when
   it certainly never reached processing (the broker could not be reached; a
   typed `forwarded: false` busy, unavailable or soon-freed quota refusal; or
   an upstream 429/503 within 2 s): at most three attempts, after the reply's

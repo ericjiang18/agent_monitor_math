@@ -96,9 +96,11 @@ credential that has ever appeared in chat, logs, shell history, or source.
 - model call time at the gateway: 600 seconds in total, queue wait included
   (`PUBLIC_KIMI_UPSTREAM_TIMEOUT_SECONDS`, 60-900); a caller's shorter
   `X-Ansatze-Timeout` shortens it
-- model client timeout: 240 seconds for the Plain worker, which calls the
-  gateway directly; a call whose caller gives up (or is stopped) first is
-  cut off at the gateway within about a second
+- model client timeout for the Plain worker, which calls the gateway
+  directly: 630 seconds like the other sponsored clients, but ending 30
+  seconds before the job timeout below (570 seconds by default), so a slow
+  provider ends in the gateway's typed 504; a call whose caller gives up (or
+  is stopped) first is cut off at the gateway within about a second
 - whole harness job timeout: 600 seconds
 - public metadata/artifact retention: 24 hours, checked at startup and at
   bounded intervals during requests

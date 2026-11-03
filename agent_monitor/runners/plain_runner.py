@@ -11,9 +11,11 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 if __package__:
+    from .. import kimi_k3
     from ..proof_markdown import normalize_proof_markdown
     from .api_backend import APIBackendError, api_chat
     from .claude_backend import (
@@ -32,6 +34,7 @@ else:
     repository_root = Path(__file__).resolve().parents[2]
     if str(repository_root) not in sys.path:
         sys.path.insert(0, str(repository_root))
+    from agent_monitor import kimi_k3
     from agent_monitor.proof_markdown import normalize_proof_markdown
     from agent_monitor.runners.api_backend import APIBackendError, api_chat
     from agent_monitor.runners.claude_backend import (
@@ -228,6 +231,35 @@ def _guest_plain_output_limit() -> int | None:
     return max(256, min(value, 8192))
 
 
+# Plain's model call ends this long before the runner's own limit, so a slow
+# provider ends in the gateway's typed timeout rather than the job watchdog.
+_WATCHDOG_MARGIN_S = 30
+_STARTED = time.monotonic()
+
+
+def _call_timeout() -> int | None:
+    """Total seconds of the next model call on the server-sponsored Kimi
+    route, or None elsewhere (api_backend's default).
+
+    A sponsored call may wait as long as the broker takes to answer
+    (``kimi_k3.SPONSORED_TIMEOUT_SECONDS``), but Plain's call is its whole
+    run: it also ends ``_WATCHDOG_MARGIN_S`` before the runner's own limit,
+    read as the job watchdog reads it (``AGENT_MONITOR_PLAIN_TIMEOUT``, else
+    ``AGENT_MONITOR_CLI_TIMEOUT``, at least 60 s) from this runner's start.
+    """
+    if not kimi_k3.is_sponsored(os.environ):
+        return None
+    budget = float(kimi_k3.SPONSORED_TIMEOUT_SECONDS)
+    raw = str(os.environ.get("AGENT_MONITOR_PLAIN_TIMEOUT") or os.environ.get("AGENT_MONITOR_CLI_TIMEOUT") or "").strip()
+    try:
+        limit = max(60, int(raw)) if raw else None
+    except ValueError:
+        limit = None
+    if limit is not None:
+        budget = min(budget, limit - _WATCHDOG_MARGIN_S - (time.monotonic() - _STARTED))
+    return max(1, int(budget))
+
+
 def _api_chat_with_output_limit(
     system: str,
     prompt: str,
@@ -244,7 +276,7 @@ def _api_chat_with_output_limit(
     set by the job is kept.
     """
     if max_output_tokens is None:
-        return api_chat(system, prompt, model=model)
+        return api_chat(system, prompt, model=model, timeout=_call_timeout())
     ceiling = max_output_tokens
     inherited = os.environ.get("AGENT_MONITOR_MAX_OUTPUT_TOKENS", "").strip()
     if inherited:
@@ -263,7 +295,7 @@ def _api_chat_with_output_limit(
     previous = {key: os.environ.get(key) for key in overrides}
     os.environ.update(overrides)
     try:
-        return api_chat(system, prompt, model=model)
+        return api_chat(system, prompt, model=model, timeout=_call_timeout())
     finally:
         for key, value in previous.items():
             if value is None:

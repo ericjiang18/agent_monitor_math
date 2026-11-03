@@ -664,9 +664,10 @@ def api_chat(
       against it).  The job's
       ``AGENT_MONITOR_MAX_OUTPUT_TOKENS`` ceiling still applies and can only
       lower it.
-    * ``timeout`` -- the call's total seconds (default 240, or
+    * ``timeout`` -- the call's total seconds (default 240,
       ``HIGH_EFFORT_TIMEOUT`` for an OpenAI call at extra-high or maximum
-      effort).  A server-sponsored Kimi call
+      effort, or ``kimi_k3.SPONSORED_TIMEOUT_SECONDS`` for a server-sponsored
+      Kimi call, as for every other sponsored caller).  A server-sponsored Kimi call
       sends it as ``X-Ansatze-Timeout`` so the broker and gateway answer
       first, and retries only replies ``kimi_k3.sponsored_retryable``
       accepts, within this deadline.  An Anthropic call's attempts, waits
@@ -728,8 +729,16 @@ def api_chat(
         raise APIBackendError("max_tokens must be an integer")
     high_effort = provider == "openai" and _openai_effort(source, chosen, effort) in _HIGH_EFFORTS
     default_max = _HIGH_EFFORT_MAX_TOKENS if high_effort else _DEFAULT_MAX_TOKENS
+    from agent_monitor import kimi_k3
+
+    sponsored = provider == "kimi" and kimi_k3.is_sponsored(source)
     if timeout is None:
-        timeout = HIGH_EFFORT_TIMEOUT if high_effort else _DEFAULT_TIMEOUT
+        # A sponsored call waits as long as the broker may take: the broker
+        # and the gateway end a slow one first, with a typed timeout.
+        timeout = (
+            kimi_k3.SPONSORED_TIMEOUT_SECONDS if sponsored
+            else HIGH_EFFORT_TIMEOUT if high_effort else _DEFAULT_TIMEOUT
+        )
     try:
         requested = (
             max_tokens
@@ -823,9 +832,6 @@ def api_chat(
             "choose a provider shown in Settings"
         )
 
-    from agent_monitor import kimi_k3
-
-    sponsored = provider == "kimi" and kimi_k3.is_sponsored(source)
     # Every 2xx Kimi reply is billed, including an empty completion that a
     # retry replaced, so the call's usage is the total of all of them.
     billed: list[dict[str, int]] = []
