@@ -655,10 +655,11 @@ def _xml_root(body: bytes):
         raise NewsError("Feed exceeds size limit")
     if b"\x00" in body:
         raise NewsError("Feed must use an ASCII-compatible XML encoding")
+    # Banning DTDs rules out entity expansion: the references left (&amp;,
+    # &#8217; ...) stand for one character each, so MAX_BYTES bounds them.
+    # They are not counted: a maths blog's feed carries tens of thousands.
     if re.search(br"<!\s*(?:DOCTYPE|ENTITY)\b", body, re.I):
         raise NewsError("Feed DTDs and entity declarations are forbidden")
-    if body.count(b"&") > 10000:
-        raise NewsError("Feed exceeds entity reference limit")
     try:
         root = ET.fromstring(body)
     except ET.ParseError:

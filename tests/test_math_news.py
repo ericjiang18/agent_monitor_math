@@ -105,11 +105,22 @@ def test_canonical_urls_deduplicate_tracking_but_preserve_semantic_parameters():
 
 
 @pytest.mark.parametrize("body", [b'<!DOCTYPE rss [<!ENTITY x "bomb">]><rss/>',
-    b'<rss>' + b'&amp;' * 10001 + b'</rss>', b'<rss>' + b' ' * news.MAX_BYTES + b'</rss>', b'<html/>', b'<rss>',
+    b'<rss>' + b' ' * news.MAX_BYTES + b'</rss>', b'<html/>', b'<rss>',
     '<!DOCTYPE rss [<!ENTITY x "bomb">]><rss/>'.encode('utf-16')])
 def test_xml_and_entity_limits_fail_closed(body):
     with pytest.raises(news.NewsError):
         news.parse_feed(body, source(), NOW)
+
+
+def test_a_maths_feed_with_many_escapes_is_read():
+    # Each formula image of a maths blog puts several escaped "&" in its URL.
+    formula = "<img src='https://s0.wp.com/latex.php?latex=x%5E2&bg=ffffff&fg=000000&s=0&c=20201002' alt='x^2'>"
+    row = story(1, summary="Notes on singular integrals. " + formula * 3000)
+    body = rss(row)
+    assert body.count(b"&") > 10000 and len(body) < news.MAX_BYTES
+    assert [item["title"] for item in news.parse_feed(body, source(), NOW)] == ["New theorem 1"]
+    output, _state = run(rows=[row])
+    assert output["source_errors"] == [] and [item["title"] for item in output["items"]] == ["New theorem 1"]
 
 
 def test_item_selection_is_newest_first_and_bounded():
