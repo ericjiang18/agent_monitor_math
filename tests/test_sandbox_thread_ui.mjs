@@ -3245,3 +3245,104 @@ ${fn('syncParentBack')}`, back)
   assert.ok(script.includes("'Hosted Kimi K3 is not available right now: add a Kimi API key in Settings to start.'} Sign in to use API keys from more providers and keep saved history."))
   assert.match(fn('dagUnavailableState'), /if\(mode==='formal'&&payload\?\.status==='none'&&formalStage\?\.status==='off'\)return \{\n\s*status:'formalization off',/)
 })
+
+test('a readable version deleted since says so, with nothing to open; a read that fails for a moment (a restart) is tried again, sooner at first', async () => {
+  // Each card in a fresh page; the server answers each read in turn (serve).
+  const setup = () => {
+    const ctx = vm.createContext({ console })
+    vm.runInContext(DOM + `
+// As in a page: markup set replaces what the element held, and text set replaces its markup.
+const textProperty=Object.getOwnPropertyDescriptor(Node_.prototype,'textContent');
+Object.defineProperty(Node_.prototype,'innerHTML',{get(){ return this._html||''; },set(v){ this._html=String(v); this._text=''; this.children=[]; }});
+Object.defineProperty(Node_.prototype,'textContent',{get:textProperty.get,set(v){ this._html=''; textProperty.set.call(this,v); }});
+const delays=[], urls=[], replies=[], waiting=[];
+const setTimeout=(done,ms)=>{ delays.push(ms); done(); };
+const answer=r=>r==='down'?Promise.reject(new TypeError('Failed to fetch')):Promise.resolve({status:r.status,ok:r.status>=200&&r.status<300,json:async()=>{ if(r.bad)throw new SyntaxError('Unexpected end of JSON input'); return r.rec; }});
+const pump=()=>{ while(waiting.length&&replies.length)waiting.shift()(replies.shift()); };
+const fetch=url=>{ urls.push(url); return new Promise(resolve=>{ waiting.push(r=>resolve(answer(r))); pump(); }); };
+const serve=(...r)=>{ replies.push(...r); pump(); };
+const mdToHtml=text=>'<p>'+text+'</p>', selectRun=()=>{}, goSession=()=>{};
+var readableParent=null;
+${constant('THREAD_READABLE_POLL_MS')}
+${['threadReadableNode', 'threadReadablePoll', 'threadMoreButton'].map(fn).join('\n')}
+const card=rid=>{ const node=threadReadableNode({key:'readable|'+rid,kind:'readable',rid}); node.isConnected=true; return node; };
+const view=node=>({sub:node.querySelector('sub').textContent,body:node.querySelector('turn-doc').textContent,
+  open:!node.querySelector('readable-open').hidden,download:!node.querySelector('turn-dl').disabled,
+  ...(node.querySelector('turn-dl').hidden?{downloadHidden:true}:{})});`, ctx)
+    return code => plain(vm.runInContext(code, ctx))
+  }
+  const flush = async () => { for (let i = 0; i < 40; i++) await new Promise(resolve => setImmediate(resolve)) }
+  const shown = (sub, body, open = true, download = false) => ({ sub, body, open, download })
+  const RUNNING = { status: 'running' }
+  const ready = text => ({ status: 'finished', sandbox_preview: { has_readable: true, text } })
+
+  // Deleted since (the Readability run removed, its proof's thread still naming it): "not found" twice in a row.
+  let step = setup()
+  step("var gone=card('rd_gone')")
+  await flush()
+  assert.deepEqual(step('view(gone)'), shown('working…', 'Making it readable…'))
+  step('serve({status:404})'); await flush()
+  // Once: nothing to open, the card otherwise as it was, and asked again soon.
+  assert.deepEqual(step('view(gone)'), shown('working…', 'Making it readable…', false))
+  step('serve({status:404})'); await flush()
+  assert.deepEqual(step('view(gone)'), { ...shown('deleted', 'This readable version was deleted.', false), downloadHidden: true })
+  assert.deepEqual(step('[urls,delays,waiting.length]'), [['/api/run/rd_gone', '/api/run/rd_gone'], [0, 1500], 0])
+
+  // Found after one "not found": its way in comes back.
+  step = setup()
+  step("var back=card('rd_back')"); step('serve({status:404})'); await flush()
+  assert.equal(step('view(back).open'), false)
+  step(`serve({status:200,rec:${JSON.stringify(ready('Done.'))}})`); await flush()
+  assert.deepEqual(step('view(back)'), shown('ready', '', true, true))
+  assert.equal(step("back.querySelector('turn-doc').innerHTML"), '<div class="md-doc"><p>Done.</p></div>')
+  assert.equal(step('waiting.length'), 0)
+
+  // The server restarting (a deploy) while it is made: a miss or two change nothing; one that lasts says so and is
+  // still tried, sooner at first; the first good read puts the card back, and the text is drawn when it comes.
+  step = setup()
+  step("var rd=card('rd1')")
+  step(`serve({status:200,rec:${JSON.stringify(RUNNING)}})`); await flush()
+  assert.deepEqual(step('view(rd)'), shown('working…', 'Making it readable…'))
+  step('serve({status:502})'); await flush()
+  step("serve('down')"); await flush()
+  assert.deepEqual(step('view(rd)'), shown('working…', 'Making it readable…'))
+  step('serve({status:503})'); await flush()
+  assert.deepEqual(step('view(rd)'), shown('not available', 'This readable version cannot be read right now; trying again…'))
+  // A cut-off answer is a miss too.
+  step('serve({status:200,bad:true})'); await flush()
+  assert.deepEqual(step('view(rd)'), shown('not available', 'This readable version cannot be read right now; trying again…'))
+  step(`serve({status:200,rec:${JSON.stringify(RUNNING)}})`); await flush()
+  assert.deepEqual(step('view(rd)'), shown('working…', 'Making it readable…'))
+  step(`serve({status:200,rec:${JSON.stringify({ ...RUNNING, sandbox_preview: { has_readable: true, text: 'Part one.' } })}})`); await flush()
+  assert.equal(step("rd.querySelector('turn-doc').innerHTML"), '<div class="md-doc"><p>Part one.</p></div>')
+  // Misses once its text is shown keep the text.
+  step('serve({status:502},{status:502},{status:502})'); await flush()
+  assert.deepEqual(step('view(rd)'), shown('not available', '', true, true))
+  assert.equal(step("rd.querySelector('turn-doc').innerHTML"), '<div class="md-doc"><p>Part one.</p></div>')
+  step(`serve({status:200,rec:${JSON.stringify(ready('Part one. Part two.'))}})`); await flush()
+  assert.deepEqual(step('view(rd)'), shown('ready', '', true, true))
+  assert.equal(step("rd.querySelector('turn-doc').innerHTML"), '<div class="md-doc"><p>Part one. Part two.</p></div>')
+  // Polled every 5 s; after misses 1.5, 3, 4.5 s, then 5 s again. Ended, it is not read again.
+  assert.deepEqual(step('delays'), [0, 5000, 1500, 3000, 4500, 5000, 5000, 5000, 1500, 3000, 4500])
+  assert.equal(step('waiting.length'), 0)
+
+  // Refused (signed out, say): said at once, not tried again.
+  step = setup()
+  step("var denied=card('rd2')"); step('serve({status:403})'); await flush()
+  assert.deepEqual(step('view(denied)'), shown('not available', 'This readable version could not be read.'))
+  assert.deepEqual(step('[urls.length,waiting.length]'), [1, 0])
+
+  // One that failed says why, as before.
+  step = setup()
+  step("var failed=card('rd3')")
+  step(`serve({status:200,rec:${JSON.stringify({ status: 'failed', error: 'Readability exited with code 1: Kimi took longer than 10 minutes to answer' })}})`); await flush()
+  assert.deepEqual(step('view(failed)'), shown('failed', 'The readable version did not finish (failed): Kimi took longer than 10 minutes to answer'))
+  assert.equal(step('waiting.length'), 0)
+
+  // A card no longer shown (another run opened) is not read again.
+  step = setup()
+  step("var left=card('rd4')"); step(`serve({status:200,rec:${JSON.stringify(RUNNING)}})`); await flush()
+  step("left.isConnected=false; serve({status:502})"); await flush()
+  assert.deepEqual(step('[urls.length,waiting.length]'), [2, 0])
+  assert.deepEqual(step('view(left)'), shown('working…', 'Making it readable…'))
+})
