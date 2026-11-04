@@ -10501,7 +10501,8 @@ function threadNoticeNode(item){
 function threadItemNode(item){ return item.kind==='user'?threadUserNode(item):item.kind==='reply'?threadReplyNode(item):item.kind==='turn'?threadTurnNode(item):item.kind==='readable'?threadReadableNode(item):threadNoticeNode(item); }
 /* A readable version made from this thread (Make readable): its run is
    followed until it ends, and its readable text drawn here; the full view
-   (Notation, Map) is that run's own. */
+   (Notation, Map) is that run's own. One deleted since says so, with nothing
+   to open. */
 function threadReadableNode(item){
   const node=analyzeEl('div','chat-msg turn-card readable-card'), head=analyzeEl('div','turn-head');
   const sub=analyzeEl('span','sub','working…');
@@ -10516,32 +10517,54 @@ function threadReadableNode(item){
   body.append(analyzeEl('span','turn-wait','Making it readable…'));
   node.setAttribute('role','article'); node.setAttribute('aria-label','Readable version');
   node.append(head,body);
-  threadReadablePoll(node,item,body,sub,download,0);
+  threadReadablePoll(node,item,body,sub,download,0,{open});
   return node;
 }
-async function threadReadablePoll(node,item,body,sub,download,round){
-  const rid=String(runId||'');
-  await new Promise(resolve=>setTimeout(resolve,round?5000:0));
+// A read that fails for a moment (the server restarting, a dropped connection)
+// is tried again, sooner at first; one that keeps failing says so and is still
+// tried. "Not found" twice in a row, as for the run shown (tick), is a
+// readable version deleted since.
+const THREAD_READABLE_POLL_MS=5000, THREAD_READABLE_RETRY_MS=1500, THREAD_READABLE_QUIET_MISSES=2;
+async function threadReadablePoll(node,item,body,sub,download,round,st={}){
+  const rid=String(runId||''), misses=st.misses||0;
+  await new Promise(resolve=>setTimeout(resolve,!round?0:misses?Math.min(THREAD_READABLE_POLL_MS,THREAD_READABLE_RETRY_MS*misses):THREAD_READABLE_POLL_MS));
   if(String(runId||'')!==rid||round&&!node.isConnected)return;
-  let rec=null;
-  try{ const response=await fetch('/api/run/'+encodeURIComponent(item.rid)); if(response.ok)rec=await response.json(); }catch(e){ rec=null; }
+  let rec=null, code=0;
+  try{ const response=await fetch('/api/run/'+encodeURIComponent(item.rid)); code=Number(response.status)||0; if(response.ok)rec=await response.json(); }catch(e){ rec=null; code=0; }
   if(String(runId||'')!==rid||!node.isConnected)return;
+  st.misses=rec?0:misses+1; st.notFound=!rec&&code===404?(st.notFound||0)+1:0;
+  const gone=st.notFound>=2, retry=!rec&&!gone&&(code===404||code===0||code>=500);
   const status=String(rec?.status||''), done=['finished','failed','stopped','interrupted'].includes(status);
   const text=rec?.sandbox_preview?.has_readable?String(rec.sandbox_preview.text||''):'';
   threadRedraw('keep',()=>{
-    sub.textContent=!rec?'not available':done?(status==='finished'?'ready':status):'working…';
+    const say=line=>{ body.textContent=''; body.append(analyzeEl('span','turn-wait',line)); };
+    // Nothing to open while its run is not found.
+    if(st.open)st.open.hidden=st.notFound>0;
+    if(gone){
+      // Nothing left to open or download.
+      sub.textContent='deleted'; node._turnText=undefined; download.disabled=true; download.hidden=true;
+      return say('This readable version was deleted.');
+    }
+    if(!rec){
+      // A miss or two keep what the card shows.
+      if(retry&&st.misses<=THREAD_READABLE_QUIET_MISSES)return;
+      sub.textContent='not available';
+      if(node._turnText===undefined){ st.failed=true; say(retry?'This readable version cannot be read right now; trying again…':'This readable version could not be read.'); }
+      return;
+    }
+    sub.textContent=done?(status==='finished'?'ready':status):'working…';
     if(text&&text!==node._turnText){
-      node._turnText=text;
+      node._turnText=text; st.failed=false;
       body.innerHTML='<div class="md-doc">'+mdToHtml(text)+'</div>'; renderMathIn(body);
       download.disabled=false;
       if(!node.querySelector('.msg-more')&&(text.length>900||text.split('\n').length>14))threadMoreButton(node,body,item.key);
-    }else if(!text&&(done||!rec)){
+    }else if(!text&&done){
       // A failed one says why (the run's own error, as its record has it).
       const why=String(rec?.error||'').replace(/^\s*[A-Za-z][\w .()-]{0,40} exited with code -?\d+:\s*/,'').trim();
-      body.textContent=''; body.append(analyzeEl('span','turn-wait',!rec?'This readable version could not be read.':status==='finished'?'No readable version was written.':'The readable version did not finish ('+status+')'+(why?': '+(why.length>300?why.slice(0,299)+'…':why):'.')));
-    }
+      say(status==='finished'?'No readable version was written.':'The readable version did not finish ('+status+')'+(why?': '+(why.length>300?why.slice(0,299)+'…':why):'.'));
+    }else if(!text&&st.failed){ st.failed=false; say('Making it readable…'); }
   });
-  if(rec&&!done&&round<720)threadReadablePoll(node,item,body,sub,download,round+1);
+  if(round<720&&(rec?!done:retry))threadReadablePoll(node,item,body,sub,download,round+1,st);
 }
 // An earlier turn's proof, as it was when the turn ended: read-only, typeset
 // as the live card's is, its start until Show more, with its own Download.
