@@ -2749,7 +2749,8 @@ def _llm_environment(
                 client_id=(user or {}).get("id") or (run_record or {}).get("owner_id"),
                 cache_key=str((run_record or {}).get("run_id") or "guest-formal"),
                 # A Formal action chains calls of up to 630 s each
-                # (kimi_k3.SPONSORED_TIMEOUT_SECONDS) on one credential.
+                # (kimi_k3.SPONSORED_TIMEOUT_SECONDS; 1,260 s for one asked
+                # again at lower effort) on one credential.
                 minimum_ttl_seconds=1_500,
             ),
             "AGENT_MONITOR_GUEST_DERIVED": "1",
@@ -2826,7 +2827,8 @@ def _llm_environment(
                 engine="formal",
                 client_id=owner_id,
                 cache_key=cache_key,
-                # As for guests (above): it must outlast chained 630 s calls.
+                # As for guests (above): it must outlast chained 630 s calls
+                # (1,260 s for one asked again at lower effort).
                 minimum_ttl_seconds=1_500,
             )
         )
@@ -2931,9 +2933,10 @@ def _chat(
         return str(model or "codex"), content
     # A sponsored Kimi call ignores this timeout: _call_llm waits the broker's
     # own deadline (kimi_k3.SPONSORED_TIMEOUT_SECONDS), sends it as
-    # X-Ansatze-Timeout and never replays an ambiguous failure.
+    # X-Ansatze-Timeout and never replays an ambiguous failure. A reply that
+    # reasoned to the output limit is asked once more, after the stop check.
     chosen, content, _provider = _call_llm(
-        env, model, prompt, timeout=legacy_timeout
+        env, model, prompt, timeout=legacy_timeout, before_resend=_stop_if_asked
     )
     return chosen, content
 

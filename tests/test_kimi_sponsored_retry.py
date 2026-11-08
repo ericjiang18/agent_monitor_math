@@ -557,7 +557,12 @@ class DerivedSponsoredCallTests(unittest.TestCase):
         queue = list(replies)
 
         def fake_http(url, *, method, headers, payload, timeout):
-            sent.append({"headers": dict(headers), "timeout": timeout})
+            sent.append({
+                "headers": dict(headers),
+                "timeout": timeout,
+                # The payload is changed in place between attempts.
+                "effort": payload.get("reasoning_effort"),
+            })
             reply = queue.pop(0)
             if isinstance(reply, BaseException):
                 raise reply
@@ -619,6 +624,141 @@ class DerivedSponsoredCallTests(unittest.TestCase):
         self.assertEqual(len(sent), 3)
         self.assertIn("temporarily overloaded and refused the request (HTTP 503)", str(outcome))
 
+    _CUT_AT_LIMIT = {
+        "choices": [{"message": {"content": ""}, "finish_reason": "length"}],
+        "usage": {
+            "prompt_tokens": 900,
+            "completion_tokens": 8192,
+            "completion_tokens_details": {"reasoning_tokens": 8192},
+        },
+    }
+
+    def test_a_reply_that_reasoned_to_the_limit_is_asked_once_more_at_lower_effort(self) -> None:
+        # The broker's credentials set KIMI_REASONING_EFFORT=high.
+        env = {**_sponsored_env(KIMI_REASONING_EFFORT="high"), "AGENT_MONITOR_GUEST_DERIVED": "1"}
+        with self.assertLogs("agent_monitor.proof_graph", level="WARNING") as logs:
+            outcome, sent, booked = self._call_llm(
+                [(200, self._CUT_AT_LIMIT), (200, _OK), (200, _OK)], env
+            )
+        self.assertEqual(outcome[1], "KIMI_OK")
+        self.assertEqual([call["effort"] for call in sent], ["high", "low"])
+        # A new call with its own full budget, not the rest of the first one.
+        self.assertEqual([call["timeout"] for call in sent], [630.0, 630.0])
+        self.assertEqual(
+            [call["headers"][kimi_k3.TIMEOUT_HEADER] for call in sent], ["630", "630"]
+        )
+        # Both replies were billed, so both are booked.
+        self.assertEqual(len(booked), 2)
+        self.assertEqual(booked[0]["usage"]["output_tokens"], 8192)
+        self.assertTrue(all(entry["billing"] == "sponsored" for entry in booked))
+        self.assertIn("asking once more at reasoning_effort=low", "\n".join(logs.output))
+        self.assertIn("finish_reason=length", "\n".join(logs.output))
+
+    def test_the_default_max_effort_steps_down_to_high(self) -> None:
+        outcome, sent, _booked = self._call_llm(
+            [(200, self._CUT_AT_LIMIT), (200, _OK)], _sponsored_env()
+        )
+        self.assertEqual(outcome[1], "KIMI_OK")
+        self.assertEqual([call["effort"] for call in sent], ["max", "high"])
+
+    def test_a_second_reply_that_reasoned_to_the_limit_ends_the_call(self) -> None:
+        env = _sponsored_env(KIMI_REASONING_EFFORT="high")
+        outcome, sent, booked = self._call_llm(
+            [(200, self._CUT_AT_LIMIT), (200, self._CUT_AT_LIMIT), (200, _OK)], env
+        )
+        self.assertIsInstance(outcome, ValueError)
+        self.assertIn("empty response for kimi-k3", str(outcome))
+        self.assertIn("finish_reason=length", str(outcome))
+        self.assertEqual([call["effort"] for call in sent], ["high", "low"])
+        self.assertEqual(len(booked), 2)
+
+    def test_other_empty_replies_are_never_replayed(self) -> None:
+        cases = {
+            "no choices": ({"choices": []}, "high"),
+            "stopped without text": (
+                {"choices": [{"message": {"content": ""}, "finish_reason": "stop"}]}, "high"
+            ),
+            "no finish reason": ({"choices": [{"message": {"content": " "}}]}, "high"),
+            "filtered": (
+                {"choices": [{"message": {"content": ""}, "finish_reason": "content_filter"}]},
+                "high",
+            ),
+            # Already at the lowest effort: the same request would end the same way.
+            "at low effort": (self._CUT_AT_LIMIT, "low"),
+        }
+        for name, (reply, effort) in cases.items():
+            with self.subTest(name):
+                outcome, sent, booked = self._call_llm(
+                    [(200, reply), (200, _OK)], _sponsored_env(KIMI_REASONING_EFFORT=effort)
+                )
+                self.assertIsInstance(outcome, ValueError)
+                self.assertIn("empty response for kimi-k3", str(outcome))
+                self.assertEqual(len(sent), 1)
+                self.assertEqual(len(booked), 1)
+
+    def test_a_reply_cut_at_the_limit_after_some_text_is_used_as_it_is(self) -> None:
+        partial = {"choices": [{"message": {"content": "theorem t : True := by"}, "finish_reason": "length"}]}
+        outcome, sent, _booked = self._call_llm(
+            [(200, partial), (200, _OK)], _sponsored_env(KIMI_REASONING_EFFORT="high")
+        )
+        self.assertEqual(outcome[1], "theorem t : True := by")
+        self.assertEqual(len(sent), 1)
+
+    def test_the_second_request_keeps_the_sponsored_refusal_rules(self) -> None:
+        env = _sponsored_env(KIMI_REASONING_EFFORT="high")
+        outcome, sent, booked = self._call_llm(
+            [(200, self._CUT_AT_LIMIT), (503, _fast_503()), (200, _OK)], env
+        )
+        self.assertEqual(outcome[1], "KIMI_OK")
+        self.assertEqual([call["effort"] for call in sent], ["high", "low", "low"])
+        self.assertEqual(len(booked), 2)
+        for reply in (
+            (504, _typed("upstream_timeout", forwarded=True)),
+            TimeoutError("timed out"),
+        ):
+            with self.subTest(reply=reply):
+                outcome, sent, _booked = self._call_llm(
+                    [(200, self._CUT_AT_LIMIT), reply, (200, _OK)], env
+                )
+                self.assertIsInstance(outcome, ValueError)
+                self.assertIn("took longer than", str(outcome))
+                self.assertEqual(len(sent), 2)
+
+    def test_a_refused_resend_never_claims_that_no_tokens_were_used(self) -> None:
+        env = _sponsored_env(KIMI_REASONING_EFFORT="high")
+        # A refusal of a first request used no tokens and says so.
+        outcome, _sent, _booked = self._call_llm([(503, _fast_503())] * 3, env)
+        self.assertIn("No tokens were used.", str(outcome))
+        # After a billed reply that reasoned to the limit it must not.
+        for refusal in (
+            (503, _fast_503()),
+            (503, _typed("gateway_unavailable", retry_after=2)),
+            (0, "connection refused"),  # the broker could not be reached
+        ):
+            with self.subTest(refusal=refusal):
+                outcome, sent, booked = self._call_llm(
+                    [(200, self._CUT_AT_LIMIT)] + [refusal] * 3, env
+                )
+                self.assertIsInstance(outcome, ValueError)
+                self.assertNotIn("No tokens were used", str(outcome))
+                self.assertEqual(len(booked), 1)
+        outcome, sent, _booked = self._call_llm(
+            [(200, self._CUT_AT_LIMIT)] + [(503, _fast_503())] * 3, env
+        )
+        self.assertIn("temporarily overloaded and refused the request (HTTP 503)", str(outcome))
+        self.assertEqual(len(sent), 4)
+
+    def test_a_call_is_asked_again_at_most_once(self) -> None:
+        # From max, high could still step down to low: one resend all the same.
+        outcome, sent, booked = self._call_llm(
+            [(200, self._CUT_AT_LIMIT), (200, self._CUT_AT_LIMIT), (200, _OK)],
+            _sponsored_env(),
+        )
+        self.assertIsInstance(outcome, ValueError)
+        self.assertIn("empty response for kimi-k3", str(outcome))
+        self.assertEqual([call["effort"] for call in sent], ["max", "high"])
+        self.assertEqual(len(booked), 2)
+
     def test_every_billed_user_key_reply_is_booked(self) -> None:
         empty = {
             "choices": [{"message": {"content": ""}, "finish_reason": "length"}],
@@ -672,6 +812,62 @@ class DerivedSponsoredCallTests(unittest.TestCase):
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0]["timeout"], 630.0)
         self.assertEqual(sent[0]["headers"][kimi_k3.TIMEOUT_HEADER], "630")
+
+    def test_a_guest_lean_call_that_reasoned_to_the_limit_gets_its_lean(self) -> None:
+        # What a guest's Verify met: high effort used the whole 8,192 tokens.
+        efforts: list[str] = []
+        replies = [(200, self._CUT_AT_LIMIT), (200, {"choices": [{"message": {"content": "LEAN"}}]})]
+
+        def fake_http(url, *, method, headers, payload, timeout):
+            efforts.append(payload.get("reasoning_effort"))
+            return replies.pop(0)
+
+        env = {
+            **_sponsored_env(KIMI_REASONING_EFFORT="high"),
+            "AGENT_MONITOR_GUEST_DERIVED": "1",
+            "AGENT_MONITOR_LLM_MAX_OUTPUT": "8192",
+        }
+        with (
+            patch("agent_monitor.settings._http_json", side_effect=fake_http),
+            patch("agent_monitor.kimi_k3.time.sleep"),
+            patch.object(proof_graph.usage_ledger, "record_usage"),
+            self.assertLogs("agent_monitor.proof_graph", level="WARNING"),
+        ):
+            _chosen, content = lean_verify._chat(env, "kimi-k3", "formalize it")
+        self.assertEqual(content, "LEAN")
+        self.assertEqual(efforts, ["high", "low"])
+
+    def test_a_lean_session_stopped_meanwhile_is_not_asked_again(self) -> None:
+        # The run is deleted while the first request is out: the stop check
+        # before the second request ends the session, as before any call.
+        efforts: list[str] = []
+        replies = [(200, self._CUT_AT_LIMIT), (200, _OK)]
+
+        def fake_http(url, *, method, headers, payload, timeout):
+            efforts.append(payload.get("reasoning_effort"))
+            return replies.pop(0)
+
+        checks: list[bool] = []
+
+        def run_gone() -> bool:
+            checks.append(bool(efforts))
+            return bool(efforts)
+
+        env = {**_sponsored_env(KIMI_REASONING_EFFORT="high"), "AGENT_MONITOR_GUEST_DERIVED": "1"}
+        token = lean_verify.stop_when(run_gone)
+        try:
+            with (
+                patch("agent_monitor.settings._http_json", side_effect=fake_http),
+                patch("agent_monitor.kimi_k3.time.sleep"),
+                patch.object(proof_graph.usage_ledger, "record_usage") as booked,
+            ):
+                with self.assertRaises(lean_verify.SessionStopped):
+                    lean_verify._chat(env, "kimi-k3", "formalize it")
+        finally:
+            lean_verify.stop_reset(token)
+        self.assertEqual(efforts, ["high"])
+        self.assertEqual(checks, [False, True])
+        self.assertEqual(booked.call_count, 1)
 
 
 class SponsoredClientHeaderTests(unittest.TestCase):

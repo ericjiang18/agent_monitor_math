@@ -65,7 +65,10 @@ calls never replay an ambiguous timeout, 5xx response or empty response,
 avoiding silent duplicate billing; only a refusal that certainly never reached
 processing (the broker could not be reached; a typed `forwarded: false` busy,
 unavailable or soon-freed quota refusal; or an upstream 429/503 within 2 s)
-is sent again, at most three attempts per logical call.
+is sent again, at most three attempts per logical call. One exception: a
+derived Formal/DAG or Lean call whose reply stopped at the output limit with
+no text (Kimi reasoned through all 8,192 tokens) is asked once more at the next
+lower reasoning effort; both replies are booked.
 
 This urgent v1 keeps the gateway and the browser's response-only Plain worker
 in the same hardened service. Tool-capable original-console harnesses run in a
@@ -91,7 +94,8 @@ credential that has ever appeared in chat, logs, shell history, or source.
   logical client, at most 200 model calls per issued token
 - output: at most 8,192 tokens per model call
 - public model attempts: at most three per logical call, retrying only a
-  refusal that never reached processing
+  refusal that never reached processing, except one lower-effort request after
+  a derived Formal/DAG or Lean reply that reasoned to the output limit (above)
 - internal run iteration value: fixed at 8; users cannot change it
 - model call time at the gateway: 600 seconds in total, queue wait included
   (`PUBLIC_KIMI_UPSTREAM_TIMEOUT_SECONDS`, 60-900); a caller's shorter
