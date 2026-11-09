@@ -969,7 +969,12 @@ ceilings, so an environment value can only lower them.
   an upstream 429/503 within 2 s): at most three attempts, after the reply's
   `retry_after` (2–30 s) or 5 s then 15 s, never with less than 30 s of the
   call left, and at most six retries per CGM run. A timeout, any other 5xx,
-  an empty completion or an untyped error is never replayed. On a sponsored
+  an empty completion or an untyped error is never replayed, with one
+  exception: a derived Formal/DAG or Lean call whose reply stopped at the
+  output limit with no text (`finish_reason` `length`: Kimi spent the whole
+  8,192 tokens on reasoning) is asked once more, as a new call with its own
+  630 s, at the next lower effort (high → low, max → high; never below low);
+  both replies are booked. On a sponsored
   CGM run a strategist call that stays refused is sent again after 30, 60
   and 120 s; when it still fails, or fails ambiguously, the run continues
   with the direct plan instead of ending (a spent call budget or an expired
@@ -983,9 +988,11 @@ ceilings, so an environment value can only lower them.
   at most six transport retries and three strategist resends, all of calls
   refused before processing, so the strategist's one call record can stand
   for up to ten requests and a guest run makes at most 21 (the rescue worker
-  is a recorded call). Derived Formal/DAG and Lean calls retry at most twice
-  each. The gateway counts a call against `PUBLIC_KIMI_GATEWAY_CALLS_PER_HOUR`
-  before forwarding it, so upstream 429/503 refusals use that quota too.
+  is a recorded call). Derived Formal/DAG and Lean calls retry a refusal at
+  most twice per request, and send at most one lower-effort request after a
+  reply that reasoned to the limit. The gateway counts a call against
+  `PUBLIC_KIMI_GATEWAY_CALLS_PER_HOUR` before forwarding it, so upstream
+  429/503 refusals use that quota too.
 - Every 2xx reply a direct API call received is booked, whatever the
   provider and whether sponsored or not: an empty completion that ended a
   CGM call keeps its tokens in the receipt's call record and the usage

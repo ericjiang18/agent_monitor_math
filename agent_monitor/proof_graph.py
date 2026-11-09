@@ -19,7 +19,7 @@ import stat
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from urllib.parse import quote
 
 from agent_monitor import usage_ledger
@@ -483,12 +483,21 @@ class ObservedModel(str):
         return value
 
 
+def _stopped_at_output_limit(body: object) -> bool:
+    """Whether a Chat Completions reply says it stopped at its output limit."""
+    try:
+        return str(body["choices"][0].get("finish_reason") or "") == "length"  # type: ignore[index]
+    except (KeyError, IndexError, TypeError, AttributeError):
+        return False
+
+
 def _call_llm(
     env: dict[str, str],
     model: str | None,
     prompt: str,
     *,
     timeout: int = 240,
+    before_resend: Callable[[], None] | None = None,
 ) -> tuple[str, str, str]:
     """Call OpenAI, Anthropic, Gemini, or an OpenAI-compatible provider natively.
 
@@ -497,8 +506,11 @@ def _call_llm(
     broker answers within it; it sends that budget as ``X-Ansatze-Timeout``
     and retries only a failure that certainly never reached processing
     (``kimi_k3.sponsored_request``), never an ambiguous timeout, 5xx or empty
-    reply.  Every 2xx reply's usage is booked, including an empty completion
-    a user-key retry replaced.
+    reply.  The one exception is a reply that stopped at its output limit
+    with no text: it is asked once more at the next lower reasoning effort,
+    after ``before_resend`` (a Lean session's stop check) lets it.
+    Every 2xx reply's usage is booked, including an empty completion a retry
+    replaced.
     """
     from agent_monitor.settings import _http_json
 
@@ -619,7 +631,40 @@ def _call_llm(
         # failure that never reached processing is retried; an ambiguous
         # timeout, 5xx or empty reply is never replayed.
         code, body, failure = kimi_k3.sponsored_request(request, timeout=timeout)
-        message = kimi_k3.failure_message(failure) if failure is not None else ""
+        # One exception: a reply that stopped at the output limit with no text
+        # (K3 spent the whole 8,192-token budget on reasoning) is not
+        # ambiguous: it was processed and booked, and the same request would
+        # end the same way. It is asked once more, as a new call at the next
+        # lower effort (high -> low), and that reply is booked too.
+        lower_effort = getattr(kimi_k3, "lower_effort_after_empty", None)
+        spent_effort = payload.get("reasoning_effort")
+        resent = False
+        if (
+            failure is None
+            and lower_effort is not None
+            and _stopped_at_output_limit(body)
+            and lower_effort(payload, code, body)
+        ):
+            if before_resend is not None:
+                # A Lean session stopped meanwhile (its run was deleted)
+                # makes no further model call.
+                before_resend()
+            summarize = getattr(kimi_k3, "empty_completion_summary", None)
+            logger.warning(
+                "Kimi spent the whole output budget on reasoning for %s (%s; "
+                "reasoning_effort=%s); asking once more at reasoning_effort=%s",
+                chosen,
+                summarize(body) if summarize is not None else "",
+                spent_effort,
+                payload.get("reasoning_effort"),
+            )
+            resent = True
+            code, body, failure = kimi_k3.sponsored_request(request, timeout=timeout)
+        # The first reply of a resent call was billed: a refused resend must
+        # not say that no tokens were used.
+        message = (
+            kimi_k3.failure_message(failure, billed=resent) if failure is not None else ""
+        )
         if message:
             # Built from typed status fields only, never the reply body; an
             # untyped reply (older broker) is reported as before.
@@ -1941,7 +1986,8 @@ def generate(
                 engine="formal",
                 client_id=owner_id,
                 cache_key=cache_key,
-                # Outlasts a sponsored call's 630 s (kimi_k3.SPONSORED_TIMEOUT_SECONDS).
+                # Outlasts a sponsored call's 630 s (kimi_k3.SPONSORED_TIMEOUT_SECONDS),
+                # or 1,260 s when its reply is asked again at lower effort.
                 minimum_ttl_seconds=1_500,
             )
         )
