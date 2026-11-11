@@ -318,6 +318,15 @@ class _ExactEvaluator(ast.NodeVisitor):
         else:
             factor = 2 if fractional or isinstance(node.op, ast.Div) else 1
             self.budget.charge(factor * _words(left) * _words(right))
+        if isinstance(node.op, ast.Mod) and fractional:
+            # Fraction a % b is (na*db % nb*da) / (da*db), reduced by a gcd
+            # whose size follows the left denominator even when b is tiny.
+            left_num, left_den = _words(Fraction(left).numerator), _words(Fraction(left).denominator)
+            right_num, right_den = _words(Fraction(right).numerator), _words(Fraction(right).denominator)
+            self.budget.charge(
+                (left_num + right_den) * (right_num + left_den)
+                + 2 * (right_num + left_den) * (left_den + right_den)
+            )
         if isinstance(node.op, ast.Add):
             value = left + right
         elif isinstance(node.op, ast.Sub):

@@ -43,6 +43,18 @@ class ExactArithmeticWorkBudgetTest(unittest.TestCase):
             evaluate_exact("((3**10000)**15 / 1) ** -10000 > 0")
         self.assertLess(time.monotonic() - started, 0.5)
 
+    def test_a_remainder_of_a_huge_fraction_is_priced_by_its_denominator(self) -> None:
+        # x % 7 of a fraction with a 230000-bit denominator reduces the result
+        # by a gcd of that size (about 0.1 s each); a chain of them must not run.
+        huge = "((3**10000)**15 + 2) / ((5**10000)**10 + 7)"
+        chain = "(" * 10 + huge + "".join(f" % {k})" for k in range(7, 17)) + " >= 0"
+        started = time.monotonic()
+        with self.assertRaisesRegex(ToolInputError, "work limit"):
+            evaluate_exact(chain)
+        self.assertLess(time.monotonic() - started, 0.6)
+        self.assertTrue(evaluate_exact(f"0 <= {huge} % 7 < 7"))
+        self.assertTrue(evaluate_exact("(7/3) % 2 == 1/3 and 7 % (5/2) == 2 and (-7/3) % (1/2) == 1/6"))
+
     def test_valuation_of_a_large_power_is_exact_and_fast(self) -> None:
         started = time.monotonic()
         self.assertTrue(evaluate_exact("valuation((2**10000)**20, 2) == 200000"))
