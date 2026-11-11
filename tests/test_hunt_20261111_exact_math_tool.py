@@ -104,5 +104,26 @@ class ExactArithmeticWorkBudgetTest(unittest.TestCase):
         self.assertEqual(result["status"], "no_counterexample_in_scope")
 
 
+class ExactResultSerialisationTest(unittest.TestCase):
+    def test_a_result_too_long_to_print_is_refused_with_a_clear_message(self) -> None:
+        for expression in ("factorial(5000)", "7**10000", "(2**10000)**2 / 3", "1 / (3**10000)"):
+            with self.subTest(expression=expression):
+                with self.assertRaises(ToolInputError) as caught:
+                    exact_math_certificate({"expressions": ["1 + 1", expression]})
+                message = str(caught.exception)
+                self.assertIn("expressions[1]", message)
+                self.assertIn("decimal digits", message)
+                self.assertNotIn("set_int_max_str_digits", message)
+
+    def test_large_results_within_the_printable_size_are_returned_exactly(self) -> None:
+        result = exact_math_certificate(
+            {"expressions": ["10**4299", "factorial(5000) > 0", "(3**10000) % (10**4000 + 1)", "1 / 10**4299"]}
+        )
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["results"][0]["value"], 10**4299)
+        self.assertEqual(result["results"][3]["value"]["denominator"], 10**4299)
+        self.assertEqual(len(result["certificate_sha256"]), 64)
+
+
 if __name__ == "__main__":
     unittest.main()

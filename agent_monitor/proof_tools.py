@@ -458,6 +458,24 @@ def _json_value(value: Any) -> Any:
     return str(value)
 
 
+def _require_printable(value: Any, index: int) -> None:
+    """Refuse a result whose decimal form exceeds the interpreter's limit."""
+    limit = sys.get_int_max_str_digits()
+    if not limit or isinstance(value, bool):
+        return
+    if isinstance(value, Fraction):
+        integers = (value.numerator, value.denominator)
+    elif isinstance(value, int):
+        integers = (value,)
+    else:
+        return
+    if any(abs(item) >= 10**limit for item in integers):
+        raise ToolInputError(
+            f"expressions[{index}] has an exact result of more than {limit} decimal digits; "
+            "compare it or reduce it (for example with %) instead"
+        )
+
+
 def _digest(payload: dict[str, Any]) -> str:
     encoded = json.dumps(_json_value(payload), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -485,10 +503,11 @@ def exact_math_certificate(payload: dict[str, Any]) -> dict[str, Any]:
     budget = _WorkBudget()
     rows = []
     booleans = []
-    for expression in expressions:
+    for index, expression in enumerate(expressions):
         if not isinstance(expression, str):
             raise ToolInputError("every expression must be a string")
         value = evaluate_exact(expression, variables, budget)
+        _require_printable(value, index)
         rows.append({"expression": expression, "value": _json_value(value), "type": type(value).__name__})
         if isinstance(value, bool):
             booleans.append(value)
