@@ -33,13 +33,13 @@ dependencies = [
   "croniter==6.0.0",
   "packaging==26.0",
   "Markdown==3.10.2",
-  "PyJWT[crypto]==2.13.0",
-  "urllib3>=2.7.0,<3",
-  "cryptography==46.0.7",
+  "PyJWT[crypto]==2.15.1",
+  "urllib3>=2.8.0,<3",
+  "cryptography==50.0.2",
   "psutil==7.2.2",
   "ptyprocess==0.7.0; sys_platform != 'win32'",
   "fire==0.7.1",
-  "certifi==2026.5.20",
+  "certifi==2026.10.23",
   # UCLA literature research extracts downloaded primary-source PDFs.
   # Keep this in the main environment because UCLA runs with sys.executable.
   "PyMuPDF>=1.24,<2",
@@ -47,7 +47,7 @@ dependencies = [
   # PDF text; parsed in sandboxed subprocesses).  MIT and BSD licensed; pinned
   # because three units share the venv and parser output feeds stored analyses.
   "pylatexenc==2.11",
-  "pypdf==6.20.0",
+  "pypdf==6.21.4",
 ]
 
 [project.optional-dependencies]
