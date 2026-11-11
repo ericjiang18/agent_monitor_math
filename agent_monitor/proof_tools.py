@@ -27,6 +27,12 @@ MAX_AST_NODES = 220
 MAX_INTEGER_BITS = 250_000
 MAX_CASES = 200_000
 MAX_TOOL_SECONDS = 8.0
+# Estimated big-integer work (64-bit word operations) that one exact-math
+# certificate, or one case of a counterexample search, may spend.  Every
+# operation is charged from its operand sizes BEFORE it runs: a single
+# big-integer C call holds the interpreter lock of the whole console, so a
+# deadline checked afterwards cannot stop it.  About a second at most.
+MAX_WORK_UNITS = 100_000_000
 _NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,31}\Z")
 
 
@@ -40,6 +46,58 @@ def _integer(value: Any, label: str) -> int:
     if value.bit_length() > MAX_INTEGER_BITS:
         raise ToolInputError(f"{label} exceeds the exact-integer size limit")
     return value
+
+
+def _words(value: Any) -> int:
+    if isinstance(value, Fraction):
+        return _words(value.numerator) + _words(value.denominator)
+    if isinstance(value, int):
+        return abs(value).bit_length() // 64 + 1
+    return 1
+
+
+class _WorkBudget:
+    def __init__(self, units: int = MAX_WORK_UNITS):
+        self.remaining = units
+
+    def charge(self, units: int) -> None:
+        self.remaining -= units
+        if self.remaining < 0:
+            raise ToolInputError(
+                "exact arithmetic exceeds the work limit of one tool call; "
+                "use smaller operands or fewer large operations"
+            )
+
+
+def _call_cost(name: str, args: list[Any]) -> int:
+    """Upper estimate, in word operations, of one allowlisted call."""
+    sizes = [_words(arg) for arg in args] or [1]
+    integral = [
+        arg.numerator if isinstance(arg, Fraction) and arg.denominator == 1 else arg
+        for arg in args
+    ]
+    if name == "powmod" and len(args) == 3:
+        modulus = _words(args[2])
+        return 2 * 64 * _words(args[1]) * modulus * modulus + sizes[0] * modulus
+    if name == "valuation" and len(args) == 2:
+        return 4 * sizes[0] * sizes[0] + sizes[1]
+    if name == "lcm":
+        return sum(sizes) ** 2
+    if name in {"gcd", "divides"}:
+        return max(sizes) * sum(sizes)
+    if name in {"min", "max"}:
+        return 2 * max(sizes) * sum(sizes)
+    if name in {"is_square", "floor", "ceil"}:
+        return sizes[0] * sizes[0]
+    if name == "factorial" and len(args) == 1 and type(integral[0]) is int and 0 <= integral[0] <= 5_000:
+        n = integral[0]
+        return n * (n * n.bit_length() // 64 + 1)
+    if name == "binomial" and len(args) == 2 and all(type(v) is int for v in integral):
+        n, k = integral
+        if 0 <= k <= n <= 100_000:
+            small = min(k, n - k)
+            return small * (min(n, small * n.bit_length()) // 64 + 1)
+    return sum(sizes)
 
 
 def _bounded(value: Any) -> Any:
@@ -106,10 +164,22 @@ def _valuation(value: Any, prime: Any) -> int:
     if p <= 1:
         raise ToolInputError("valuation base must exceed 1")
     n = abs(n)
+    if n % p:
+        return 0
+    # p**(2**i) for every i with p**(2**i) | n, then strip them greedily: a
+    # logarithmic number of divisions instead of one per factor of p.
+    powers = [p]
+    while True:
+        square = powers[-1] * powers[-1]
+        if square.bit_length() > n.bit_length() or n % square:
+            break
+        powers.append(square)
     count = 0
-    while n % p == 0:
-        n //= p
-        count += 1
+    for index in range(len(powers) - 1, -1, -1):
+        quotient, remainder = divmod(n, powers[index])
+        if not remainder:
+            n = quotient
+            count += 1 << index
     return count
 
 
@@ -193,9 +263,10 @@ _FUNCTIONS: dict[str, Callable[..., Any]] = {
 
 
 class _ExactEvaluator(ast.NodeVisitor):
-    def __init__(self, variables: dict[str, int]):
+    def __init__(self, variables: dict[str, int], budget: _WorkBudget | None = None):
         self.variables = variables
         self.nodes = 0
+        self.budget = budget if budget is not None else _WorkBudget()
 
     def visit(self, node: ast.AST) -> Any:  # noqa: D401
         self.nodes += 1
@@ -223,6 +294,7 @@ class _ExactEvaluator(ast.NodeVisitor):
 
     def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:  # noqa: N802
         value = self.visit(node.operand)
+        self.budget.charge(_words(value))
         if isinstance(node.op, ast.Not):
             if not isinstance(value, bool):
                 raise ToolInputError("not requires a boolean operand")
@@ -238,6 +310,14 @@ class _ExactEvaluator(ast.NodeVisitor):
         right = self.visit(node.right)
         if isinstance(left, bool) or isinstance(right, bool):
             raise ToolInputError("booleans cannot be used in arithmetic")
+        fractional = isinstance(left, Fraction) or isinstance(right, Fraction)
+        if isinstance(node.op, ast.Pow):
+            pass  # charged below from the size of the result
+        elif isinstance(node.op, (ast.Add, ast.Sub)) and not fractional:
+            self.budget.charge(_words(left) + _words(right))
+        else:
+            factor = 2 if fractional or isinstance(node.op, ast.Div) else 1
+            self.budget.charge(factor * _words(left) * _words(right))
         if isinstance(node.op, ast.Add):
             value = left + right
         elif isinstance(node.op, ast.Sub):
@@ -261,10 +341,12 @@ class _ExactEvaluator(ast.NodeVisitor):
             if abs(exponent) > 10_000:
                 raise ToolInputError("absolute exponent is limited to 10000")
             base_bits = max(1, abs(_require_integral(left, "power base")).bit_length())
-            if exponent > 0 and base_bits * exponent > MAX_INTEGER_BITS:
+            if base_bits * abs(exponent) > MAX_INTEGER_BITS:
                 raise ToolInputError("power result would exceed the size limit")
             if left == 0 and exponent < 0:
                 raise ToolInputError("zero cannot have a negative exponent")
+            result_words = base_bits * abs(exponent) // 64 + 1
+            self.budget.charge(result_words * result_words)
             value = left**exponent
         else:
             raise ToolInputError("unsupported binary operator")
@@ -293,6 +375,10 @@ class _ExactEvaluator(ast.NodeVisitor):
         left = self.visit(node.left)
         for operator, comparator in zip(node.ops, node.comparators, strict=True):
             right = self.visit(comparator)
+            if isinstance(left, Fraction) or isinstance(right, Fraction):
+                self.budget.charge(2 * _words(left) * _words(right))
+            else:
+                self.budget.charge(_words(left) + _words(right))
             if isinstance(operator, ast.Eq):
                 ok = left == right
             elif isinstance(operator, ast.NotEq):
@@ -326,6 +412,7 @@ class _ExactEvaluator(ast.NodeVisitor):
         if len(node.args) > 20:
             raise ToolInputError("too many function arguments")
         args = [self.visit(arg) for arg in node.args]
+        self.budget.charge(_call_cost(node.func.id, args))
         try:
             return _bounded(_FUNCTIONS[node.func.id](*args))
         except ToolInputError:
@@ -334,7 +421,11 @@ class _ExactEvaluator(ast.NodeVisitor):
             raise ToolInputError(f"invalid {node.func.id} call: {exc}") from exc
 
 
-def evaluate_exact(expression: str, variables: dict[str, int] | None = None) -> Any:
+def evaluate_exact(
+    expression: str,
+    variables: dict[str, int] | None = None,
+    budget: _WorkBudget | None = None,
+) -> Any:
     expression = str(expression or "").strip()
     if not expression or len(expression) > MAX_EXPRESSION_CHARS:
         raise ToolInputError(f"expression must contain 1-{MAX_EXPRESSION_CHARS} characters")
@@ -348,7 +439,7 @@ def evaluate_exact(expression: str, variables: dict[str, int] | None = None) -> 
         tree = ast.parse(expression, mode="eval")
     except SyntaxError as exc:
         raise ToolInputError(f"invalid expression syntax: {exc.msg}") from exc
-    return _ExactEvaluator(checked).visit(tree)
+    return _ExactEvaluator(checked, budget).visit(tree)
 
 
 def _json_value(value: Any) -> Any:
@@ -391,12 +482,13 @@ def exact_math_certificate(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(variables, dict) or len(variables) > 32:
         raise ToolInputError("variables must be an object with at most 32 entries")
     started = time.monotonic()
+    budget = _WorkBudget()
     rows = []
     booleans = []
     for expression in expressions:
         if not isinstance(expression, str):
             raise ToolInputError("every expression must be a string")
-        value = evaluate_exact(expression, variables)
+        value = evaluate_exact(expression, variables, budget)
         rows.append({"expression": expression, "value": _json_value(value), "type": type(value).__name__})
         if isinstance(value, bool):
             booleans.append(value)
