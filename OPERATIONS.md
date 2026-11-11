@@ -1357,7 +1357,10 @@ turn's routing too).
   (P ≥ 0.5), Analyze by default, or a proof when the request asks to prove
   something. A mode this site does not offer becomes a proof. With the
   judge off or failing, Auto picks the default (Analyze with a manuscript,
-  else a proof).
+  else a proof). A problem handed over from the Problems page ("Click to
+  solve") is a proof while its "Source: <link>" line is still in the box:
+  Start does not ask the judge, and the link is never taken for a
+  manuscript.
 - **The manuscript and the instruction** (`autoSourceOf`). Attached files
   are the manuscript and the text is the instruction; a link alone, or in a
   sentence ("Analyze this paper: <link>"), is the manuscript and the rest of

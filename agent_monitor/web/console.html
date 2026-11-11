@@ -6276,6 +6276,10 @@ function autoComposerSource(source){
 // One Auto start at a time: a second Start (or Ctrl/⌘+Enter) while Jev rates
 // the request, or while the run it picked starts, starts nothing more.
 let autoStarting=false;
+// The "Source: <link>" line of a problem handed over from the Problems page
+// (consumeCatalogueProblem): while the composer still holds it, the request
+// is that problem to prove, not a manuscript to analyze.
+let catalogueHandoffLine='';
 async function startAutoRun(){
   if(autoStarting)return;
   autoStarting=true;
@@ -6287,6 +6291,15 @@ async function startAutoRunOnce(){
   if(initialAttachments.busy)return;
   const text=$('problem-text').value.trim(), files=initialAttachments.files.length;
   if(!text&&!files){ eb.style.display='block'; eb.textContent='Please enter a problem, paste a link, or attach files.'; return; }
+  // A problem from the Problems page starts a proof, whatever the judge would
+  // say: its "Source:" link names where the problem comes from.
+  const handoff=(typeof catalogueHandoffLine!=='undefined'&&catalogueHandoffLine);
+  if(handoff&&text.includes(handoff)){
+    autoPick={mode:autoAsksForLean(text)?'formal':'informal',kind:'prove'};
+    try{ await startRun({fromAuto:true}); }
+    finally{ autoPick=null; renderFormalizeSwitch(); syncStartButton(); }
+    return;
+  }
   const source=autoSourceOf(text,files), hasSource=!!source.kind;
   $('start-btn').disabled=true;
   let rated=null;
@@ -13064,6 +13077,7 @@ function consumeCatalogueProblem(){
       'Investigate this statement carefully. Distinguish established partial results, reported proof claims, and unresolved gaps. A claimed proof is not an accepted solution.']
       .filter(Boolean).join('\n\n');
     input.value=prompt;
+    catalogueHandoffLine='Source: '+item.source;
     input.dispatchEvent(new Event('input',{bubbles:true}));
     const unavailable=item.analyzeRequested?' Analyze is not available here, so the problem was loaded for proving instead.':'';
     showCatalogueNote((item.ready?'Problem loaded: '+item.title+'. Review the statement and choose Prove to begin.'
