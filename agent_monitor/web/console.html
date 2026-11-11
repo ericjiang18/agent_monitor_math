@@ -6309,10 +6309,11 @@ async function startAutoRunOnce(){
   }catch(e){ rated=null; }
   finally{ $('start-btn').disabled=false; }
   if(rated&&rated.enabled&&rated.math===false){ eb.style.display='block'; eb.textContent=String(rated.message||'Ansätze answers mathematics only.'); if(eb.dataset)eb.dataset.refusal='1'; return; }
-  // No answer (the judge off or failing): what Auto picks by default.
+  // No answer (the judge off or failing): what Auto picks by default, as the
+  // server does (Analyze with a link or files; pasted text is a proof).
   // No formalization unless asked for (Lean, Mathlib, formalize): it is slow.
   const proofMode=autoAsksForLean(text)?'formal':'informal';
-  let mode=rated&&rated.enabled&&rated.mode?String(rated.mode):(hasSource?'analyze':proofMode);
+  let mode=rated&&rated.enabled&&rated.mode?String(rated.mode):(hasSource&&source.kind!=='paste'?'analyze':proofMode);
   if((mode==='analyze'||mode==='readability')&&!runKindOffered(mode))mode=proofMode;
   if((mode==='analyze'||mode==='readability')&&!(analyzeLinkFromText(text)||files||text))mode=proofMode;
   const manuscript=mode==='analyze'||mode==='readability';

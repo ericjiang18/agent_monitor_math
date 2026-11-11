@@ -146,3 +146,20 @@ test('after a hand-off, a new request in the composer is rated by Auto as usual'
     [{ mode: 'readability', kind: 'readability', source: { kind: 'url', url: 'https://arxiv.org/abs/2401.00001', focus: 'Make this readable', seen: false }, focus: 'Make this readable' }])
   assert.deepEqual(plain(step('posted'))[0][1].has_source, true)
 })
+
+// A long pasted problem (shaped like a manuscript: paragraphs, named results).
+const LONG_PROBLEM = 'Definition. A graph is k-critical if its chromatic number is k and every proper subgraph has a smaller one.\n\n' +
+  'Theorem. Prove that every k-critical graph has minimum degree at least k - 1. ' + 'Give every step of the argument. '.repeat(8) +
+  '\n\nHint: consider a vertex of small degree and colour the rest of the graph first, then extend the colouring.'
+
+for (const [answer, rep] of Object.entries({ 'the route request failing': null, 'no rating (judge off, or a guest past its hourly ratings)': { enabled: false } })) {
+  test(`with ${answer}, Auto starts a proof for pasted text and Analyze for a link, as the server's default does`, async () => {
+    const { step, start } = autoPage()
+    assert.ok(LONG_PROBLEM.length >= 400)
+    step(`els['problem-text'].value=${JSON.stringify(LONG_PROBLEM)}`)
+    assert.deepEqual(await start(rep), [{ mode: 'informal', kind: 'prove' }])
+    assert.equal(plain(step('posted'))[0][1].source, 'text')
+    step(`els['problem-text'].value='https://arxiv.org/abs/2401.00001'`)
+    assert.deepEqual((await start(rep)).map(pick => pick.kind), ['analyze'])
+  })
+}
