@@ -60,3 +60,38 @@ def test_a_sign_up_address_longer_than_an_address_can_be_is_refused(isolated_aut
     for address in ("a" * 900_000 + "@example.test", "a@" + "b" * 250 + ".test"):
         with pytest.raises(ValueError):
             auth.register(address, PASSWORD, require_open=True)
+
+
+def test_a_sign_up_address_that_mail_would_deliver_elsewhere_is_refused(isolated_auth, monkeypatch):
+    monkeypatch.setenv("AGENT_MONITOR_REGISTRATION_EMAIL_SUFFIXES", ".edu")
+    # The mail library reads "(x.edu" as a comment: the mail goes to attacker@evil.example.
+    with pytest.raises(ValueError):
+        auth.register("attacker@evil.example(x.edu", PASSWORD, require_open=True)
+    monkeypatch.delenv("AGENT_MONITOR_REGISTRATION_EMAIL_SUFFIXES")
+    for address in ("x<victim@target.example>", "['member@example.test']",
+                    "mеmber@example.test", "a,b@example.test", '"a b"@example.test',
+                    "a" * 65 + "@example.test"):
+        with pytest.raises(ValueError):
+            auth.register(address, PASSWORD, require_open=True)
+        # An account an operator creates is held to the same rule.
+        with pytest.raises(ValueError):
+            auth.register(address, PASSWORD)
+    account = auth.register("Student.Name+tag@cs.ucla.edu", PASSWORD, require_open=True)
+    assert account["email"] == "student.name+tag@cs.ucla.edu"
+
+
+def test_an_account_stored_under_the_older_address_rule_still_signs_in(isolated_auth, monkeypatch):
+    address = "old_style@under_score.example"
+    salt = secrets.token_bytes(16)
+    with closing(auth._conn()) as conn, conn:
+        conn.execute(
+            "INSERT INTO users (email, name, password_hash, salt, is_admin, is_guest, created_at,"
+            " email_verified_at) VALUES (?,?,?,?,?,?,?,?)",
+            (address, "Old", auth._hash_password(PASSWORD, salt), salt, 0, 0, auth._now(), auth._now()),
+        )
+    assert auth.login(address, PASSWORD)["email"] == address
+    monkeypatch.setenv("AGENT_MONITOR_APP_URL", "https://ansatze.test")
+    sent = []
+    monkeypatch.setattr(auth, "_send_reset_email", lambda to, link: sent.append(to) or True)
+    assert auth.handle_forgot_password(address)
+    assert sent == [address]

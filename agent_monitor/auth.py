@@ -527,6 +527,14 @@ def register(
     email = (email or "").strip().lower()
     if len(email) > MAX_EMAIL_LENGTH or not _EMAIL_RE.match(email):
         raise ValueError("Please enter a valid email address")
+    # A new address must be one plain mailbox that mail reaches exactly as
+    # written: "a@b.example(x.edu" or "x<c@d.example>" would pass the pattern
+    # (and a domain rule) while their mail goes elsewhere.  Only new accounts
+    # are held to this; stored addresses keep signing in as they are.
+    from agent_monitor.accounts_admin import usable_address
+
+    if not usable_address(email):
+        raise ValueError("Please enter a valid email address")
     if email.endswith("@public.local"):
         raise ValueError("Please enter a non-reserved email address")
     if require_open and not email_allowed_for_registration(email):
