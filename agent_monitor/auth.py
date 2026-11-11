@@ -561,7 +561,8 @@ def register(
                 " VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     email,
-                    (name or "").strip() or None,
+                    # Bounded like every other name an account is given.
+                    (name or "").strip()[:120].strip() or None,
                     pw_hash,
                     salt,
                     int(is_admin),

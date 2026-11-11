@@ -80,6 +80,13 @@ def test_a_sign_up_address_that_mail_would_deliver_elsewhere_is_refused(isolated
     assert account["email"] == "student.name+tag@cs.ucla.edu"
 
 
+def test_a_sign_up_name_is_trimmed_to_120_characters(isolated_auth):
+    account = auth.register("verbose@example.test", PASSWORD, name="  " + "N" * 900_000, require_open=True)
+    assert account["name"] == "N" * 120
+    account = auth.register("short@example.test", PASSWORD, name=" Ada Lovelace ", require_open=True)
+    assert account["name"] == "Ada Lovelace"
+
+
 def test_an_account_stored_under_the_older_address_rule_still_signs_in(isolated_auth, monkeypatch):
     address = "old_style@under_score.example"
     salt = secrets.token_bytes(16)
