@@ -935,3 +935,75 @@ def test_an_arxiv_entry_whose_reply_was_cut_off_is_tried_again_not_dropped():
         overlay, state = run(ArxivFetcher(), state=state, now=NOW + timedelta(hours=6 * hours), model_cap=48,
                              model_request=model, sources=("arxiv",))
     assert len(state["sources"]["arxiv"]["seen"]) >= 1 and overlay["signals"] == {}
+
+
+class FakeTime:
+    """Stands in for ``kimi_k3.time`` only: a clock that only its sleeps advance."""
+
+    def __init__(self):
+        self.now, self.sleeps = 1000.0, []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def fast_refusal():
+    from agent_monitor import sponsored_kimi_client as client
+
+    return client.SponsoredKimiError(
+        "Sponsored Kimi request failed: Kimi request was rejected", status=503,
+        error={"message": "Kimi request was rejected", "type": "upstream_rejected", "forwarded": True,
+               "upstream_status": 503, "upstream_elapsed_ms": 126, "retry_after": None})
+
+
+def test_a_refusal_kimi_never_processed_is_sent_again_and_the_run_goes_on(monkeypatch):
+    # Kimi refused the first call at once (HTTP 503 in 0.1 s, never processed): it is sent again
+    # 5 s later instead of stopping the run's model calls until the next run six hours later.
+    from agent_monitor import kimi_k3
+
+    clock = FakeTime()
+    monkeypatch.setattr(kimi_k3, "time", clock)
+    refusals, model = [fast_refusal()], QuotingModel()
+
+    def flaky(body, **kwargs):
+        if refusals:
+            raise refusals.pop()
+        return model(body, **kwargs)
+
+    overlay, state = run(ArxivFetcher(), model_cap=48, model_request=flaky, sources=("arxiv",))
+    assert clock.sleeps == [5.0] and model.calls == status.ARXIV_QUERIES_PER_RUN
+    assert len(overlay["signals"]) == status.ARXIV_QUERIES_PER_RUN
+    assert not any(error["source_id"] == "kimi-k3" for error in overlay["source_errors"])
+    assert state["budget"]["calls"] == status.ARXIV_QUERIES_PER_RUN + 1  # the refused call counts too
+
+
+@pytest.mark.parametrize(("run_cap", "refused", "sent", "waits"), [
+    (1, 1, 1, []),  # no call left for a resend: the refusal stops the run's model calls
+    (2, 1, 2, [5.0]),  # the resend fits the run and is answered
+    (2, 2, 2, [5.0]),  # the resend is refused too: the job sends no third request
+])
+def test_resends_stay_within_the_runs_call_cap(monkeypatch, run_cap, refused, sent, waits):
+    from agent_monitor import kimi_k3
+
+    clock = FakeTime()
+    monkeypatch.setattr(kimi_k3, "time", clock)
+    refusals, model = [fast_refusal() for _ in range(refused)], QuotingModel()
+
+    def flaky(body, **kwargs):
+        if refusals:
+            raise refusals.pop()
+        return model(body, **kwargs)
+
+    state = {}
+    kimi = status.Model(state, cap=48, run_cap=run_cap, request=flaky, today="2026-11-11")
+    item = {"title": "Paper on this problem", "text": "We prove it in case 1."}
+    result = kimi.match(item, [{"id": "erdos-0004", "title": "A problem", "summary": "Open."}])
+    assert state["calls"] == sent and kimi.run_left == 0 and clock.sleeps == waits
+    if refused < sent:
+        assert result is not None and not kimi.stopped and kimi.errors == []
+    else:
+        assert result is None and kimi.stopped and kimi.errors == [("unavailable", "Kimi is temporarily unavailable")]

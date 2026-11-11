@@ -218,3 +218,43 @@ def test_a_summary_about_the_supplied_text_is_dropped_for_that_row_only():
     texts = {row['id']: 'Introducing Gemini 3.7 Flash' for row in rows}
     assert news_kimi.parse_summaries(json.dumps({'items': rows}), set(texts), texts) == [rows[1]]
     assert 'never mention the excerpt' in news_kimi.SUMMARY_SYSTEM
+
+
+class FakeTime:
+    """Stands in for ``kimi_k3.time`` only: a clock that only its sleeps advance."""
+
+    def __init__(self):
+        self.now, self.sleeps = 1000.0, []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def test_a_refusal_kimi_never_processed_is_sent_again_within_the_run_budget(monkeypatch):
+    clock, sent = FakeTime(), []
+    monkeypatch.setattr(news_kimi.kimi_tasks.kimi_k3, 'time', clock)
+    monkeypatch.setattr(news_kimi.client, 'issue_credentials', lambda **kwargs: {'KIMI_API_KEY': 'ephemeral-fixture-token'})
+    refusal = news_kimi.client.SponsoredKimiError(
+        'Sponsored Kimi request failed: Kimi request was rejected', status=503,
+        error={'message': 'Kimi request was rejected', 'type': 'upstream_rejected', 'forwarded': True,
+               'upstream_status': 503, 'upstream_elapsed_ms': 126, 'retry_after': None})
+
+    def request(path, **kwargs):
+        sent.append((kwargs['timeout'], kwargs['extra_headers']['X-Ansatze-Timeout']))
+        if len(sent) % 2:
+            raise refusal
+        return {'choices': [{'finish_reason': 'stop', 'message': {'content': json.dumps({'items': []})}}]}, ''
+
+    monkeypatch.setattr(news_kimi.client, '_request', request)
+    budget = news_kimi.NewsBudget({}, 60, 2, today='2026-11-11')
+    assert news_kimi.triage([{'id': 'a', 'title': 't'}], budget=budget) == []
+    assert clock.sleeps == [5.0] and sent == [(90, '90'), (85, '85')] and budget.run_calls == 2
+    # With no call left in the run, the refusal is reported and the stage backs off instead.
+    sent.clear()
+    with pytest.raises(news_kimi.NewsSummaryError) as error:
+        news_kimi.triage([{'id': 'a', 'title': 't'}], budget=news_kimi.NewsBudget({}, 60, 1, today='2026-11-11'))
+    assert error.value.kind == 'unavailable' and len(sent) == 1 and clock.sleeps == [5.0]
