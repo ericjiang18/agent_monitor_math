@@ -1,4 +1,6 @@
+import io
 import json
+import urllib.error
 
 import pytest
 
@@ -23,6 +25,11 @@ class Recorder:
         if isinstance(item, BaseException):
             raise item
         return item
+
+
+def assert_unchained(error):
+    """No provider or transport detail rides along as the error's cause or context."""
+    assert error.__cause__ is None and (error.__context__ is None or error.__suppress_context__)
 
 
 def keep_items(value):
@@ -116,7 +123,7 @@ def test_failures_are_public_safe(error, kind):
         call_json("t", "s", {}, client_id="c", cache_key="k", validate=keep_items, request=Recorder(error))
     assert caught.value.kind == kind
     assert "sk-secret" not in str(caught.value) and "prompt" not in str(caught.value)
-    assert caught.value.__cause__ is None
+    assert_unchained(caught.value)
 
 
 def test_oversized_payload_is_refused_before_any_call():
@@ -172,3 +179,193 @@ def test_empty_or_cut_off_replies_are_marked_incomplete_and_schema_breaks_are_no
     with pytest.raises(KimiTaskError) as caught:
         call_json("t", "s", {}, client_id="c", cache_key="k", validate=keep_items, request=Recorder(reply('{"other": 1}')))
     assert caught.value.kind == "invalid" and caught.value.incomplete is False
+
+
+# ── a call Kimi refused before processing it ─────────────────────────────────
+
+
+def refused(status=503, *, kind="upstream_rejected", elapsed_ms=126, retry_after=None, forwarded=True):
+    """The broker's typed reply to a refused call (``public_kimi_gateway.error_body``)."""
+    upstream = kind == "upstream_rejected"
+    error = {"message": "Kimi request was rejected", "type": kind, "forwarded": forwarded,
+             "upstream_status": status if upstream else None, "upstream_elapsed_ms": elapsed_ms if upstream else None,
+             "retry_after": retry_after}
+    return client.SponsoredKimiError("Sponsored Kimi request failed: Kimi request was rejected", status=status,
+                                     error=error)
+
+
+class Clock:
+    """A monotonic clock that only sleeping advances."""
+
+    def __init__(self):
+        self.now, self.sleeps = 1000.0, []
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+def call(fake, clock=None, **kwargs):
+    clock = clock or Clock()
+    return call_json("t", "s", {}, client_id="c", cache_key="k", validate=keep_items, request=fake,
+                     sleep=clock.sleep, clock=clock, **kwargs)
+
+
+@pytest.mark.parametrize("status", [429, 503])
+def test_a_fast_refusal_is_sent_again_after_its_delay(status):
+    clock = Clock()
+    fake = Recorder(refused(status), reply('{"items": []}'))
+    assert call(fake, clock, timeout=90) == {"items": []}
+    assert len(fake.bodies) == 2 and fake.bodies[0] == fake.bodies[1] and clock.sleeps == [5.0]
+    # The resend has what is left of the call's own deadline, not a new one.
+    assert fake.kwargs["timeout"] == 85.0
+
+
+@pytest.mark.parametrize(("retry_after", "wait"), [(1, 2.0), (7, 7.0), (120, 30.0)])
+def test_the_refusals_retry_after_sets_the_wait(retry_after, wait):
+    clock = Clock()
+    assert call(Recorder(refused(429, retry_after=retry_after), reply('{"items": []}')), clock) == {"items": []}
+    assert clock.sleeps == [wait]
+
+
+def test_a_call_the_gateway_never_forwarded_is_sent_again():
+    clock = Clock()
+    fake = Recorder(refused(429, kind="gateway_busy", forwarded=False, retry_after=2), reply('{"items": []}'))
+    assert call(fake, clock) == {"items": []} and len(fake.bodies) == 2 and clock.sleeps == [2.0]
+
+
+def test_a_job_resends_a_refusal_once_and_reports_the_second_as_before():
+    # Runs allow three attempts; a job runs again soon, so it sends a refused call only twice.
+    assert kimi_tasks.JOB_RESENDS == 1
+    clock = Clock()
+    fake = Recorder(refused(503), refused(429), reply('{"items": []}'))
+    with pytest.raises(KimiTaskError) as caught:
+        call(fake, clock, timeout=90)
+    assert len(fake.bodies) == 2 and clock.sleeps == [5.0]
+    assert (caught.value.kind, str(caught.value)) == ("unavailable", "Kimi is temporarily unavailable")
+    assert_unchained(caught.value)
+
+
+@pytest.mark.parametrize("error", [
+    refused(503, elapsed_ms=2500),  # refused only after 2.5 s: Kimi may have processed it
+    refused(500, elapsed_ms=100),
+    refused(502, kind="upstream_unavailable"),
+    refused(504, kind="upstream_timeout"),
+    client.SponsoredKimiError("Sponsored Kimi request failed: HTTP 503", status=503),  # untyped
+    client.SponsoredKimiError("Sponsored Kimi service is temporarily unavailable"),  # no reply
+    ConnectionResetError("reset after the request was sent"),
+], ids=["slow-503", "500", "unavailable", "timeout", "untyped", "no-reply", "reset"])
+def test_a_failure_kimi_may_have_processed_is_never_sent_again(error):
+    clock = Clock()
+    fake = Recorder(error, reply('{"items": []}'))
+    with pytest.raises(KimiTaskError) as caught:
+        call(fake, clock)
+    assert len(fake.bodies) == 1 and clock.sleeps == []
+    assert (caught.value.kind, str(caught.value)) == ("unavailable", "Kimi is temporarily unavailable")
+    assert_unchained(caught.value)
+
+
+def test_a_quota_refusal_is_not_sent_again_and_still_reads_as_refused():
+    quota = client.SponsoredKimiError(
+        "Sponsored Kimi request failed: Sponsored Kimi call quota reached", status=429,
+        error={"message": "Sponsored Kimi call quota reached", "type": "sponsor_quota", "forwarded": False})
+    fake = Recorder(quota, reply('{"items": []}'))
+    with pytest.raises(KimiTaskError) as caught:
+        call(fake)
+    assert caught.value.kind == "refused" and len(fake.bodies) == 1
+
+
+def test_each_resend_takes_one_call_from_the_budget():
+    state = {}
+    budget = DailyBudget(state, 5, today="2026-11-11")
+    assert call(Recorder(refused(503), reply('{"items": []}')), budget=budget) == {"items": []}
+    assert state["calls"] == 2
+
+
+def test_a_resend_the_budget_cannot_pay_for_is_not_sent():
+    state = {}
+    clock = Clock()
+    fake = Recorder(refused(503), reply('{"items": []}'))
+    with pytest.raises(KimiTaskError) as caught:
+        call(fake, clock, budget=DailyBudget(state, 1, today="2026-11-11"))
+    # The refusal is reported (the job backs off), not a spent budget.
+    assert caught.value.kind == "unavailable" and len(fake.bodies) == 1 and clock.sleeps == []
+    assert state["calls"] == 1
+
+
+def test_a_resend_needs_thirty_seconds_of_the_call_left():
+    clock = Clock()
+    fake = Recorder(refused(503, retry_after=15), reply('{"items": []}'))
+    with pytest.raises(KimiTaskError):
+        call(fake, clock, timeout=40)  # 40 - 15 = 25 s would be left
+    assert len(fake.bodies) == 1 and clock.sleeps == []
+
+
+def test_a_refused_request_keeps_the_lower_effort_resend_of_an_empty_reply():
+    clock = Clock()
+    fake = Recorder(refused(429), reply(""), refused(503), reply('{"items": []}'))
+    assert call(fake, clock, effort="high") == {"items": []}
+    assert [body["reasoning_effort"] for body in fake.bodies] == ["high", "high", "low", "low"]
+    assert clock.sleeps == [5.0, 5.0]
+
+
+def test_the_default_request_sends_the_resend_with_the_time_left(monkeypatch):
+    monkeypatch.setattr(client, "issue_credentials", lambda **kw: {"KIMI_API_KEY": "tok"})
+    sent = []
+
+    def fake_request(path, **kw):
+        sent.append((kw["timeout"], kw["extra_headers"]))
+        if len(sent) == 1:
+            raise refused(503)
+        return reply('{"items": []}'), ""
+
+    monkeypatch.setattr(client, "_request", fake_request)
+    clock = Clock()
+    assert call_json("t", "s", {}, client_id="ansatze-problems", cache_key="problems", validate=keep_items,
+                     timeout=90, sleep=clock.sleep, clock=clock) == {"items": []}
+    assert sent == [(90.0, {"X-Ansatze-Timeout": "90"}), (85.0, {"X-Ansatze-Timeout": "85"})]
+
+
+TYPED_REFUSAL = {"message": "Kimi request was rejected", "type": "upstream_rejected", "forwarded": True,
+                 "upstream_status": 503, "upstream_elapsed_ms": 126, "retry_after": None}
+
+
+@pytest.mark.parametrize(("status", "raw", "message", "error"), [
+    (503, json.dumps({"error": TYPED_REFUSAL}).encode(), "Sponsored Kimi request failed: Kimi request was rejected",
+     TYPED_REFUSAL),
+    (429, b'{"error": "Public run quota reached; try again later"}',
+     "Sponsored Kimi request failed: Public run quota reached; try again later", None),
+    (503, b"<html>busy</html>", "Sponsored Kimi request failed: HTTP 503", None),
+], ids=["typed", "untyped", "not-json"])
+def test_an_http_error_reply_keeps_its_status_and_typed_error(monkeypatch, status, raw, message, error):
+    def answer(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, status, "refused", {}, io.BytesIO(raw))
+
+    monkeypatch.delenv("AGENT_MONITOR_SPONSORED_KIMI_URL", raising=False)
+    monkeypatch.setattr(client._opener, "open", answer)
+    with pytest.raises(client.SponsoredKimiError) as caught:
+        client._request("/internal/v1/chat/completions", method="POST", payload={"model": "kimi-k3"}, timeout=5)
+    assert str(caught.value) == message
+    assert caught.value.status == status and caught.value.error == error
+
+
+def test_other_client_errors_carry_no_status():
+    error = client.SponsoredKimiError("Sponsored Kimi service is temporarily unavailable")
+    assert error.status is None and error.error is None and error.args == ("Sponsored Kimi service is temporarily unavailable",)
+
+
+def test_the_last_failure_is_the_one_reported():
+    # A soon-freed site quota is sent again; the resend's lost connection is what the job hears.
+    quota = client.SponsoredKimiError(
+        "Sponsored Kimi request failed: Public Kimi gateway hourly call quota reached", status=429,
+        error={"message": "Public Kimi gateway hourly call quota reached", "type": "gateway_quota",
+               "forwarded": False, "retry_after": 10})
+    clock = Clock()
+    fake = Recorder(quota, ConnectionResetError("reset"), reply('{"items": []}'))
+    with pytest.raises(KimiTaskError) as caught:
+        call(fake, clock)
+    assert len(fake.bodies) == 2 and clock.sleeps == [10.0]
+    assert (caught.value.kind, str(caught.value)) == ("unavailable", "Kimi is temporarily unavailable")

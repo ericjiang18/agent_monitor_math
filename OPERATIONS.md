@@ -959,16 +959,21 @@ ceilings, so an environment value can only lower them.
   runs out, returns HTTP 429, and such a call never reached the provider. The
   sponsored clients may send such a call again (next item).
 - Sponsored Kimi clients (the CGM runner, derived Formal/DAG and Lean calls,
-  Plain, the news summarizer) send their whole remaining timeout as
-  `X-Ansatze-Timeout`, so the broker and gateway can only answer sooner;
+  Plain, the news and problem-status jobs) send their whole remaining timeout
+  as `X-Ansatze-Timeout`, so the broker and gateway can only answer sooner;
   CGM, Formal/DAG and Lean calls wait 630 s (a CGM call less near the run's
   deadline), Plain's one call too but ending 30 s before its runner's own
-  limit (570 s in the isolated Kimi service), the news summarizer 90 s. A sponsored call is retried only when
-  it certainly never reached processing (the broker could not be reached; a
-  typed `forwarded: false` busy, unavailable or soon-freed quota refusal; or
-  an upstream 429/503 within 2 s): at most three attempts, after the reply's
-  `retry_after` (2–30 s) or 5 s then 15 s, never with less than 30 s of the
-  call left, and at most six retries per CGM run. A timeout, any other 5xx,
+  limit (570 s in the isolated Kimi service), the news and problem-status
+  jobs 90 s. A sponsored call is retried only when it certainly never reached
+  processing (the broker could not be reached; a typed `forwarded: false`
+  busy, unavailable or soon-freed quota refusal; or an upstream 429/503
+  within 2 s): at most three attempts, after the reply's `retry_after`
+  (2–30 s) or 5 s then 15 s, never with less than 30 s of the call left, and
+  at most six retries per CGM run. The news and problem-status jobs
+  (`kimi_tasks.call_json`) resend only the typed refusals, not a call to an
+  unreachable broker, and only once per call, since a job runs again within
+  30 minutes or 6 hours; the resend counts against the job's run and daily
+  call caps. A timeout, any other 5xx,
   an empty completion or an untyped error is never replayed, with one
   exception: a derived Formal/DAG or Lean call whose reply stopped at the
   output limit with no text (`finish_reason` `length`: Kimi spent the whole
@@ -2022,7 +2027,10 @@ off. A run records its possible calls in `state.json` before making any, so a
 failed publication or a killed run still counts them, and it starts model
 stages only within its first 10 minutes. `--dry-run` never calls the model.
 Set the cap with `sudo systemctl edit ansatze-news.service` (`[Service]` and
-`Environment=ANSATZE_NEWS_MODEL_CALLS_PER_DAY=…`). A failed task backs off for
+`Environment=ANSATZE_NEWS_MODEL_CALLS_PER_DAY=…`). A call Kimi refused before
+processing it (an upstream 429/503 within 2 s, or a refusal the gateway never
+forwarded) is first sent again once, after the reply's `retry_after` or 5 s,
+and the resend counts as a call. A failed task backs off for
 30 minutes, doubling up to a day (with five minutes of slack for the timer's
 start jitter). A task skipped without a call (cap or deadline reached, or the
 broker refused an earlier task of the same run) is not counted as a failure.
@@ -2147,9 +2155,13 @@ including `kimi-k3` when the broker is down or refusing. Kimi K3 (client id
 `ansatze-problems`, through the loopback broker) only labels candidate matches
 with a verbatim quote: at most 8 calls per run and
 `ANSATZE_PROBLEMS_MODEL_CALLS_PER_DAY` (default 48; `0` disables) per UTC day,
-counted in `state.json` because the broker’s own counters reset on restart. It
-backs off for the rest of a run when the broker is busy or over quota; arXiv
-entries it could not classify wait for the next run.
+counted in `state.json` because the broker’s own counters reset on restart. A
+call Kimi refused before processing it (an upstream 429/503 within 2 s, or a
+refusal the gateway never forwarded) is first sent again once, after the
+reply's `retry_after` or 5 s, and the resend counts as a call against both
+caps. When a call still fails with Kimi busy, over quota or unavailable, the
+job makes no more calls in that run; arXiv entries it could not classify wait
+for the next run.
 
 Review with `scripts/review_problem_status.py list --overlay
 /var/lib/ansatze-problems/problem-status.json`, then `show`, `accept`, `set`,

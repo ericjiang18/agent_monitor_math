@@ -59,7 +59,26 @@ def _singleflight_credential_issue(function):
 
 
 class SponsoredKimiError(RuntimeError):
-    """The isolated sponsored service could not complete a Plain run."""
+    """The isolated sponsored service could not complete a Plain run.
+
+    ``status`` and ``error`` are set only for an HTTP error reply: its status
+    code and, when the reply was typed, its ``error`` object (``type``,
+    ``forwarded``, the upstream status and timing, ``retry_after``; the
+    gateway never copies provider text into it).  A caller can then tell a
+    refusal that certainly never reached processing
+    (``kimi_k3.sponsored_retryable``) from any other failure.
+    """
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        status: int | None = None,
+        error: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.error = dict(error) if isinstance(error, Mapping) else None
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -151,11 +170,16 @@ def _request(
         except SponsoredKimiError:
             value = {}
         error = value.get("error")
-        if isinstance(error, Mapping):
+        typed = error if isinstance(error, Mapping) else None
+        if typed is not None:
             # Internal endpoints answer with a typed {"error": {"message": ...}}.
-            error = error.get("message")
+            error = typed.get("message")
         message = str(error or f"HTTP {exc.code}")
-        raise SponsoredKimiError(f"Sponsored Kimi request failed: {message}") from None
+        raise SponsoredKimiError(
+            f"Sponsored Kimi request failed: {message}",
+            status=exc.code if isinstance(exc.code, int) else None,
+            error=typed,
+        ) from None
     except (OSError, urllib.error.URLError) as exc:
         raise SponsoredKimiError(
             "Sponsored Kimi service is temporarily unavailable"

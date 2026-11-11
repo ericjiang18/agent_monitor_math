@@ -115,6 +115,91 @@ def _default_request(body: dict[str, Any], *, client_id: str, cache_key: str, ti
     return response
 
 
+# A job's call that Kimi refused before processing it is sent again once: one
+# resend rescues the brief refusals seen in production, and a job that still
+# fails runs again within 30 minutes (news) or 6 hours (problems).  More
+# resends would mostly spend the daily call cap during a long outage.
+JOB_RESENDS = 1
+
+
+class _Resends:
+    """The resends one job call may still make, each paid from ``budget``."""
+
+    def __init__(self, budget: Any, limit: int) -> None:
+        self.budget, self.left = budget, limit
+
+    def take(self) -> bool:
+        if self.left <= 0 or (self.budget is not None and not self.budget.take()):
+            return False
+        self.left -= 1
+        return True
+
+
+def _public_failure(error: client.SponsoredKimiError) -> KimiTaskError:
+    refused = any(word in str(error).lower() for word in ("quota", "busy", "429", "limit"))
+    return KimiTaskError(
+        "Kimi is busy or over quota for background jobs" if refused else "Kimi is temporarily unavailable",
+        "refused" if refused else "unavailable",
+    )
+
+
+def _send(
+    send: Callable[..., Any],
+    body: dict[str, Any],
+    *,
+    client_id: str,
+    cache_key: str,
+    timeout: float,
+    budget: Any,
+    sleep: Callable[[float], None] | None,
+    clock: Callable[[], float] | None,
+) -> object:
+    """Send ``body``, and send it again only after a refusal Kimi never processed.
+
+    The rules are a run's (:func:`kimi_k3.sponsored_request`), with one
+    resend (``JOB_RESENDS``) instead of two: a reply that
+    :func:`kimi_k3.sponsored_retryable` accepts (a typed refusal the gateway
+    never forwarded, or Kimi's 429/503 within 2 s) is sent again after the
+    reply's ``retry_after`` (2-30 s) or 5 s, never with less than 30 s of
+    ``timeout`` left.  Any other failure is never sent again.  Every attempt
+    takes one call from ``budget``; a resend it cannot pay for is not sent.
+    Every failure becomes a public-safe :class:`KimiTaskError`.
+    """
+    if budget is not None and not budget.take():
+        raise KimiTaskError("The daily model budget for this job is used up", "budget")
+    refusal: list[client.SponsoredKimiError] = []
+
+    def attempt(seconds: float) -> tuple[int, object]:
+        refusal.clear()
+        try:
+            return 200, send(body, client_id=client_id, cache_key=cache_key, timeout=seconds)
+        except client.SponsoredKimiError as error:
+            status = getattr(error, "status", None)
+            if isinstance(status, bool) or not isinstance(status, int) or not 400 <= status < 600:
+                raise
+            refusal.append(error)
+            # Only the typed error decides whether it may be sent again.
+            return status, {"error": getattr(error, "error", None)}
+
+    try:
+        # The allowance pays each resend from the budget: a resend is a call.
+        _code, response, failure = kimi_k3.sponsored_request(
+            attempt, timeout=timeout, allowance=_Resends(budget, JOB_RESENDS), sleep=sleep, clock=clock,
+        )
+    except KimiTaskError:
+        raise
+    except client.SponsoredKimiError as error:
+        raise _public_failure(error) from None
+    except Exception:  # noqa: BLE001 - never surface provider or transport detail
+        raise KimiTaskError("Kimi is temporarily unavailable", "unavailable") from None
+    if failure is None:
+        return response
+    if refusal:
+        raise _public_failure(refusal[0]) from None
+    # The request may have been sent and the connection lost: never resent.
+    raise KimiTaskError("Kimi is temporarily unavailable", "unavailable")
+
+
 def call_json(
     task: str,
     system: str,
@@ -128,14 +213,19 @@ def call_json(
     timeout: float = 120.0,
     budget: DailyBudget | None = None,
     request: Callable[..., dict[str, Any]] | None = None,
+    sleep: Callable[[float], None] | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> dict[str, Any]:
     """Run one strict JSON task and return the caller-validated object.
 
+    A request Kimi refused before processing it is sent again once
+    (:func:`_send`); nothing else is resent as is.
     One empty completion is retried once with lower reasoning effort (K3 counts
     reasoning against ``max_tokens``).  ``validate`` must raise ``ValueError`` or
     :class:`KimiTaskError` for anything it does not accept; a rejected reply is
     not retried (a second identical call rarely fixes a schema violation and
     would double the cost).  Each attempt takes one call from ``budget``.
+    ``sleep`` and ``clock`` default to ``time.sleep`` and ``time.monotonic``.
     """
     if effort not in EFFORTS:
         raise KimiTaskError("Unsupported reasoning effort", "invalid")
@@ -145,20 +235,10 @@ def call_json(
         "reasoning_effort": effort, "messages": _messages(task, system, payload),
     }
     for attempt in range(2):
-        if budget is not None and not budget.take():
-            raise KimiTaskError("The daily model budget for this job is used up", "budget")
-        try:
-            response = send(body, client_id=client_id, cache_key=cache_key, timeout=float(timeout))
-        except KimiTaskError:
-            raise
-        except client.SponsoredKimiError as exc:
-            refused = any(word in str(exc).lower() for word in ("quota", "busy", "429", "limit"))
-            raise KimiTaskError(
-                "Kimi is busy or over quota for background jobs" if refused else "Kimi is temporarily unavailable",
-                "refused" if refused else "unavailable",
-            ) from None
-        except Exception:  # noqa: BLE001 - never surface provider or transport detail
-            raise KimiTaskError("Kimi is temporarily unavailable", "unavailable") from None
+        response = _send(
+            send, body, client_id=client_id, cache_key=cache_key, timeout=float(timeout),
+            budget=budget, sleep=sleep, clock=clock,
+        )
         if not isinstance(response, Mapping):
             raise KimiTaskError("The model reply was malformed", "invalid")
         if attempt == 0 and kimi_k3.lower_effort_after_empty(body, 200, response):

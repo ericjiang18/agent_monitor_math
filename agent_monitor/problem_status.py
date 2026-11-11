@@ -142,6 +142,24 @@ def signal_key(problem_id: str, url: str) -> str:
 # ── model access ──────────────────────────────────────────────────────────────
 
 
+class _RunShare:
+    """The daily budget, limited to the ``left`` calls this run still has.
+
+    One task may send more than one request (a call Kimi refused before
+    processing it is sent again, kimi_tasks.call_json), and each request must
+    fit the run cap as well as the daily one.
+    """
+
+    def __init__(self, budget: Any, left: int) -> None:
+        self.budget, self.left = budget, left
+
+    def take(self) -> bool:
+        if self.left <= 0 or not self.budget.take():
+            return False
+        self.left -= 1
+        return True
+
+
 class Model:
     """Kimi K3 through the broker with a per-run and a persisted daily cap."""
 
@@ -172,7 +190,7 @@ class Model:
             return None
         before = self.budget.used
         try:
-            return call(self.budget)
+            return call(_RunShare(self.budget, self.run_left))
         except KimiTaskError as error:
             # Busy, over quota or budget: stop calling for this run (back off).
             if error.kind in ("refused", "budget", "unavailable"):
