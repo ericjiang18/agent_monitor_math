@@ -494,9 +494,9 @@ restart `agent-monitor.service` after editing, once no proofs are running).
   Copy-first checks and the one-time backfill are in `OPERATIONS.md` (News
   refresh).
 - **Analyze dependencies and settings.** Analyze needs `pylatexenc==2.11`
-  and `pypdf==6.20.0` in `/home/repo/agent_monitor_math/.venv` (one venv for
+  and `pypdf==6.21.4` in `/home/repo/agent_monitor_math/.venv` (one venv for
   `agent-monitor`, `ansatze-kimi` and `ansatze-news`): dry-run first, then
-  `sudo -u ubuntu .venv/bin/python -m pip install --no-deps pylatexenc==2.11 pypdf==6.20.0`.
+  `sudo -u ubuntu .venv/bin/python -m pip install --no-deps pylatexenc==2.11 pypdf==6.21.4`.
   Its caps, kill switches (`AGENT_MONITOR_ANALYZE_ENABLED`,
   `AGENT_MONITOR_ANALYZE_GUESTS`; both on by default), the sponsored daily cap
   and concurrency (`AGENT_MONITOR_ANALYZE_SPONSORED_RUNS_PER_DAY`, default 40,

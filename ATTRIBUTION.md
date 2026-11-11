@@ -44,7 +44,7 @@ this application.
 
 ## Document-parsing dependencies (installed, not vendored)
 
-- pypdf 6.20.0 — https://github.com/py-pdf/pypdf — BSD-3-Clause. Extracts the
+- pypdf 6.21.4 — https://github.com/py-pdf/pypdf — BSD-3-Clause. Extracts the
   Kourovka Notebook's PDF text for the problem-source facts.
 - pylatexenc 2.11 — https://github.com/phfaist/pylatexenc — MIT. LaTeX
   structure parsing. Both are pinned in `pyproject.toml`.
@@ -90,7 +90,7 @@ end; no Rust code, binary or generated tree-sitter grammar (MIT, Copyright
 
 ## pypdf (installed dependency)
 
-- Source: https://github.com/py-pdf/pypdf, version 6.20.0 (pinned in
+- Source: https://github.com/py-pdf/pypdf, version 6.21.4 (pinned in
   `pyproject.toml`)
 - License: BSD-3-Clause, Copyright (c) 2006-2008 Mathieu Fenniak; some
   contributions copyright (c) 2007 Ashish Kulkarni and (c) 2014 Steve Witham

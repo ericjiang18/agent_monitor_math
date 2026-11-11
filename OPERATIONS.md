@@ -1680,7 +1680,7 @@ when the server offers it.
 - **Evaluation.** `scripts/eval_analyze.py` runs the withdrawn openai/math
   Weil-classes paper (archived revision `adc7f12`) and control papers;
   `--dry-run --local NAME=DIR` plans without model calls or network.
-- **Dependencies.** `pylatexenc==2.11` and `pypdf==6.20.0` (pinned in
+- **Dependencies.** `pylatexenc==2.11` and `pypdf==6.21.4` (pinned in
   `pyproject.toml`) must be installed in the shared venv.
 
 | Variable | Default |
