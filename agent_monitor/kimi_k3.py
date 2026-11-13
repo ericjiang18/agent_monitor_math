@@ -272,17 +272,21 @@ def sponsored_retryable(code: int, body: object) -> bool:
 def sponsored_retry_delay(attempt: int, body: object) -> float:
     """Seconds to wait after failed attempt ``attempt`` (1-based).
 
-    Deterministic, without jitter: the reply's ``retry_after`` clamped to
-    2..30 s when present, otherwise 5 s before the second attempt and 15 s
-    before the third.
+    Deterministic, without jitter: 5 s before the second attempt and 15 s
+    before the third, or the reply's ``retry_after`` (clamped to 2..30 s)
+    when that is longer.  A shorter hint is not followed: Kimi's provider has
+    hinted 2 s or less while it kept refusing for several seconds after each
+    completed call, so following the hint spent all three attempts of a call
+    within about 5 s.
     """
+    index = max(0, min(int(attempt) - 1, len(_SPONSORED_RETRY_DELAYS_S) - 1))
+    delay = _SPONSORED_RETRY_DELAYS_S[index]
     error = typed_error(body)
     retry_after = _plain_int(error.get("retry_after")) if error is not None else None
     if retry_after is not None:
         low, high = _RETRY_AFTER_BOUNDS_S
-        return float(max(low, min(retry_after, high)))
-    index = max(0, min(int(attempt) - 1, len(_SPONSORED_RETRY_DELAYS_S) - 1))
-    return _SPONSORED_RETRY_DELAYS_S[index]
+        delay = max(delay, float(max(low, min(retry_after, high))))
+    return delay
 
 
 class RetryAllowance:

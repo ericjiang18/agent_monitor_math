@@ -224,8 +224,8 @@ def test_a_fast_refusal_is_sent_again_after_its_delay(status):
     assert fake.kwargs["timeout"] == 85.0
 
 
-@pytest.mark.parametrize(("retry_after", "wait"), [(1, 2.0), (7, 7.0), (120, 30.0)])
-def test_the_refusals_retry_after_sets_the_wait(retry_after, wait):
+@pytest.mark.parametrize(("retry_after", "wait"), [(1, 5.0), (7, 7.0), (120, 30.0)])
+def test_the_wait_is_5_s_or_the_refusals_longer_retry_after(retry_after, wait):
     clock = Clock()
     assert call(Recorder(refused(429, retry_after=retry_after), reply('{"items": []}')), clock) == {"items": []}
     assert clock.sleeps == [wait]
@@ -234,7 +234,7 @@ def test_the_refusals_retry_after_sets_the_wait(retry_after, wait):
 def test_a_call_the_gateway_never_forwarded_is_sent_again():
     clock = Clock()
     fake = Recorder(refused(429, kind="gateway_busy", forwarded=False, retry_after=2), reply('{"items": []}'))
-    assert call(fake, clock) == {"items": []} and len(fake.bodies) == 2 and clock.sleeps == [2.0]
+    assert call(fake, clock) == {"items": []} and len(fake.bodies) == 2 and clock.sleeps == [5.0]
 
 
 def test_a_job_resends_a_refusal_once_and_reports_the_second_as_before():

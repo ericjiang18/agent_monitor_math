@@ -967,9 +967,11 @@ ceilings, so an environment value can only lower them.
   jobs 90 s. A sponsored call is retried only when it certainly never reached
   processing (the broker could not be reached; a typed `forwarded: false`
   busy, unavailable or soon-freed quota refusal; or an upstream 429/503
-  within 2 s): at most three attempts, after the reply's `retry_after`
-  (2–30 s) or 5 s then 15 s, never with less than 30 s of the call left, and
-  at most six retries per CGM run. The news and problem-status jobs
+  within 2 s): at most three attempts, after 5 s then 15 s, or after the
+  reply's `retry_after` when that is longer (at most 30 s; a shorter hint is
+  not followed, since Kimi's provider has kept refusing for several seconds
+  after hinting 2 s or less), never with less than 30 s of the call left, and at
+  most six retries per CGM run. The news and problem-status jobs
   (`kimi_tasks.call_json`) resend only the typed refusals, not a call to an
   unreachable broker, and only once per call, since a job runs again within
   30 minutes or 6 hours; the resend counts against the job's run and daily
@@ -2029,8 +2031,8 @@ stages only within its first 10 minutes. `--dry-run` never calls the model.
 Set the cap with `sudo systemctl edit ansatze-news.service` (`[Service]` and
 `Environment=ANSATZE_NEWS_MODEL_CALLS_PER_DAY=…`). A call Kimi refused before
 processing it (an upstream 429/503 within 2 s, or a refusal the gateway never
-forwarded) is first sent again once, after the reply's `retry_after` or 5 s,
-and the resend counts as a call. A failed task backs off for
+forwarded) is first sent again once, after 5 s or the reply's longer
+`retry_after`, and the resend counts as a call. A failed task backs off for
 30 minutes, doubling up to a day (with five minutes of slack for the timer's
 start jitter). A task skipped without a call (cap or deadline reached, or the
 broker refused an earlier task of the same run) is not counted as a failure.
@@ -2157,11 +2159,11 @@ with a verbatim quote: at most 8 calls per run and
 `ANSATZE_PROBLEMS_MODEL_CALLS_PER_DAY` (default 48; `0` disables) per UTC day,
 counted in `state.json` because the broker’s own counters reset on restart. A
 call Kimi refused before processing it (an upstream 429/503 within 2 s, or a
-refusal the gateway never forwarded) is first sent again once, after the
-reply's `retry_after` or 5 s, and the resend counts as a call against both
-caps. When a call still fails with Kimi busy, over quota or unavailable, the
-job makes no more calls in that run; arXiv entries it could not classify wait
-for the next run.
+refusal the gateway never forwarded) is first sent again once, after 5 s or
+the reply's longer `retry_after`, and the resend counts as a call against
+both caps. When a call still fails with Kimi busy, over quota or
+unavailable, the job makes no more calls in that run; arXiv entries it could
+not classify wait for the next run.
 
 Review with `scripts/review_problem_status.py list --overlay
 /var/lib/ansatze-problems/problem-status.json`, then `show`, `accept`, `set`,
