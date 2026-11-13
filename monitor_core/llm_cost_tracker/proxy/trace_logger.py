@@ -176,6 +176,7 @@ def _fallback_response_content(response_obj, kwargs: Dict[str, Any]) -> tuple[st
     return content, thinking
 
 
+def _compute_cost(usage: Dict[str, int], model: str) -> Optional[float]:
     """Compute dollar cost from token usage. Returns None for unpriced models."""
     try:
         from llm_cost_tracker.pricing import (

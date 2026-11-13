@@ -564,11 +564,14 @@ def test_installer_parses_the_staged_kimi_file_without_printing_it(tmp_path):
         f'# staged\r\nexport KIMI_API_KEY="{secret}"\r\nKIMI_API_BASE = https://kimi.example/v1\nOTHER=1\n',
         encoding="utf-8",
     )
+    # Named outside the f-string: reusing the quote character inside a
+    # replacement field is Python 3.12 syntax, and 3.11 is supported.
+    install_script = BUNDLE / "install.sh"
     script = (
         "set -euo pipefail\n"
         f"APP_DIR={ROOT}\n"
         'die() { echo "die: $*"; exit 1; }\n'
-        f'eval "$(sed -n \'/^read_staged_kimi() {{/,/^}}/p\' {BUNDLE / 'install.sh'})"\n'
+        f'eval "$(sed -n \'/^read_staged_kimi() {{/,/^}}/p\' {install_script})"\n'
         'read_staged_kimi "$1"\n'
         'printf "%s %s\\n" "${#STAGED_KIMI_KEY}" "${STAGED_KIMI_BASE}"\n'
         '[[ ${STAGED_KIMI_KEY} == "$2" ]] && echo same\n'
