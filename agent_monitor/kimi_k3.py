@@ -28,8 +28,11 @@ SPONSORED_TIMEOUT_SECONDS = 630
 # broker and the gateway may only shorten their deadlines to it.
 TIMEOUT_HEADER = "X-Ansatze-Timeout"
 SPONSORED_ATTEMPTS = 3
-# Transport retries one CGM run may spend across all of its calls.
-SPONSORED_RUN_RETRIES = 6
+# Transport retries one CGM or Analyze run may spend across all of its calls:
+# twice a sponsored run's 12 recorded calls.  Every one resends a call refused
+# before processing (no tokens used); a Kimi provider that refuses the first
+# request after each completed call needs about one per call.
+SPONSORED_RUN_RETRIES = 24
 _SPONSORED_RETRY_DELAYS_S = (5.0, 15.0)
 _RETRY_AFTER_BOUNDS_S = (2, 30)
 # A retry is skipped when it would leave less of the call's deadline.
@@ -272,17 +275,21 @@ def sponsored_retryable(code: int, body: object) -> bool:
 def sponsored_retry_delay(attempt: int, body: object) -> float:
     """Seconds to wait after failed attempt ``attempt`` (1-based).
 
-    Deterministic, without jitter: the reply's ``retry_after`` clamped to
-    2..30 s when present, otherwise 5 s before the second attempt and 15 s
-    before the third.
+    Deterministic, without jitter: 5 s before the second attempt and 15 s
+    before the third, or the reply's ``retry_after`` (clamped to 2..30 s)
+    when that is longer.  A shorter hint is not followed: Kimi's provider has
+    hinted 2 s or less while it kept refusing for several seconds after each
+    completed call, so following the hint spent all three attempts of a call
+    within about 5 s.
     """
+    index = max(0, min(int(attempt) - 1, len(_SPONSORED_RETRY_DELAYS_S) - 1))
+    delay = _SPONSORED_RETRY_DELAYS_S[index]
     error = typed_error(body)
     retry_after = _plain_int(error.get("retry_after")) if error is not None else None
     if retry_after is not None:
         low, high = _RETRY_AFTER_BOUNDS_S
-        return float(max(low, min(retry_after, high)))
-    index = max(0, min(int(attempt) - 1, len(_SPONSORED_RETRY_DELAYS_S) - 1))
-    return _SPONSORED_RETRY_DELAYS_S[index]
+        delay = max(delay, float(max(low, min(retry_after, high))))
+    return delay
 
 
 class RetryAllowance:

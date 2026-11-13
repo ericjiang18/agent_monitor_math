@@ -114,11 +114,16 @@ class SponsoredRetryableTests(unittest.TestCase):
         self.assertEqual(kimi_k3.sponsored_retry_delay(1, None), 5.0)
         self.assertEqual(kimi_k3.sponsored_retry_delay(2, None), 15.0)
         self.assertEqual(kimi_k3.sponsored_retry_delay(1, _fast_503()), 5.0)
-        for retry_after, expected in ((0, 2.0), (1, 2.0), (2, 2.0), (17, 17.0), (30, 30.0), (3600, 30.0)):
+        # A retry_after hint only lengthens the wait (to at most 30 s); a
+        # shorter one is not followed: Kimi's provider has kept refusing for
+        # several seconds after hinting 1-2 s.
+        cases = ((0, 5.0, 15.0), (1, 5.0, 15.0), (2, 5.0, 15.0), (7, 7.0, 15.0),
+                 (17, 17.0, 17.0), (30, 30.0, 30.0), (3600, 30.0, 30.0))
+        for retry_after, first, second in cases:
             with self.subTest(retry_after=retry_after):
                 body = _typed("gateway_busy", retry_after=retry_after)
-                self.assertEqual(kimi_k3.sponsored_retry_delay(1, body), expected)
-                self.assertEqual(kimi_k3.sponsored_retry_delay(2, body), expected)
+                self.assertEqual(kimi_k3.sponsored_retry_delay(1, body), first)
+                self.assertEqual(kimi_k3.sponsored_retry_delay(2, body), second)
 
     def test_timeout_header_value_rounds_down_to_whole_seconds(self) -> None:
         self.assertEqual(kimi_k3.timeout_header_value(630), "630")
@@ -167,15 +172,46 @@ class SponsoredRequestTests(unittest.TestCase):
         # The first attempt carries the whole timeout, later ones what is left.
         self.assertEqual(sent, [630.0, 625.0, 610.0])
 
-    def test_retry_after_sets_the_delay(self) -> None:
+    def test_a_short_retry_after_never_shortens_the_schedule(self) -> None:
         busy = (429, _typed("gateway_busy", retry_after=2))
         _code, _body, failure, _sent, slept = self._run([busy, busy, busy])
-        self.assertEqual(slept, [2.0, 2.0])
+        self.assertEqual(slept, [5.0, 15.0])
         self.assertIsNotNone(failure)
         assert failure is not None
         self.assertEqual((failure.status, failure.kind, failure.attempts), (429, "gateway_busy", 3))
         self.assertTrue(failure.retryable)
         self.assertFalse(failure.permanent)
+
+    def test_a_longer_retry_after_sets_the_delay(self) -> None:
+        busy = (429, _typed("gateway_busy", retry_after=20))
+        _code, _body, _failure, _sent, slept = self._run([busy, busy, busy])
+        self.assertEqual(slept, [20.0, 20.0])
+
+    def test_a_provider_refusing_after_a_short_hint_is_waited_out(self) -> None:
+        # Kimi's provider answered 429 with Retry-After: 1 and kept refusing for
+        # several seconds after a completed call: resends 2 s apart all failed.
+        clock = _Clock()
+        start = clock()
+
+        def provider(now: _Clock):
+            if now() - start < 10:
+                return 429, _fast_503(upstream_status=429, upstream_elapsed_ms=150, retry_after=1)
+            return 200, _OK
+
+        code, body, failure, _sent, slept = self._run([provider] * 3, clock=clock)
+        self.assertEqual((code, body, failure), (200, _OK, None))
+        self.assertEqual(slept, [5.0, 15.0])
+
+    def test_a_run_survives_a_refusal_before_every_call(self) -> None:
+        # Kimi's provider has refused the first request after nearly every
+        # completed call (one run turn met 9 refusals among its 11 calls); with
+        # six retries per run, the seventh refused call failed outright.
+        allowance = kimi_k3.RetryAllowance(kimi_k3.SPONSORED_RUN_RETRIES)
+        refused = (429, _fast_503(upstream_status=429, upstream_elapsed_ms=150, retry_after=1))
+        for call in range(12):
+            with self.subTest(call=call):
+                code, body, failure, sent, _slept = self._run([refused, (200, _OK)], allowance=allowance)
+                self.assertEqual((code, body, failure, len(sent)), (200, _OK, None, 2))
 
     def test_at_most_three_attempts(self) -> None:
         refused = (0, "connection refused")
@@ -261,7 +297,7 @@ class SponsoredRequestTests(unittest.TestCase):
         self.assertEqual((len(sent), slept), (1, []))
         assert failure is not None
         self.assertTrue(failure.retryable)
-        self.assertEqual(kimi_k3.SPONSORED_RUN_RETRIES, 6)
+        self.assertEqual(kimi_k3.SPONSORED_RUN_RETRIES, 24)
 
 
 class FailureMessageTests(unittest.TestCase):

@@ -1344,11 +1344,11 @@ def test_a_busy_sponsored_provider_ends_a_kimi_run_with_bounded_retries(
 
     assert kimi_runner.main() == 1
 
-    # The strategist: three calls of three attempts (the run's six transport
-    # retries), its 30/60/120 s waits, then one last attempt; then the direct
-    # plan's worker and, after 60 s, one rescue worker, one attempt each.
-    assert len(requests) == 12
-    assert sleeps == [5.0, 15.0] * 3
+    # The strategist: four calls of three attempts each, with its 30/60/120 s
+    # waits between them; then the direct plan's worker and, after 60 s, one
+    # rescue worker, three attempts each (12 of the run's 24 transport retries).
+    assert len(requests) == 18
+    assert sleeps == [5.0, 15.0] * 6
     assert waits == [30.0, 60.0, 120.0, 60.0]
     assert requests[0]["headers"][kimi_k3.TIMEOUT_HEADER] == "630"
     assert requests[0]["timeout"] == 630.0
