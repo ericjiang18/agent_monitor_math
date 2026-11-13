@@ -40,7 +40,12 @@ SESSION_COOKIE = "pc_session"
 SESSION_TTL_DAYS = 30
 GUEST_SESSION_TTL_HOURS = 24
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# One "@", no spaces, and a dot inside the domain.  The dot is found by a
+# lookahead so a crafted text ("a@....@") is refused in linear time instead of
+# being backtracked through quadratically (the match holds the GIL).
+_EMAIL_RE = re.compile(r"^[^@\s]+@(?=[^@\s]+\.[^@\s])[^@\s]+$")
+# The longest address mail can carry (RFC 5321 path limit, less the brackets).
+MAX_EMAIL_LENGTH = 254
 _INIT_LOCK = threading.Lock()
 _INITIALIZED = False
 _USER_ENV_CIPHERTEXT_PREFIX = "enc:v1:"
@@ -520,7 +525,15 @@ def register(
     if require_open and _registration_override() is not True:
         raise PermissionError("Account registration is currently closed")
     email = (email or "").strip().lower()
-    if not _EMAIL_RE.match(email):
+    if len(email) > MAX_EMAIL_LENGTH or not _EMAIL_RE.match(email):
+        raise ValueError("Please enter a valid email address")
+    # A new address must be one plain mailbox that mail reaches exactly as
+    # written: "a@b.example(x.edu" or "x<c@d.example>" would pass the pattern
+    # (and a domain rule) while their mail goes elsewhere.  Only new accounts
+    # are held to this; stored addresses keep signing in as they are.
+    from agent_monitor.accounts_admin import usable_address
+
+    if not usable_address(email):
         raise ValueError("Please enter a valid email address")
     if email.endswith("@public.local"):
         raise ValueError("Please enter a non-reserved email address")
@@ -548,7 +561,8 @@ def register(
                 " VALUES (?,?,?,?,?,?,?,?,?)",
                 (
                     email,
-                    (name or "").strip() or None,
+                    # Bounded like every other name an account is given.
+                    (name or "").strip()[:120].strip() or None,
                     pw_hash,
                     salt,
                     int(is_admin),

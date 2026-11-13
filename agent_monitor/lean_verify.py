@@ -47,7 +47,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from agent_monitor import account_policy, lean_broker, usage_ledger
 from agent_monitor.proof_graph import (  # reuse LLM plumbing and safe reads
@@ -3751,6 +3751,101 @@ _CHEAT_RULES: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
+# Five rules above read a stretch that every place it may open shares: an
+# attribute bracket up to its first `]`, or the rest of a line up to `:`.
+# `re.finditer` rescans that stretch from each opening (`@[@[@[…`, many
+# `instance` on one line) — quadratic, and cubic for the `@[… instance …] def`
+# rule — while holding the GIL, so one pasted source stalled the console.
+# `_cheat_rule_hits` returns exactly the matches of `re.finditer(rule, src)`,
+# but runs the full rule only at the first opening of each stretch. A later
+# opening in the same stretch sees a subset of what the first one saw: for the
+# attribute rules it can still match only right after its own `[` (`later`),
+# for the others it cannot match at all (`later` is None).
+_ATTR_OPEN = r"(?:@\[|" + _KW + r"attribute\s*\[)"
+_CORE_TAIL = _CORE_CLASSES + r"\s+" + _CORE_TYPES
+_DEF_HEAD = r"\s*(?:(?:private|protected|noncomputable)\s+)*(?:def|abbrev)\b"
+_LINE_TAIL = r"[^:\n]*:\s*" + _CORE_TAIL
+# The rest of a line up to its first `:` or newline, and what follows a `:`.
+_LINE_STOP = re.compile(r"[:\n]")
+_AFTER_COLON = re.compile(r":\s*" + _CORE_TAIL)
+_CHEAT_RULE_SCANS: dict[
+    str, tuple[re.Pattern, re.Pattern, re.Pattern, re.Pattern | None, re.Pattern | None]
+] = {
+    # rule: (opening, end of its stretch, rule at the first opening,
+    #        rule at a later opening, whole rule when `first` ends at `def`)
+    _ATTR_OPEN + r"\s*(?:[^\]]*,\s*)?" + tail: (
+        re.compile(_ATTR_OPEN),
+        re.compile(r"\]"),
+        # `\s*+`: giving back a blank after `[` never helps (neither part may
+        # start with one), and retrying the bracket for each blank is slow.
+        re.compile(_ATTR_OPEN + r"\s*+(?:[^\]]*,\s*)?" + tail),
+        re.compile(_ATTR_OPEN + r"\s*" + tail),
+        None,
+    )
+    for tail in (r"(?:local\s+|scoped\s+)?implemented_by", r"extern\b")
+}
+_CHEAT_RULE_SCANS[_KW + r"instance\b" + _LINE_TAIL] = (
+    re.compile(_KW + r"instance\b"),
+    _LINE_STOP,
+    re.compile(_KW + r"instance\b" + _LINE_TAIL),
+    None,
+    None,
+)
+_CHEAT_RULE_SCANS[r"@\[[^\]]*\binstance\b[^\]]*\]" + _DEF_HEAD + _LINE_TAIL] = (
+    re.compile(r"@\["),
+    re.compile(r"\]"),
+    # The rule with the `instance` search in a lookahead (one pass, where the
+    # original backtracks to every `instance` and rescans for the `]`), up to
+    # `def`; whether the rest of that line fits is decided once per line.
+    re.compile(r"@\[(?=[^\]]*?\binstance\b)[^\]]*\]" + _DEF_HEAD),
+    None,
+    re.compile(r"@\[(?=[^\]]*?\binstance\b)[^\]]*\]" + _DEF_HEAD + _LINE_TAIL),
+)
+_CHEAT_RULE_SCANS[_KW + r"attribute\s*\[[^\]]*\binstance\b"] = (
+    re.compile(_KW + r"attribute\s*\["),
+    re.compile(r"\]"),
+    re.compile(_KW + r"attribute\s*\[[^\]]*\binstance\b"),
+    None,
+    None,
+)
+
+
+def _cheat_rule_hits(pattern: str, src: str) -> Iterator[re.Match]:
+    """The matches of ``re.finditer(pattern, src)``, in linear time."""
+    scan = _CHEAT_RULE_SCANS.get(pattern)
+    if scan is None:
+        yield from re.finditer(pattern, src)
+        return
+    opening, stop, first, later, whole = scan
+    pos, end, scanned = 0, -1, -1
+    line_from, line_end, line_fits = 0, -1, False
+    while True:
+        opened = opening.search(src, pos)
+        if opened is None:
+            return
+        start = opened.start()
+        if opened.end() > end:
+            found = stop.search(src, opened.end())
+            end = found.start() if found else len(src)
+        if end != scanned:
+            scanned = end
+            hit = first.match(src, start)
+            if hit is not None and whole is not None:
+                if not line_from <= hit.end() <= line_end:
+                    line_from = hit.end()
+                    found = _LINE_STOP.search(src, line_from)
+                    line_end = found.start() if found else len(src)
+                    line_fits = _AFTER_COLON.match(src, line_end) is not None
+                hit = whole.match(src, start) if line_fits else None
+        else:
+            hit = later.match(src, start) if later is not None else None
+        if hit is None:
+            pos = start + 1
+        else:
+            yield hit
+            pos = hit.end()
+
+
 _LEXICAL_FLAGS = {
     "ambiguous_char_literal": (
         "a character literal directly after a symbol can be tokenized differently "
@@ -4152,7 +4247,7 @@ def _fidelity_flags(
             )
     for pattern, fid, severity, message in _CHEAT_RULES:
         hits = [
-            hit for hit in re.finditer(pattern, src)
+            hit for hit in _cheat_rule_hits(pattern, src)
             if not lexer.inside_ident[hit.start()]
         ]
         if not hits:
