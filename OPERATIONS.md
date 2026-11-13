@@ -970,8 +970,10 @@ ceilings, so an environment value can only lower them.
   within 2 s): at most three attempts, after 5 s then 15 s, or after the
   reply's `retry_after` when that is longer (at most 30 s; a shorter hint is
   not followed, since Kimi's provider has kept refusing for several seconds
-  after hinting 2 s or less), never with less than 30 s of the call left, and at
-  most six retries per CGM run. The news and problem-status jobs
+  after hinting 2 s or less), never with less than 30 s of the call left, and
+  at most 24 retries per CGM or Analyze run (refused requests use no tokens,
+  and Kimi's provider has refused about one request per completed call, so
+  six were often spent within one run). The news and problem-status jobs
   (`kimi_tasks.call_json`) resend only the typed refusals, not a call to an
   unreachable broker, and only once per call, since a job runs again within
   30 minutes or 6 hours; the resend counts against the job's run and daily
@@ -992,14 +994,14 @@ ceilings, so an environment value can only lower them.
   Please try again in a few minutes."; it adds "No tokens were used." only
   when no call of the run was processed.
 - Those resends are not counted in `AGENT_MONITOR_CGM_MAX_CALLS`: a run sends
-  at most six transport retries and three strategist resends, all of calls
+  at most 24 transport retries and three strategist resends, all of calls
   refused before processing, so the strategist's one call record can stand
-  for up to ten requests and a guest run makes at most 21 (the rescue worker
-  is a recorded call). Derived Formal/DAG and Lean calls retry a refusal at
-  most twice per request, and send at most one lower-effort request after a
-  reply that reasoned to the limit. The gateway counts a call against
-  `PUBLIC_KIMI_GATEWAY_CALLS_PER_HOUR` before forwarding it, so upstream
-  429/503 refusals use that quota too.
+  for up to twelve requests and a guest run makes at most 39 (the rescue
+  worker is a recorded call). Derived Formal/DAG and Lean calls retry a
+  refusal at most twice per request, and send at most one lower-effort
+  request after a reply that reasoned to the limit. The gateway counts a call
+  against `PUBLIC_KIMI_GATEWAY_CALLS_PER_HOUR` before forwarding it, so
+  upstream 429/503 refusals use that quota too.
 - Every 2xx reply a direct API call received is booked, whatever the
   provider and whether sponsored or not: an empty completion that ended a
   CGM call keeps its tokens in the receipt's call record and the usage
@@ -1166,7 +1168,7 @@ that text alone. A rejected text may be revised and checked again.
   they start from the published `proof.md` all the same.
 - Policy note for the owner: with the round on, a guest or sponsored run
   whose proof is accepted makes up to 4 more Kimi calls (16 recorded calls
-  instead of 12, plus the run's shared six transport retries), counted
+  instead of 12, plus the run's shared 24 transport retries), counted
   against the broker's per-token quota and `PUBLIC_KIMI_GATEWAY_CALLS_PER_HOUR`.
   `AGENT_MONITOR_CGM_WRITEUP_GUESTS=0` keeps guests and sponsored runs at 12.
 

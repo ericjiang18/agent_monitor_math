@@ -28,8 +28,11 @@ SPONSORED_TIMEOUT_SECONDS = 630
 # broker and the gateway may only shorten their deadlines to it.
 TIMEOUT_HEADER = "X-Ansatze-Timeout"
 SPONSORED_ATTEMPTS = 3
-# Transport retries one CGM run may spend across all of its calls.
-SPONSORED_RUN_RETRIES = 6
+# Transport retries one CGM or Analyze run may spend across all of its calls:
+# twice a sponsored run's 12 recorded calls.  Every one resends a call refused
+# before processing (no tokens used); a Kimi provider that refuses the first
+# request after each completed call needs about one per call.
+SPONSORED_RUN_RETRIES = 24
 _SPONSORED_RETRY_DELAYS_S = (5.0, 15.0)
 _RETRY_AFTER_BOUNDS_S = (2, 30)
 # A retry is skipped when it would leave less of the call's deadline.

@@ -202,6 +202,17 @@ class SponsoredRequestTests(unittest.TestCase):
         self.assertEqual((code, body, failure), (200, _OK, None))
         self.assertEqual(slept, [5.0, 15.0])
 
+    def test_a_run_survives_a_refusal_before_every_call(self) -> None:
+        # Kimi's provider has refused the first request after nearly every
+        # completed call (one run turn met 9 refusals among its 11 calls); with
+        # six retries per run, the seventh refused call failed outright.
+        allowance = kimi_k3.RetryAllowance(kimi_k3.SPONSORED_RUN_RETRIES)
+        refused = (429, _fast_503(upstream_status=429, upstream_elapsed_ms=150, retry_after=1))
+        for call in range(12):
+            with self.subTest(call=call):
+                code, body, failure, sent, _slept = self._run([refused, (200, _OK)], allowance=allowance)
+                self.assertEqual((code, body, failure, len(sent)), (200, _OK, None, 2))
+
     def test_at_most_three_attempts(self) -> None:
         refused = (0, "connection refused")
         _code, _body, failure, sent, slept = self._run([refused] * 3)
@@ -286,7 +297,7 @@ class SponsoredRequestTests(unittest.TestCase):
         self.assertEqual((len(sent), slept), (1, []))
         assert failure is not None
         self.assertTrue(failure.retryable)
-        self.assertEqual(kimi_k3.SPONSORED_RUN_RETRIES, 6)
+        self.assertEqual(kimi_k3.SPONSORED_RUN_RETRIES, 24)
 
 
 class FailureMessageTests(unittest.TestCase):
